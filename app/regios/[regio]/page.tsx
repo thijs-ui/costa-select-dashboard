@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
 import { formatEuro, normalizeRegio } from '@/lib/calculations'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Users, TrendingUp, Building2, Euro } from 'lucide-react'
 
 interface Sale {
   id: string
@@ -115,10 +115,10 @@ export default function RegioDetailPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Leads" value={String(filteredLeads.length)} color="purple" />
-        <KpiCard label="Open deals" value={String(filteredDeals.length)} color="blue" />
-        <KpiCard label="Sales" value={String(filteredSales.length)} color="green" />
-        <KpiCard label="Netto commissie" value={totalCommissie > 0 ? formatEuro(totalCommissie) : '—'} color="amber" />
+        <KpiCard icon={<Users className="w-4 h-4" />} label="Leads" value={String(filteredLeads.length)} color="purple" />
+        <KpiCard icon={<TrendingUp className="w-4 h-4" />} label="Open deals" value={String(filteredDeals.length)} color="blue" />
+        <KpiCard icon={<Building2 className="w-4 h-4" />} label="Sales" value={String(filteredSales.length)} color="green" />
+        <KpiCard icon={<Euro className="w-4 h-4" />} label="Netto commissie" value={totalCommissie > 0 ? formatEuro(totalCommissie) : '—'} color="amber" />
       </div>
 
       {/* Conversiefunnel */}
@@ -250,7 +250,7 @@ function Section({ title, empty, emptyText, children }: {
   )
 }
 
-function KpiCard({ label, value, color }: { label: string; value: string; color: 'purple' | 'blue' | 'green' | 'amber' }) {
+function KpiCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: 'purple' | 'blue' | 'green' | 'amber' }) {
   const colors = {
     purple: 'bg-purple-50 text-purple-600',
     blue: 'bg-blue-50 text-blue-600',
@@ -260,7 +260,7 @@ function KpiCard({ label, value, color }: { label: string; value: string; color:
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg mb-2 ${colors[color]}`}>
-        <span className="text-xs font-bold">{value.charAt(0)}</span>
+        {icon}
       </div>
       <div className="text-xl font-bold text-gray-900">{value}</div>
       <div className="text-xs text-gray-500 mt-0.5">{label}</div>
