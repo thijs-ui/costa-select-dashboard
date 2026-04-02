@@ -27,20 +27,23 @@ export default function DashboardPage() {
   const [maandkosten, setMaandkosten] = useState<KostenRow[]>([])
   const [targets, setTargets] = useState({ deals_2026: 20, netto_omzet_2026: 200000 })
   const [leads, setLeads] = useState<{ regio: string; add_time: string }[]>([])
+  const [afspraken, setAfspraken] = useState<{ bron: string | null; datum: string; regio: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
 
   useEffect(() => {
     async function load() {
-      const [dealsRes, kostenRes, settingsRes, leadsRes] = await Promise.all([
+      const [dealsRes, kostenRes, settingsRes, leadsRes, afsprakenRes] = await Promise.all([
         supabase.from('deals').select('aankoopprijs, bruto_commissie, netto_commissie_cs, datum_passering, regio'),
         supabase.from('maandkosten').select('bedrag, jaar, maand, entiteit, kosten_posten(naam)'),
         supabase.from('settings').select('key, value'),
         fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : null).catch(() => null),
+        supabase.from('afspraken').select('bron, datum, regio'),
       ])
       setDeals((dealsRes.data ?? []) as DealRow[])
       setMaandkosten((kostenRes.data ?? []) as unknown as KostenRow[])
       if (leadsRes?.leads) setLeads(leadsRes.leads as { regio: string; add_time: string }[])
+      setAfspraken((afsprakenRes.data ?? []) as { bron: string | null; datum: string; regio: string | null }[])
       const map: Record<string, unknown> = {}
       ;(settingsRes.data ?? [] as { key: string; value: unknown }[]).forEach((r: { key: string; value: unknown }) => { map[r.key] = r.value })
       if (map.targets) setTargets(map.targets as typeof targets)
@@ -79,6 +82,16 @@ export default function DashboardPage() {
     .filter(k => AD_POSTEN.includes(k.kosten_posten?.naam ?? ''))
     .filter(k => isInRange(`${k.jaar}-${String(k.maand).padStart(2, '0')}-01`, range))
     .reduce((s, k) => s + Number(k.bedrag), 0)
+
+  // Referral KPI's — gefilterd op entiteit + periode
+  const filteredAfspraken = afspraken.filter(a =>
+    matchesEntity(a.regio, entity) && isInRange(a.datum, range)
+  )
+  const totaalAfspraken = filteredAfspraken.length
+  const klantReferrals = filteredAfspraken.filter(a => a.bron === 'Referentie').length
+  const partnerReferrals = filteredAfspraken.filter(a => a.bron === 'Referentie van partner').length
+  const klantReferralPct = totaalAfspraken > 0 ? Math.round((klantReferrals / totaalAfspraken) * 100) : null
+  const partnerReferralPct = totaalAfspraken > 0 ? Math.round((partnerReferrals / totaalAfspraken) * 100) : null
 
   const gemAankoopprijs = totaalDeals > 0 ? totaalAankoopwaarde / totaalDeals : 0
   const gemBrutoCommissie = totaalDeals > 0 ? brutoCommissie / totaalDeals : 0
@@ -157,6 +170,25 @@ export default function DashboardPage() {
           label="Cost per sale"
           value={totaalDeals > 0 && totaalAdSpend > 0 ? formatEuro(totaalAdSpend / totaalDeals) : '—'}
           sub={`${totaalDeals} sales in periode`}
+        />
+      </div>
+
+      {/* Referrals */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <KpiCard
+          label="Klant-referrals"
+          value={klantReferralPct !== null ? `${klantReferralPct}%` : '—'}
+          sub={`${klantReferrals} van ${totaalAfspraken} afspraken`}
+        />
+        <KpiCard
+          label="Partner-referrals"
+          value={partnerReferralPct !== null ? `${partnerReferralPct}%` : '—'}
+          sub={`${partnerReferrals} van ${totaalAfspraken} afspraken`}
+        />
+        <KpiCard
+          label="Totaal referrals"
+          value={String(klantReferrals + partnerReferrals)}
+          sub={`${klantReferralPct !== null && partnerReferralPct !== null ? klantReferralPct + partnerReferralPct : '—'}% van alle afspraken`}
         />
       </div>
 
