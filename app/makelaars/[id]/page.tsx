@@ -30,7 +30,7 @@ interface Afspraak {
   datum: string
   status: string
   type: string | null
-  klant_naam: string | null
+  lead_naam: string | null
   regio: string | null
 }
 
@@ -48,7 +48,7 @@ export default function MakelaarDetailPage() {
       const [mRes, dRes, aRes] = await Promise.all([
         supabase.from('makelaars').select('id, naam, rol').eq('id', id).single(),
         supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, regio, type_deal').eq('makelaar_id', id).order('datum_passering', { ascending: false }),
-        supabase.from('afspraken').select('id, datum, status, type, klant_naam, regio').eq('makelaar_id', id).order('datum', { ascending: false }),
+        supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio').eq('makelaar_id', id).order('datum', { ascending: false }),
       ])
       setMakelaar(mRes.data as Makelaar | null)
       setDeals((dRes.data ?? []) as Deal[])
@@ -165,7 +165,7 @@ export default function MakelaarDetailPage() {
                 {filteredAfspraken.map((a, i) => (
                   <tr key={a.id} className={`border-b border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                     <td className="px-4 py-2.5 text-gray-600">{new Date(a.datum).toLocaleDateString('nl-NL')}</td>
-                    <td className="px-4 py-2.5 text-gray-700">{a.klant_naam ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-700">{a.lead_naam ?? '—'}</td>
                     <td className="px-4 py-2.5 text-gray-500">{a.regio ?? '—'}</td>
                     <td className="px-4 py-2.5 text-gray-500 text-xs">{a.type ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right">
