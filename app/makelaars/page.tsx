@@ -8,6 +8,7 @@ import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
 import { formatEuro } from '@/lib/calculations'
 import { TrendingUp, CalendarDays, Euro } from 'lucide-react'
+import Link from 'next/link'
 
 interface Makelaar {
   id: string
@@ -154,12 +155,12 @@ export default function MakelaarsPage() {
                       className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
                     >
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <Link href={`/makelaars/${s.makelaar.id}`} className="flex items-center gap-2 group">
                           <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-600 shrink-0">
                             {s.makelaar.naam.charAt(0)}
                           </div>
-                          <span className="font-medium text-gray-900">{s.makelaar.naam}</span>
-                        </div>
+                          <span className="font-medium text-gray-900 group-hover:text-blue-600 group-hover:underline">{s.makelaar.naam}</span>
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.deals > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
