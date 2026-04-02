@@ -189,31 +189,20 @@ export async function fetchLeads(token: string): Promise<PipedriveLead[]> {
 
 export async function fetchAllActivities(token: string): Promise<PipedriveActivity[]> {
   const results: PipedriveActivity[] = []
-  // Fetch done activities
-  let start = 0
-  while (true) {
-    const res = await fetch(
-      `${BASE_URL}/activities?api_token=${token}&done=1&limit=500&start=${start}`,
-      { cache: 'no-store' }
-    )
-    if (!res.ok) break
-    const json = await res.json()
-    results.push(...(json.data ?? []))
-    if (!json.additional_data?.pagination?.more_items_in_collection) break
-    start += 500
-  }
-  // Fetch open activities
-  start = 0
-  while (true) {
-    const res = await fetch(
-      `${BASE_URL}/activities?api_token=${token}&done=0&limit=500&start=${start}`,
-      { cache: 'no-store' }
-    )
-    if (!res.ok) break
-    const json = await res.json()
-    results.push(...(json.data ?? []))
-    if (!json.additional_data?.pagination?.more_items_in_collection) break
-    start += 500
+  // user_id=0 = alle gebruikers; done=1 en done=0 apart ophalen
+  for (const done of [0, 1]) {
+    let start = 0
+    while (true) {
+      const res = await fetch(
+        `${BASE_URL}/activities?api_token=${token}&user_id=0&done=${done}&limit=500&start=${start}`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) break
+      const json = await res.json()
+      results.push(...(json.data ?? []))
+      if (!json.additional_data?.pagination?.more_items_in_collection) break
+      start += 500
+    }
   }
   return results
 }
