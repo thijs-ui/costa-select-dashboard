@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
 import { Building2, Users, TrendingUp, Euro } from 'lucide-react'
+import { normalizeRegio } from '@/lib/calculations'
 
 interface GeslotenDeal {
   regio: string | null
@@ -95,7 +96,7 @@ const [loading, setLoading] = useState(true)
   }
 
   for (const d of filteredGesloten) {
-    const r = ensureRegio(d.regio ?? 'Onbekend')
+    const r = ensureRegio(normalizeRegio(d.regio))
     r.geslotenDeals++
     r.omzet += d.aankoopprijs ?? 0
     r.commissie += d.bruto_commissie ?? 0

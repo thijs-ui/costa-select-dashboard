@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
+import { normalizeRegio } from '@/lib/calculations'
 
 interface Sale {
   regio: string | null
@@ -81,13 +82,13 @@ export default function FunnelPage() {
   const regios = Array.from(new Set([
     ...filteredLeads.map(l => l.regio),
     ...filteredDeals.map(d => d.regio),
-    ...filteredSales.map(s => s.regio ?? 'Onbekend'),
+    ...filteredSales.map(s => normalizeRegio(s.regio)),
   ])).filter(Boolean).sort()
 
   const regioFunnels: RegioFunnel[] = regios.map(regio => {
     const leads = filteredLeads.filter(l => l.regio === regio).length
     const deals = filteredDeals.filter(d => d.regio === regio).length
-    const s = filteredSales.filter(s => (s.regio ?? 'Onbekend') === regio).length
+    const s = filteredSales.filter(s => normalizeRegio(s.regio) === regio).length
     return {
       regio,
       leads,

@@ -2,6 +2,16 @@
  * Business logic voor commissie-berekeningen en KPI's
  */
 
+const REGIO_NORMALIZATION: Record<string, string> = {
+  'CBN': 'Costa Blanca Noord',
+  'CBZ': 'Costa Blanca Zuid',
+}
+
+export function normalizeRegio(regio: string | null | undefined): string {
+  if (!regio) return 'Onbekend'
+  return REGIO_NORMALIZATION[regio.trim()] ?? regio.trim()
+}
+
 export interface CommissieInput {
   aankoopprijs: number
   commissie_pct: number | null

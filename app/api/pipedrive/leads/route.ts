@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { fetchLeads, fetchLeadLabels } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
+import { normalizeRegio } from '@/lib/calculations'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,9 +33,9 @@ export async function GET() {
 
   const result = leads.map(lead => {
     const labelIds = (lead.label_ids ?? []) as string[]
-    const regio = labelIds.length > 0
-      ? (labelMap.get(labelIds[0]) ?? 'Onbekend')
-      : 'Onbekend'
+    const regio = normalizeRegio(
+      labelIds.length > 0 ? (labelMap.get(labelIds[0]) ?? 'Onbekend') : 'Onbekend'
+    )
 
     const person = lead.person_id as { value: number; name: string } | null
     return {
