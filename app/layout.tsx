@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="nl" className={`h-full ${bricolage.variable} ${raleway.variable}`}>
       <body className="h-full flex">
         <Sidebar />
-        <main className="flex-1 ml-[244px] min-h-screen p-6" style={{ backgroundColor: '#FFFAEF' }}>
+        <main className="flex-1 ml-[244px] min-h-screen px-6 pt-6 pb-16" style={{ backgroundColor: '#FFFAEF' }}>
           {children}
         </main>
       </body>
