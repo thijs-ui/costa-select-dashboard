@@ -88,7 +88,7 @@ export default function DashboardPage() {
     matchesEntity(a.regio, entity) && isInRange(a.datum, range)
   )
   const totaalAfspraken = filteredAfspraken.length
-  const klantReferrals = filteredAfspraken.filter(a => a.bron === 'Referentie').length
+  const klantReferrals = filteredAfspraken.filter(a => a.bron === 'Referentie van klant').length
   const partnerReferrals = filteredAfspraken.filter(a => a.bron === 'Referentie van partner').length
   const klantReferralPct = totaalAfspraken > 0 ? Math.round((klantReferrals / totaalAfspraken) * 100) : null
   const partnerReferralPct = totaalAfspraken > 0 ? Math.round((partnerReferrals / totaalAfspraken) * 100) : null
