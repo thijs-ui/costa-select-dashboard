@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { fetchAllActivities, fetchUsers } from '@/lib/pipedrive'
+import { fetchAllActivities, fetchUsers, fetchDeals, fetchPipelines } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
 
 const TARGET_TYPES: Record<string, string> = {
@@ -34,15 +34,28 @@ export async function POST(req: Request) {
     await supabase.from('afspraken').delete().not('pipedrive_activiteit_id', 'is', null)
   }
 
-  const [activities, users, makelaarsRes] = await Promise.all([
+  const [activities, users, makelaarsRes, allDeals, pipelines] = await Promise.all([
     fetchAllActivities(apiToken),
     fetchUsers(apiToken),
     supabase.from('makelaars').select('id, naam'),
+    fetchDeals(apiToken),
+    fetchPipelines(apiToken),
   ])
 
   const makelaars = (makelaarsRes.data ?? []) as Array<{ id: string; naam: string }>
   const userMap = new Map<number, string>()
   for (const u of users) userMap.set(u.id, u.name)
+
+  const pipelineMap = new Map<number, string>()
+  for (const p of pipelines) pipelineMap.set(p.id, p.name)
+
+  const dealMap = new Map<number, { regio: string; bron: string | null }>()
+  for (const d of allDeals) {
+    dealMap.set(d.id, {
+      regio: pipelineMap.get(d.pipeline_id) ?? 'Onbekend',
+      bron: (d as unknown as Record<string, unknown>).channel as string | null ?? null,
+    })
+  }
 
   // Filter op type key
   const relevant = activities.filter(act => TARGET_TYPES[act.type])
@@ -71,11 +84,14 @@ export async function POST(req: Request) {
     const lead_naam = act.person_name ?? (act.person_id as { name?: string } | null)?.name ?? 'Onbekend'
     const status = act.done ? 'Uitgevoerd' : 'Gepland'
     const type = TARGET_TYPES[act.type]
+    const dealInfo = act.deal_id ? dealMap.get(act.deal_id) : null
+    const regio = dealInfo?.regio ?? null
+    const bron = dealInfo?.bron ?? null
 
     if (bestaandeMap.has(act.id)) {
       if (!reset) {
         await supabase.from('afspraken')
-          .update({ datum, status, lead_naam })
+          .update({ datum, status, lead_naam, regio, bron })
           .eq('id', bestaandeMap.get(act.id)!)
         updated++
       }
@@ -86,6 +102,8 @@ export async function POST(req: Request) {
         makelaar_id: makelaar?.id ?? null,
         type,
         status,
+        regio,
+        bron,
         pipedrive_activiteit_id: act.id,
       })
     }

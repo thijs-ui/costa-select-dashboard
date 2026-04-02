@@ -64,6 +64,7 @@ export interface PipedriveActivity {
   person_name: string | null
   user_id: number
   person_id: { value: number; name: string } | null
+  deal_id: number | null
 }
 
 export interface PipedrivePerson {

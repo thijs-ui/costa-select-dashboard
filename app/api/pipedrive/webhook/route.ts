@@ -77,12 +77,35 @@ export async function POST(req: NextRequest) {
         ? (makelaars ?? []).find((m: { id: string; naam: string }) => m.naam.toLowerCase().includes(firstWord))
         : null
 
+      // Regio en bron ophalen via gekoppelde deal
+      let regio: string | null = null
+      let bron: string | null = null
+      const dealId = act.deal_id as number | null
+      if (dealId) {
+        const token = await getToken()
+        if (token) {
+          const [dealRes, pipelines] = await Promise.all([
+            fetch(`https://api.pipedrive.com/v1/deals/${dealId}?api_token=${token}`, { cache: 'no-store' }).then(r => r.json()),
+            fetchPipelines(token),
+          ])
+          const deal = dealRes.data
+          if (deal) {
+            const pipelineMap = new Map<number, string>()
+            for (const p of pipelines) pipelineMap.set(p.id, p.name)
+            regio = pipelineMap.get(deal.pipeline_id) ?? null
+            bron = deal.channel ?? null
+          }
+        }
+      }
+
       await supabase.from('afspraken').insert({
         datum,
         lead_naam,
         makelaar_id: makelaar?.id ?? null,
         type: TARGET_TYPES[actType],
         status,
+        regio,
+        bron,
         pipedrive_activiteit_id: act.id,
       })
 
