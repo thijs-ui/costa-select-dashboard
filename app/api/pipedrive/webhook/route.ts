@@ -41,27 +41,19 @@ export async function POST(req: NextRequest) {
       const act = body.data
       if (!act) return NextResponse.json({ ok: true })
 
-      // Haal activiteitsnamen op uit settings
-      const { data: settingsRow } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'pipedrive_activiteit_namen')
-        .single()
-
-      const activiteitNamen = (settingsRow?.value as string[]) ?? ['teams meeting', 'bezoek nederland']
-      const namenLower = activiteitNamen.map((n: string) => n.toLowerCase())
-      const typeMap: Record<string, string> = {
-        'teams meeting': 'Kennismaking',
-        'bezoek nederland': 'Bezichtiging',
+        // Alleen Teams Meeting (meeting) en Bezoek Nederland (bezoek_nederland) importeren
+      const TARGET_TYPES: Record<string, string> = {
+        'meeting': 'Kennismaking',
+        'bezoek_nederland': 'Bezichtiging',
       }
-
-      if (!namenLower.includes((act.subject ?? '').toLowerCase())) {
+      const actType = (act.type ?? '') as string
+      if (!TARGET_TYPES[actType]) {
         return NextResponse.json({ ok: true, skipped: true })
       }
 
       const status = act.done ? 'Uitgevoerd' : 'Gepland'
       const datum = act.due_date ?? new Date().toISOString().split('T')[0]
-      const lead_naam = act.person?.name ?? 'Onbekend (Pipedrive)'
+      const lead_naam = act.person?.name ?? act.person_name ?? 'Onbekend (Pipedrive)'
 
       // Check of afspraak al bestaat
       const { data: existing } = await supabase
@@ -70,30 +62,26 @@ export async function POST(req: NextRequest) {
         .eq('pipedrive_activiteit_id', act.id)
         .single()
 
-      if (existing && body.event === 'updated.activity') {
-        // Update bestaande afspraak (datum, status, naam)
+      if (existing) {
         await supabase.from('afspraken')
           .update({ datum, status, lead_naam })
           .eq('id', existing.id)
         return NextResponse.json({ ok: true, updated: true })
       }
 
-      if (existing) {
-        return NextResponse.json({ ok: true, duplicate: true })
-      }
-
       // Haal makelaars op voor user mapping
       const { data: makelaars } = await supabase.from('makelaars').select('id, naam')
-      const makelaar = (makelaars ?? []).find((m: { id: string; naam: string }) =>
-        m.naam.toLowerCase().includes((act.user?.name ?? '').toLowerCase().split(' ')[0])
-      )
+      const userName = (act.user?.name ?? act.assigned_to_user_name ?? '') as string
+      const firstWord = userName.toLowerCase().split(' ')[0]
+      const makelaar = firstWord
+        ? (makelaars ?? []).find((m: { id: string; naam: string }) => m.naam.toLowerCase().includes(firstWord))
+        : null
 
-      const type = typeMap[(act.subject ?? '').toLowerCase()] ?? 'Bezichtiging'
       await supabase.from('afspraken').insert({
         datum,
         lead_naam,
         makelaar_id: makelaar?.id ?? null,
-        type,
+        type: TARGET_TYPES[actType],
         status,
         pipedrive_activiteit_id: act.id,
       })

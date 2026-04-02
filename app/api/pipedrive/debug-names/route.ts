@@ -18,17 +18,22 @@ export async function GET() {
   if (!token) return NextResponse.json({ error: 'Geen API token' }, { status: 400 })
 
   const supabase = createServiceClient()
-  const [labels, pipelines, dealsRes] = await Promise.all([
+  const [labels, pipelines, dealsRes, actTypesRes] = await Promise.all([
     fetchLeadLabels(token),
     fetchPipelines(token),
     supabase.from('deals').select('regio'),
+    fetch(`https://api.pipedrive.com/v1/activityTypes?api_token=${token}`, { cache: 'no-store' }).then(r => r.json()),
   ])
 
   const dbRegios = Array.from(new Set((dealsRes.data ?? []).map((d: { regio: string | null }) => d.regio ?? 'null'))).sort()
+  const activityTypes = (actTypesRes.data ?? []).map((t: { id: number; name: string; key_string: string }) => ({
+    id: t.id, name: t.name, key: t.key_string,
+  }))
 
   return NextResponse.json({
     leadLabels: labels.map(l => ({ id: l.id, name: l.name })),
     pipelines: pipelines.map(p => ({ id: p.id, name: p.name })),
     dbRegios,
+    activityTypes,
   })
 }
