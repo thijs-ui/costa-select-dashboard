@@ -6,6 +6,7 @@ import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
 import { Building2, Users, TrendingUp, Euro } from 'lucide-react'
 import { normalizeRegio } from '@/lib/calculations'
+import Link from 'next/link'
 
 interface GeslotenDeal {
   regio: string | null
@@ -198,7 +199,9 @@ const [loading, setLoading] = useState(true)
                       key={r.regio}
                       className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
                     >
-                      <td className="px-4 py-3 font-medium text-gray-900">{r.regio}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        <Link href={`/regios/${encodeURIComponent(r.regio)}`} className="hover:text-blue-600 hover:underline">{r.regio}</Link>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
                           {r.leads}
