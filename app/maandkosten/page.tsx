@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatEuro, MAANDEN } from '@/lib/calculations'
-import { Plus, Check } from 'lucide-react'
+import { Plus, Check, Repeat2, X } from 'lucide-react'
 import { useEntity, Entity } from '@/lib/entity'
 import EntitySwitch from '@/components/entity-switch'
 
@@ -18,6 +18,7 @@ interface Post {
   categorie_id: string
   naam: string
   volgorde: number
+  vaste_last_bedrag: number | null
 }
 
 interface Maandkost {
@@ -39,6 +40,8 @@ export default function MaandkostenPage() {
   const [loading, setLoading] = useState(true)
   const [newPostName, setNewPostName] = useState<Record<string, string>>({})
   const [newCatName, setNewCatName] = useState('')
+  const [editingVasteLast, setEditingVasteLast] = useState<string | null>(null)
+  const [vasteLastInput, setVasteLastInput] = useState('')
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,6 +63,23 @@ export default function MaandkostenPage() {
       if (!map[k.kosten_post_id]) map[k.kosten_post_id] = {}
       map[k.kosten_post_id][k.maand] = k.bedrag
     })
+
+    // Auto-fill lege maanden voor vaste lasten
+    const vastePosts = (postRes.data ?? []).filter((p: Post) => p.vaste_last_bedrag)
+    for (const post of vastePosts) {
+      const updates: object[] = []
+      for (let maand = 1; maand <= 12; maand++) {
+        if (!map[post.id]?.[maand]) {
+          updates.push({ kosten_post_id: post.id, jaar, maand, bedrag: post.vaste_last_bedrag, entiteit: entity })
+          if (!map[post.id]) map[post.id] = {}
+          map[post.id][maand] = post.vaste_last_bedrag
+        }
+      }
+      if (updates.length > 0) {
+        await supabase.from('maandkosten').upsert(updates, { onConflict: 'kosten_post_id,jaar,maand,entiteit' })
+      }
+    }
+
     setKosten(map)
     setLoading(false)
   }
@@ -109,6 +129,17 @@ export default function MaandkostenPage() {
     )
     setCellStatus((prev) => ({ ...prev, [key]: 'saved' }))
     setTimeout(() => setCellStatus((prev) => ({ ...prev, [key]: 'idle' })), 1500)
+  }
+
+  async function saveVasteLast(postId: string, bedrag: number | null) {
+    await supabase.from('kosten_posten').update({ vaste_last_bedrag: bedrag }).eq('id', postId)
+    setPosten(prev => prev.map(p => p.id === postId ? { ...p, vaste_last_bedrag: bedrag } : p))
+    setEditingVasteLast(null)
+  }
+
+  function openVasteLast(post: Post) {
+    setEditingVasteLast(post.id)
+    setVasteLastInput(post.vaste_last_bedrag ? String(post.vaste_last_bedrag) : '')
   }
 
   async function addPost(catId: string) {
@@ -192,7 +223,42 @@ export default function MaandkostenPage() {
                     {catPosten.map((post) => (
                       <tr key={post.id} className="border-t border-slate-50 hover:bg-slate-50/50 group">
                         <td className="px-3 py-1 text-slate-600 sticky left-0 bg-white group-hover:bg-slate-50/50 pl-5">
-                          {post.naam}
+                          <div className="flex items-center gap-1.5">
+                            <span>{post.naam}</span>
+                            {editingVasteLast === post.id ? (
+                              <div className="flex items-center gap-1 ml-1">
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={vasteLastInput}
+                                  onChange={e => setVasteLastInput(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveVasteLast(post.id, parseFloat(vasteLastInput) || null)
+                                    if (e.key === 'Escape') setEditingVasteLast(null)
+                                  }}
+                                  placeholder="Bedrag"
+                                  className="w-24 border border-slate-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-blue-400"
+                                />
+                                <button onClick={() => saveVasteLast(post.id, parseFloat(vasteLastInput) || null)}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium">OK</button>
+                                {post.vaste_last_bedrag && (
+                                  <button onClick={() => saveVasteLast(post.id, null)}
+                                    className="text-xs text-red-400 hover:text-red-600">Verwijderen</button>
+                                )}
+                                <button onClick={() => setEditingVasteLast(null)}>
+                                  <X size={11} className="text-slate-400" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openVasteLast(post)}
+                                title="Vaste last instellen"
+                                className={`opacity-0 group-hover:opacity-100 transition-opacity ${post.vaste_last_bedrag ? '!opacity-100 text-blue-500' : 'text-slate-300 hover:text-slate-500'}`}
+                              >
+                                <Repeat2 size={13} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         {MAANDEN.map((_, i) => {
                           const maand = i + 1
