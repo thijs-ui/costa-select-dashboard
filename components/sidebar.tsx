@@ -15,6 +15,7 @@ import {
   MapPin,
   Users,
   Filter,
+  Building2,
 } from 'lucide-react'
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { href: '/funnel', label: 'Funnel', icon: Filter },
   { href: '/regios', label: "Regio's", icon: MapPin },
   { href: '/makelaars', label: 'Makelaars', icon: Users },
+  { href: '/partners', label: 'Partners', icon: Building2 },
   { href: '/deals', label: 'Sales', icon: Handshake },
   { href: '/afspraken', label: 'Afspraken', icon: CalendarDays },
   { href: '/commissies', label: 'Commissies', icon: CreditCard },
