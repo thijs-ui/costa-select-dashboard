@@ -57,7 +57,7 @@ export default function RegioDetailPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const [salesRes, makelaarsRes, dealsRes, leadsRes] = await Promise.all([
-      supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, netto_commissie_cs, type_deal, makelaar_id'),
+      supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, netto_commissie_cs, type_deal, makelaar_id, regio'),
       supabase.from('makelaars').select('id, naam'),
       fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
       fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
