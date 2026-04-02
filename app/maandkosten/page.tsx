@@ -133,6 +133,10 @@ export default function MaandkostenPage() {
 
   async function saveVasteLast(postId: string, bedrag: number | null) {
     await supabase.from('kosten_posten').update({ vaste_last_bedrag: bedrag }).eq('id', postId)
+    if (bedrag === null) {
+      await supabase.from('maandkosten').delete().eq('kosten_post_id', postId).eq('jaar', jaar).eq('entiteit', entity)
+      setKosten(prev => { const next = { ...prev }; delete next[postId]; return next })
+    }
     setPosten(prev => prev.map(p => p.id === postId ? { ...p, vaste_last_bedrag: bedrag } : p))
     setEditingVasteLast(null)
   }
