@@ -136,7 +136,7 @@ export default function PLPage() {
               <DataRow label="Aantal sales" values={rows.map((r) => r.deals || null)} totaal={totaal.deals} format="getal" />
               <DataRow label="Aankoopwaarde" values={rows.map((r) => r.aankoopwaarde || null)} totaal={totaal.aankoopwaarde} />
               <DataRow label="Bruto commissie" values={rows.map((r) => r.bruto_commissie || null)} totaal={totaal.bruto_commissie} />
-              <DataRow label="− Makelaar commissie" values={rows.map((r) => r.makelaar_commissie || null)} totaal={totaal.makelaar_commissie} muted />
+              <DataRow label="− Consultant commissie" values={rows.map((r) => r.makelaar_commissie || null)} totaal={totaal.makelaar_commissie} muted />
               <DataRow label="− Partner commissie" values={rows.map((r) => r.partner_commissie || null)} totaal={totaal.partner_commissie} muted />
               <DataRow
                 label="Netto omzet CS"

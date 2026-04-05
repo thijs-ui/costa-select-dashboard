@@ -362,7 +362,7 @@ export default function AannamensPage() {
                 onChange={(e) => setSettings({ ...settings, minimum_fee: Number(e.target.value) })}
                 className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
             </Field>
-            <Field label="Standaard makelaar %">
+            <Field label="Standaard consultant %">
               <input type="number" step="1"
                 value={(settings.makelaar_commissie_pct * 100).toFixed(0)}
                 onChange={(e) => setSettings({ ...settings, makelaar_commissie_pct: Number(e.target.value) / 100 })}

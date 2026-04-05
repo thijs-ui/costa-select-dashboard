@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { berekenCommissie, formatEuro, formatPct } from '@/lib/calculations'
 import DateFilter from '@/components/date-filter'
@@ -83,7 +84,16 @@ const emptyForm = {
   notities: '',
 }
 
-export default function DealsPage() {
+export default function DealsPageWrapper() {
+  return (
+    <Suspense>
+      <DealsPage />
+    </Suspense>
+  )
+}
+
+function DealsPage() {
+  const searchParams = useSearchParams()
   const [deals, setDeals] = useState<Deal[]>([])
   const [makelaars, setMakelaars] = useState<Makelaar[]>([])
   const [appSettings, setAppSettings] = useState<AppSettings>({
@@ -101,6 +111,14 @@ export default function DealsPage() {
   const formRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { loadAll() }, [])
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId || deals.length === 0) return
+    const deal = deals.find(d => d.id === editId)
+    if (deal) startEdit(deal)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals, searchParams])
 
   async function loadAll() {
     const [dealsRes, makelaarRes, settingsRes] = await Promise.all([
@@ -460,7 +478,9 @@ export default function DealsPage() {
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Berekening</div>
             <div className="grid grid-cols-4 gap-3 text-sm">
               <PreviewItem label="Bruto commissie" value={formatEuro(preview.bruto_commissie)}
-                sub={preview.min_fee_toegepast ? 'min fee' : `${(preview.commissie_pct * 100).toFixed(1)}%`} />
+                sub={preview.min_fee_toegepast
+                  ? `min fee (${formatEuro(preview.bruto_commissie_incl_btw)} incl. BTW)`
+                  : `${(preview.commissie_pct * 100).toFixed(1)}%`} />
               {preview.makelaar_commissie > 0 && (
                 <PreviewItem
                   label={`Consultant${form.is_overdracht ? ' 1' : ''} (${(preview.makelaar_pct_effectief * 100).toFixed(0)}%)`}

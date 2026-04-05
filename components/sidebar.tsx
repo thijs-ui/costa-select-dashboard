@@ -2,8 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/lib/auth-context'
 import {
   LayoutDashboard,
+  MessageSquare,
+  BookOpen,
+  GraduationCap,
+  Compass,
   Handshake,
   CalendarDays,
   Receipt,
@@ -14,120 +19,137 @@ import {
   Settings,
   MapPin,
   Users,
-  Filter,
   Building2,
+  LogOut,
+  X,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
+import { useState } from 'react'
 
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/funnel', label: 'Funnel', icon: Filter },
-  { href: '/regios', label: "Regio's", icon: MapPin },
-  { href: '/makelaars', label: 'Makelaars', icon: Users },
-  { href: '/partners', label: 'Partners', icon: Building2 },
-  { href: '/deals', label: 'Sales', icon: Handshake },
-  { href: '/afspraken', label: 'Afspraken', icon: CalendarDays },
-  { href: '/commissies', label: 'Commissies', icon: CreditCard },
-  { href: '/pl', label: 'P&L', icon: TrendingUp },
-  { href: '/maandkosten', label: 'Maandkosten', icon: Receipt },
-  { href: '/bonnen', label: 'Bonnen & facturen', icon: FileText },
-  { href: '/pipedrive', label: 'Pipedrive', icon: Zap },
-  { href: '/aannames', label: 'Aannames', icon: Settings },
+const platformItems = [
+  { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
+  { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
+  { href: '/training', label: 'Training', icon: GraduationCap },
+  { href: '/kompas', label: 'Costa Kompas', icon: Compass },
 ]
 
-function CostaLogoMark() {
-  return (
-    <svg width="24" height="20" viewBox="0 0 24 20" fill="none" aria-hidden="true">
-      {/* Linker voet */}
-      <rect x="0" y="13" width="7" height="3" rx="0.5" fill="#F5AF40" transform="rotate(-5 3.5 14.5)" />
-      {/* Linker diagonaal */}
-      <rect x="3" y="5" width="3" height="9" rx="0.5" fill="#F5AF40" transform="rotate(-35 4.5 9.5)" />
-      {/* Midden verticaal */}
-      <rect x="10.5" y="2" width="3" height="11" rx="0.5" fill="#F5AF40" />
-      {/* Rechter diagonaal */}
-      <rect x="17" y="5" width="3" height="9" rx="0.5" fill="#F5AF40" transform="rotate(35 18.5 9.5)" />
-      {/* Rechter voet */}
-      <rect x="17" y="13" width="7" height="3" rx="0.5" fill="#F5AF40" transform="rotate(5 20.5 14.5)" />
-    </svg>
-  )
+const dashboardItems = [
+  { href: '/dashboard', label: 'Overzicht', icon: LayoutDashboard },
+  { href: '/dashboard/regios', label: "Regio's & Funnel", icon: MapPin },
+  { href: '/dashboard/makelaars', label: 'Consultants', icon: Users },
+  { href: '/dashboard/partners', label: 'Partners', icon: Building2 },
+  { href: '/dashboard/deals', label: 'Sales', icon: Handshake },
+  { href: '/dashboard/afspraken', label: 'Afspraken', icon: CalendarDays },
+  { href: '/dashboard/commissies', label: 'Commissies', icon: CreditCard },
+  { href: '/dashboard/pl', label: 'P&L', icon: TrendingUp },
+  { href: '/dashboard/maandkosten', label: 'Maandkosten', icon: Receipt },
+  { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
+  { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
+  { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
+]
+
+interface SidebarProps {
+  isOpen: boolean
+  onClose: () => void
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const { role, signOut, user } = useAuth()
+  const isAdmin = role === 'admin'
+  const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
+
+  function renderNavItem(item: { href: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> }) {
+    const { href, label, icon: Icon } = item
+    const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={onClose}
+        className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${
+          isActive
+            ? 'font-semibold text-white bg-white/15'
+            : 'text-white/70 hover:text-white hover:bg-white/10'
+        }`}
+      >
+        <Icon size={16} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
+        <span>{label}</span>
+      </Link>
+    )
+  }
 
   return (
-    <aside
-      className="w-[244px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40"
-      style={{ backgroundColor: '#004B46' }}
-    >
-      {/* Logo header */}
-      <div className="px-5 py-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-2.5 mb-1">
-          <CostaLogoMark />
-          <span
-            className="text-white text-[13px] font-semibold uppercase tracking-widest leading-none"
-            style={{ fontFamily: 'var(--font-heading, sans-serif)' }}
-          >
-            COSTA SELECT
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={onClose} />
+      )}
+
+      <aside
+        className={`w-56 bg-[#004B46] fixed left-0 top-0 bottom-0 z-40 overflow-y-auto flex flex-col transition-transform duration-300
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0`}
+      >
+        {/* Mobile close */}
+        <div className="flex justify-end px-3 pt-3 md:hidden">
+          <button onClick={onClose} className="text-white/40 hover:text-white p-1 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Top spacing */}
+        <div className="h-6" />
+
+        {/* Platform section */}
+        <div className="px-4 pt-4 pb-1">
+          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">
+            Menu
           </span>
         </div>
-        <div
-          className="text-[11px] mt-1.5 ml-[36px]"
-          style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-body, sans-serif)' }}
-        >
-          Financieel dashboard
-        </div>
-      </div>
+        <nav className="space-y-0.5">
+          {platformItems.map(renderNavItem)}
+        </nav>
 
-      {/* Nav */}
-      <nav className="flex-1 py-3 px-3 space-y-0.5">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors relative"
-              style={{
-                backgroundColor: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.6)',
-                fontFamily: 'var(--font-body, sans-serif)',
-              }}
-              onMouseEnter={e => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.07)'
-                  ;(e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.85)'
-                }
-              }}
-              onMouseLeave={e => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-                  ;(e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.6)'
-                }
-              }}
-            >
-              {/* Active indicator */}
-              {isActive && (
-                <span
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full"
-                  style={{ backgroundColor: '#F5AF40' }}
-                />
-              )}
-              <Icon size={15} strokeWidth={1.5} className="flex-shrink-0" />
-              <span>{label}</span>
-            </Link>
-          )
-        })}
-      </nav>
+        {/* Dashboard section — admin only */}
+        {isAdmin && (
+          <>
+            <div className="px-4 pt-6 pb-1">
+              <button
+                onClick={() => setDashboardOpen(!dashboardOpen)}
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+              >
+                <span>Financieel</span>
+                {dashboardOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </button>
+            </div>
+            {dashboardOpen && (
+              <nav className="space-y-0.5">
+                {dashboardItems.map(renderNavItem)}
+              </nav>
+            )}
+          </>
+        )}
 
-      {/* Footer */}
-      <div className="px-5 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <div
-          className="text-[10px] leading-tight"
-          style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-body, sans-serif)' }}
-        >
-          Premium aankoopmakelaar Spanje
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Footer */}
+        <div className="px-4 py-4 border-t border-white/10">
+          {user && (
+            <div className="text-[11px] text-white/40 mb-2 truncate">
+              {user.email}
+            </div>
+          )}
+          <button
+            onClick={signOut}
+            className="flex items-center gap-2 text-[12px] text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+          >
+            <LogOut size={13} strokeWidth={1.5} />
+            <span>Uitloggen</span>
+          </button>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   )
 }

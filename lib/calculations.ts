@@ -30,9 +30,12 @@ export interface CommissieInput {
   skip_min_fee?: boolean                  // handmatige override: minimum fee niet toepassen
 }
 
+export const BTW_RATE = 0.21
+
 export interface CommissieResult {
   commissie_pct: number
-  bruto_commissie: number
+  bruto_commissie: number          // ex-BTW
+  bruto_commissie_incl_btw: number // alleen bij min fee: het factuurbedrag incl. BTW
   min_fee_toegepast: boolean
   makelaar_pct_effectief: number
   makelaar2_pct_effectief: number
@@ -58,9 +61,11 @@ export function berekenCommissie(input: CommissieInput): CommissieResult {
   const effectief_commissie_pct = commissie_pct ?? commissie_per_type[type_deal.toLowerCase()] ?? 0.02
 
   // 2. Bruto commissie (met minimum fee, tenzij handmatig uitgeschakeld)
+  // Minimum fee is incl. BTW — alle verdere berekeningen op ex-BTW basis
   const berekend = aankoopprijs * effectief_commissie_pct
   const min_fee_toegepast = berekend < minimum_fee && !input.skip_min_fee
-  const bruto_commissie = min_fee_toegepast ? minimum_fee : berekend
+  const bruto_commissie_incl_btw = min_fee_toegepast ? minimum_fee : berekend
+  const bruto_commissie = min_fee_toegepast ? minimum_fee / (1 + BTW_RATE) : berekend
 
   // 3. Effectieve makelaarpercentages op basis van deal-type
   let m1 = makelaar_pct
@@ -99,6 +104,7 @@ export function berekenCommissie(input: CommissieInput): CommissieResult {
   return {
     commissie_pct: effectief_commissie_pct,
     bruto_commissie,
+    bruto_commissie_incl_btw,
     min_fee_toegepast,
     makelaar_pct_effectief: m1,
     makelaar2_pct_effectief: m2,

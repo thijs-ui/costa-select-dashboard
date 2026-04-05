@@ -18,7 +18,7 @@ interface Post {
   categorie_id: string
   naam: string
   volgorde: number
-  vaste_last_bedrag: number | null
+  vaste_lasten: Record<string, number> | null
 }
 
 interface Maandkost {
@@ -64,15 +64,16 @@ export default function MaandkostenPage() {
       map[k.kosten_post_id][k.maand] = k.bedrag
     })
 
-    // Auto-fill lege maanden voor vaste lasten
-    const vastePosts = (postRes.data ?? []).filter((p: Post) => p.vaste_last_bedrag)
+    // Auto-fill lege maanden voor vaste lasten (per entiteit)
+    const vastePosts = (postRes.data ?? []).filter((p: Post) => p.vaste_lasten?.[entity])
     for (const post of vastePosts) {
+      const bedrag = post.vaste_lasten![entity]
       const updates: object[] = []
       for (let maand = 1; maand <= 12; maand++) {
         if (!map[post.id]?.[maand]) {
-          updates.push({ kosten_post_id: post.id, jaar, maand, bedrag: post.vaste_last_bedrag, entiteit: entity })
+          updates.push({ kosten_post_id: post.id, jaar, maand, bedrag, entiteit: entity })
           if (!map[post.id]) map[post.id] = {}
-          map[post.id][maand] = post.vaste_last_bedrag
+          map[post.id][maand] = bedrag
         }
       }
       if (updates.length > 0) {
@@ -132,18 +133,24 @@ export default function MaandkostenPage() {
   }
 
   async function saveVasteLast(postId: string, bedrag: number | null) {
-    await supabase.from('kosten_posten').update({ vaste_last_bedrag: bedrag }).eq('id', postId)
+    const post = posten.find(p => p.id === postId)
+    const huidig = post?.vaste_lasten ?? {}
+    const nieuw = bedrag === null
+      ? Object.fromEntries(Object.entries(huidig).filter(([k]) => k !== entity))
+      : { ...huidig, [entity]: bedrag }
+    await supabase.from('kosten_posten').update({ vaste_lasten: nieuw }).eq('id', postId)
     if (bedrag === null) {
       await supabase.from('maandkosten').delete().eq('kosten_post_id', postId).eq('jaar', jaar).eq('entiteit', entity)
       setKosten(prev => { const next = { ...prev }; delete next[postId]; return next })
     }
-    setPosten(prev => prev.map(p => p.id === postId ? { ...p, vaste_last_bedrag: bedrag } : p))
+    setPosten(prev => prev.map(p => p.id === postId ? { ...p, vaste_lasten: nieuw } : p))
     setEditingVasteLast(null)
   }
 
   function openVasteLast(post: Post) {
     setEditingVasteLast(post.id)
-    setVasteLastInput(post.vaste_last_bedrag ? String(post.vaste_last_bedrag) : '')
+    const bedrag = post.vaste_lasten?.[entity]
+    setVasteLastInput(bedrag ? String(bedrag) : '')
   }
 
   async function addPost(catId: string) {
@@ -245,7 +252,7 @@ export default function MaandkostenPage() {
                                 />
                                 <button onClick={() => saveVasteLast(post.id, parseFloat(vasteLastInput) || null)}
                                   className="text-xs text-blue-600 hover:text-blue-800 font-medium">OK</button>
-                                {post.vaste_last_bedrag && (
+                                {post.vaste_lasten?.[entity] && (
                                   <button onClick={() => saveVasteLast(post.id, null)}
                                     className="text-xs text-red-400 hover:text-red-600">Verwijderen</button>
                                 )}
@@ -257,7 +264,7 @@ export default function MaandkostenPage() {
                               <button
                                 onClick={() => openVasteLast(post)}
                                 title="Vaste last instellen"
-                                className={`opacity-0 group-hover:opacity-100 transition-opacity ${post.vaste_last_bedrag ? '!opacity-100 text-blue-500' : 'text-slate-300 hover:text-slate-500'}`}
+                                className={`opacity-0 group-hover:opacity-100 transition-opacity ${post.vaste_lasten?.[entity] ? '!opacity-100 text-blue-500' : 'text-slate-300 hover:text-slate-500'}`}
                               >
                                 <Repeat2 size={13} />
                               </button>

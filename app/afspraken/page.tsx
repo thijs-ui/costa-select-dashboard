@@ -10,6 +10,7 @@ import EntitySwitch from '@/components/entity-switch'
 import { Pencil, Trash2 } from 'lucide-react'
 
 interface Makelaar { id: string; naam: string }
+interface Partner { id: string; naam: string }
 interface Afspraak {
   id: string
   datum: string
@@ -49,6 +50,7 @@ const emptyForm = {
   bron: '',
   regio: '',
   makelaar_id: '',
+  partner_id: '',
   type: 'Bezichtiging',
   status: 'Gepland',
   resultaat: '',
@@ -61,6 +63,7 @@ export default function AfsprakenPage() {
   const { entity, setEntity } = useEntity()
   const [afspraken, setAfspraken] = useState<Afspraak[]>([])
   const [makelaars, setMakelaars] = useState<Makelaar[]>([])
+  const [partners, setPartners] = useState<Partner[]>([])
   const [allAdPosten, setAllAdPosten] = useState<AdPost[]>([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -77,17 +80,19 @@ export default function AfsprakenPage() {
   useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
-    const [aRes, mRes, sRes, kRes] = await Promise.all([
+    const [aRes, mRes, sRes, kRes, pRes] = await Promise.all([
       supabase.from('afspraken').select('*').order('datum', { ascending: false }),
       supabase.from('makelaars').select('id, naam').eq('actief', true),
       supabase.from('settings').select('key, value'),
       supabase.from('maandkosten')
         .select('bedrag, entiteit, kosten_posten(naam)')
         .eq('jaar', new Date().getFullYear()),
+      supabase.from('partners').select('id, naam').eq('actief', true).order('naam'),
     ])
 
     setAfspraken((aRes.data ?? []) as Afspraak[])
     setMakelaars((mRes.data ?? []) as Makelaar[])
+    setPartners((pRes.data ?? []) as Partner[])
     setAllAdPosten((kRes.data ?? []) as unknown as AdPost[])
 
     if (sRes.data) {
@@ -111,6 +116,7 @@ export default function AfsprakenPage() {
       bron: a.bron ?? '',
       regio: a.regio ?? '',
       makelaar_id: a.makelaar_id ?? '',
+      partner_id: (a as unknown as { partner_id?: string }).partner_id ?? '',
       type: a.type,
       status: a.status,
       resultaat: a.resultaat ?? '',
@@ -133,6 +139,7 @@ export default function AfsprakenPage() {
       bron: form.bron || null,
       regio: form.regio || null,
       makelaar_id: form.makelaar_id || null,
+      partner_id: form.bron === 'Referentie van partner' ? (form.partner_id || null) : null,
       type: form.type,
       status: form.status,
       resultaat: form.resultaat || null,
@@ -272,12 +279,12 @@ export default function AfsprakenPage() {
       {makelaarStats.length > 0 && (
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">Per makelaar</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Per consultant</h2>
           </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                {['Makelaar', 'Afspraken', 'Deals', 'Close %'].map((h) => (
+                {['Consultant', 'Afspraken', 'Deals', 'Close %'].map((h) => (
                   <th key={h} className="text-left px-4 py-2 text-xs uppercase tracking-wide text-slate-500 font-medium">{h}</th>
                 ))}
               </tr>
@@ -318,18 +325,26 @@ export default function AfsprakenPage() {
               onChange={(e) => setForm({ ...form, lead_naam: e.target.value })} className={inp} />
           </Field>
           <Field label="Bron">
-            <select value={form.bron} onChange={(e) => setForm({ ...form, bron: e.target.value })} className={inp}>
+            <select value={form.bron} onChange={(e) => setForm({ ...form, bron: e.target.value, partner_id: '' })} className={inp}>
               <option value="">Kies bron</option>
               {settings.bronnen.map((b) => <option key={b}>{b}</option>)}
             </select>
           </Field>
+          {form.bron === 'Referentie van partner' && (
+            <Field label="Partner">
+              <select value={form.partner_id} onChange={(e) => setForm({ ...form, partner_id: e.target.value })} className={inp}>
+                <option value="">Kies partner</option>
+                {partners.map((p) => <option key={p.id} value={p.id}>{p.naam}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Regio">
             <select value={form.regio} onChange={(e) => setForm({ ...form, regio: e.target.value })} className={inp}>
               <option value="">Kies regio</option>
               {settings.regios.map((r) => <option key={r}>{r}</option>)}
             </select>
           </Field>
-          <Field label="Makelaar">
+          <Field label="Consultant">
             <select value={form.makelaar_id} onChange={(e) => setForm({ ...form, makelaar_id: e.target.value })} className={inp}>
               <option value="">Geen</option>
               {makelaars.map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}

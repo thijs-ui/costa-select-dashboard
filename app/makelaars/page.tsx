@@ -15,6 +15,7 @@ interface Makelaar {
   naam: string
   rol: string
   area_manager_id: string | null
+  pipedrive_naam: string | null
 }
 
 interface Deal {
@@ -34,14 +35,32 @@ interface Afspraak {
   type: string | null
 }
 
+interface PipedriveStats {
+  leads: number
+  openDeals: number
+}
+
 interface MakelaarStats {
   makelaar: Makelaar
-  deals: number
+  sales: number
   omzet: number
   makelaarCommissie: number
-  afsprakenUitgevoerd: number
   afsprakenGepland: number
-  conversie: number | null
+  leads: number        // Pipedrive leads
+  openDeals: number    // Pipedrive open deals
+  lToD: number | null  // Lead → Deal
+  dToS: number | null  // Deal → Sale
+  lToS: number | null  // Lead → Sale
+}
+
+function pct(num: number, den: number): number | null {
+  return den > 0 ? Math.round((num / den) * 100) : null
+}
+
+function PctBadge({ value, good = 20 }: { value: number | null; good?: number }) {
+  if (value === null) return <span className="text-gray-300 text-xs">—</span>
+  const color = value >= good ? 'bg-green-100 text-green-700' : value >= good / 2 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{value}%</span>
 }
 
 export default function MakelaarsPage() {
@@ -51,18 +70,21 @@ export default function MakelaarsPage() {
   const [makelaars, setMakelaars] = useState<Makelaar[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
   const [afspraken, setAfspraken] = useState<Afspraak[]>([])
+  const [pipedrivePerUser, setPipedrivePerUser] = useState<Record<string, PipedriveStats>>({})
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [mRes, dRes, aRes] = await Promise.all([
-      supabase.from('makelaars').select('id, naam, rol, area_manager_id').eq('actief', true).order('naam'),
+    const [mRes, dRes, aRes, pdRes] = await Promise.all([
+      supabase.from('makelaars').select('id, naam, rol, area_manager_id, pipedrive_naam').eq('actief', true).order('naam'),
       supabase.from('deals').select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
       supabase.from('afspraken').select('makelaar_id, datum, status, type'),
+      fetch('/api/pipedrive/consultant-funnel').then(r => r.ok ? r.json() : { perUser: {} }),
     ])
     setMakelaars((mRes.data ?? []) as Makelaar[])
     setDeals((dRes.data ?? []) as Deal[])
     setAfspraken((aRes.data ?? []) as Afspraak[])
+    setPipedrivePerUser((pdRes as { perUser: Record<string, PipedriveStats> }).perUser ?? {})
     setLoading(false)
   }, [])
 
@@ -80,37 +102,45 @@ export default function MakelaarsPage() {
     .map(m => {
       const mDeals = filteredDeals.filter(d => d.makelaar_id === m.id)
       const mAfspraken = filteredAfspraken.filter(a => a.makelaar_id === m.id)
-      const uitgevoerd = mAfspraken.filter(a => a.status === 'Uitgevoerd').length
       const gepland = mAfspraken.filter(a => a.status === 'Gepland').length
-      const conversie = uitgevoerd > 0 ? (mDeals.length / uitgevoerd) * 100 : null
+      const sales = mDeals.length
+
+      // Match Pipedrive user: gebruik pipedrive_naam als die ingesteld is, anders naam
+      const matchKey = (m.pipedrive_naam ?? m.naam).trim().toLowerCase()
+      const pdEntry = Object.entries(pipedrivePerUser).find(([name]) => name.trim().toLowerCase() === matchKey)
+      const leads = pdEntry?.[1].leads ?? 0
+      const openDeals = pdEntry?.[1].openDeals ?? 0
+
       return {
         makelaar: m,
-        deals: mDeals.length,
+        sales,
         omzet: mDeals.reduce((s, d) => s + (d.aankoopprijs ?? 0), 0),
         makelaarCommissie: mDeals.reduce((s, d) => s + (d.makelaar_commissie ?? 0), 0),
-        afsprakenUitgevoerd: uitgevoerd,
         afsprakenGepland: gepland,
-        conversie,
+        leads,
+        openDeals,
+        lToD: pct(openDeals, leads),
+        dToS: pct(sales, openDeals),
+        lToS: pct(sales, leads),
       }
     })
     .sort((a, b) => b.makelaarCommissie - a.makelaarCommissie)
 
   const totals = stats.reduce((acc, s) => ({
-    deals: acc.deals + s.deals,
+    sales: acc.sales + s.sales,
     omzet: acc.omzet + s.omzet,
     makelaarCommissie: acc.makelaarCommissie + s.makelaarCommissie,
-    afsprakenUitgevoerd: acc.afsprakenUitgevoerd + s.afsprakenUitgevoerd,
+    leads: acc.leads + s.leads,
+    openDeals: acc.openDeals + s.openDeals,
     afsprakenGepland: acc.afsprakenGepland + s.afsprakenGepland,
-  }), { deals: 0, omzet: 0, makelaarCommissie: 0, afsprakenUitgevoerd: 0, afsprakenGepland: 0 })
-
-  const topPerformer = stats.length > 0 ? stats[0] : null
+  }), { sales: 0, omzet: 0, makelaarCommissie: 0, leads: 0, openDeals: 0, afsprakenGepland: 0 })
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Makelaars</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Consultants</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Prestaties per consultant — {ENTITY_LABELS[entity]}
           </p>
@@ -127,10 +157,10 @@ export default function MakelaarsPage() {
         <>
           {/* Summary row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <SummaryCard icon={<TrendingUp className="w-4 h-4" />} label="Sales" value={String(totals.deals)} color="green" />
-            <SummaryCard icon={<Euro className="w-4 h-4" />} label="Commissie makelaars" value={formatEuro(totals.makelaarCommissie)} color="amber" />
-            <SummaryCard icon={<CalendarDays className="w-4 h-4" />} label="Afspraken uitgevoerd" value={String(totals.afsprakenUitgevoerd)} color="blue" />
-            <SummaryCard icon={<CalendarDays className="w-4 h-4" />} label="Afspraken gepland" value={String(totals.afsprakenGepland)} color="purple" />
+            <SummaryCard icon={<TrendingUp className="w-4 h-4" />} label="Sales" value={String(totals.sales)} color="green" />
+            <SummaryCard icon={<Euro className="w-4 h-4" />} label="Commissie consultants" value={formatEuro(totals.makelaarCommissie)} color="amber" />
+            <SummaryCard icon={<CalendarDays className="w-4 h-4" />} label="Leads (Pipedrive)" value={String(totals.leads)} color="blue" />
+            <SummaryCard icon={<CalendarDays className="w-4 h-4" />} label="Open deals (Pipedrive)" value={String(totals.openDeals)} color="purple" />
           </div>
 
           {/* Per-makelaar tabel */}
@@ -139,12 +169,14 @@ export default function MakelaarsPage() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs uppercase tracking-wide">
                   <th className="text-left px-4 py-3 font-semibold">Consultant</th>
-                  <th className="text-right px-4 py-3 font-semibold">Sales</th>
+                  <th className="text-right px-4 py-3 font-semibold">Leads</th>
+                  <th className="text-right px-4 py-3 font-semibold">Deals</th>
+                  <th className="text-right px-4 py-3 font-semibold text-green-600">Sales</th>
                   <th className="text-right px-4 py-3 font-semibold">Omzet</th>
                   <th className="text-right px-4 py-3 font-semibold">Commissie</th>
-                  <th className="text-right px-4 py-3 font-semibold">Afspraken</th>
-                  <th className="text-right px-4 py-3 font-semibold">Gepland</th>
-                  <th className="text-right px-4 py-3 font-semibold">Conversie</th>
+                  <th className="text-right px-4 py-3 font-semibold">L→D</th>
+                  <th className="text-right px-4 py-3 font-semibold">D→S</th>
+                  <th className="text-right px-4 py-3 font-semibold">L→S</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,8 +195,18 @@ export default function MakelaarsPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.deals > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-                          {s.deals}
+                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.leads > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {s.leads}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.openDeals > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {s.openDeals}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.sales > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {s.sales}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-gray-600">{s.omzet > 0 ? formatEuro(s.omzet) : '—'}</td>
@@ -176,25 +218,9 @@ export default function MakelaarsPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.afsprakenUitgevoerd > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
-                          {s.afsprakenUitgevoerd}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.afsprakenGepland > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
-                          {s.afsprakenGepland}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {s.conversie !== null ? (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.conversie >= 30 ? 'bg-green-100 text-green-700' : s.conversie >= 15 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
-                            {s.conversie.toFixed(0)}%
-                          </span>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </td>
+                      <td className="px-4 py-3 text-right"><PctBadge value={s.lToD} good={50} /></td>
+                      <td className="px-4 py-3 text-right"><PctBadge value={s.dToS} good={30} /></td>
+                      <td className="px-4 py-3 text-right"><PctBadge value={s.lToS} good={15} /></td>
                     </tr>
                   )
                 })}
@@ -202,18 +228,14 @@ export default function MakelaarsPage() {
               <tfoot>
                 <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold text-gray-700">
                   <td className="px-4 py-3">Totaal</td>
-                  <td className="px-4 py-3 text-right">{totals.deals}</td>
+                  <td className="px-4 py-3 text-right">{totals.leads}</td>
+                  <td className="px-4 py-3 text-right">{totals.openDeals}</td>
+                  <td className="px-4 py-3 text-right">{totals.sales}</td>
                   <td className="px-4 py-3 text-right">{formatEuro(totals.omzet)}</td>
                   <td className="px-4 py-3 text-right">{formatEuro(totals.makelaarCommissie)}</td>
-                  <td className="px-4 py-3 text-right">{totals.afsprakenUitgevoerd}</td>
-                  <td className="px-4 py-3 text-right">{totals.afsprakenGepland}</td>
-                  <td className="px-4 py-3 text-right">
-                    {totals.afsprakenUitgevoerd > 0 ? (
-                      <span className="text-xs font-semibold">
-                        {((totals.deals / totals.afsprakenUitgevoerd) * 100).toFixed(0)}%
-                      </span>
-                    ) : '—'}
-                  </td>
+                  <td className="px-4 py-3 text-right"><PctBadge value={pct(totals.openDeals, totals.leads)} good={50} /></td>
+                  <td className="px-4 py-3 text-right"><PctBadge value={pct(totals.sales, totals.openDeals)} good={30} /></td>
+                  <td className="px-4 py-3 text-right"><PctBadge value={pct(totals.sales, totals.leads)} good={15} /></td>
                 </tr>
               </tfoot>
             </table>

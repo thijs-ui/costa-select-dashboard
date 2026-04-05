@@ -1,28 +1,51 @@
 @import "tailwindcss";
 
-:root {
+/* ─── Costa Select Brand Theme (Tailwind v4) ─────────────────────────── */
+@theme {
+  /* Primaire kleuren */
   --color-deepsea: #004B46;
+  --color-deepsea-light: #0A6B63;
+  --color-deepsea-lighter: #E6F0EF;
+
   --color-sun: #F5AF40;
+  --color-sun-light: #FBD78A;
+  --color-sun-dark: #D4921A;
+  --color-sun-subtle: #FEF6E4;
+
+  /* Achtergrond & ondersteunend */
   --color-marble: #FFFAEF;
   --color-sand: #FFE5BD;
+  --color-sky: #B3FFF0;
   --color-sea: #0EAE96;
-  --color-white: #FFFFFF;
-  --color-text-dark: #004B46;
-  --color-text-muted: #7A8C8B;
+
+  /* Typografie */
+  --font-heading: 'Bricolage Grotesque', serif;
+  --font-body: 'Raleway', sans-serif;
+  --font-sans: 'Raleway', sans-serif;
+
+  /* Border radius */
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
 }
 
+/* ─── Base Styles ─────────────────────────────────────────────────────── */
 body {
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  line-height: 1.4;
   background: var(--color-marble);
-  color: var(--color-text-dark);
+  color: var(--color-deepsea);
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
   font-family: var(--font-heading), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.0;
+  color: var(--color-deepsea);
 }
 
-/* Scrollbar styling */
+/* ─── Scrollbar ───────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -31,9 +54,9 @@ h1, h2, h3 {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #FFE5BD;
+  background: var(--color-sand);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #F5AF40;
+  background: var(--color-sun);
 }

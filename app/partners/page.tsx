@@ -6,6 +6,7 @@ import DateFilter from '@/components/date-filter'
 import { getDateRange, isInRange, type DatePreset } from '@/lib/date-utils'
 import { formatEuro } from '@/lib/calculations'
 import { Plus, Pencil, Check, X, Euro, Handshake, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
 
 interface Partner {
   id: string
@@ -23,12 +24,18 @@ interface Deal {
   aankoopprijs: number
 }
 
+interface Afspraak {
+  partner_id: string | null
+  datum: string
+}
+
 const emptyForm = { naam: '', email: '', land: '' }
 
 export default function PartnersPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
   const [partners, setPartners] = useState<Partner[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
+  const [afspraken, setAfspraken] = useState<Afspraak[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyForm)
   const [showForm, setShowForm] = useState(false)
@@ -38,12 +45,14 @@ export default function PartnersPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [pRes, dRes] = await Promise.all([
+    const [pRes, dRes, aRes] = await Promise.all([
       supabase.from('partners').select('*').eq('actief', true).order('naam'),
       supabase.from('deals').select('partner_naam, partner_commissie, partner_deal, datum_passering, aankoopprijs'),
+      supabase.from('afspraken').select('partner_id, datum'),
     ])
     setPartners((pRes.data ?? []) as Partner[])
     setDeals((dRes.data ?? []) as Deal[])
+    setAfspraken((aRes.data ?? []) as Afspraak[])
     setLoading(false)
   }, [])
 
@@ -52,13 +61,16 @@ export default function PartnersPage() {
   const range = getDateRange(datePreset)
   const filteredDeals = deals.filter(d => d.partner_deal && isInRange(d.datum_passering, range))
 
+  const filteredAfspraken = afspraken.filter(a => isInRange(a.datum, range))
+
   const stats = partners.map(p => {
     const partnerDeals = filteredDeals.filter(d =>
       d.partner_naam?.toLowerCase().trim() === p.naam.toLowerCase().trim()
     )
+    const partnerAfspraken = filteredAfspraken.filter(a => a.partner_id === p.id).length
     const commissie = partnerDeals.reduce((s, d) => s + (d.partner_commissie ?? 0), 0)
     const omzet = partnerDeals.reduce((s, d) => s + d.aankoopprijs, 0)
-    return { partner: p, deals: partnerDeals.length, commissie, omzet }
+    return { partner: p, deals: partnerDeals.length, afspraken: partnerAfspraken, commissie, omzet }
   }).sort((a, b) => b.commissie - a.commissie)
 
   const totals = stats.reduce((acc, s) => ({
@@ -122,7 +134,7 @@ export default function PartnersPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <SummaryCard icon={<Handshake className="w-4 h-4" />} label="Actieve partners" value={String(partners.length)} color="blue" />
-        <SummaryCard icon={<TrendingUp className="w-4 h-4" />} label="Partner-deals in periode" value={String(totals.deals)} color="green" />
+        <SummaryCard icon={<TrendingUp className="w-4 h-4" />} label="Partner-sales in periode" value={String(totals.deals)} color="green" />
         <SummaryCard icon={<Euro className="w-4 h-4" />} label="Commissie partners" value={totals.commissie > 0 ? formatEuro(totals.commissie) : '—'} color="amber" />
       </div>
 
@@ -173,7 +185,8 @@ export default function PartnersPage() {
               <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
                 <th className="text-left px-4 py-3 font-semibold">Partner</th>
                 <th className="text-left px-4 py-3 font-semibold">Land</th>
-                <th className="text-right px-4 py-3 font-semibold">Deals</th>
+                <th className="text-right px-4 py-3 font-semibold">Afspraken</th>
+                <th className="text-right px-4 py-3 font-semibold">Sales</th>
                 <th className="text-right px-4 py-3 font-semibold">Omzet</th>
                 <th className="text-right px-4 py-3 font-semibold">Commissie</th>
                 <th className="text-right px-4 py-3 font-semibold">Gem. per deal</th>
@@ -182,7 +195,7 @@ export default function PartnersPage() {
             </thead>
             <tbody>
               {stats.map((s, i) => (
-                <tr key={s.partner.id} className={`border-b border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                <tr key={s.partner.id} className={`group border-b border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                   {editingId === s.partner.id ? (
                     <>
                       <td className="px-4 py-2">
@@ -214,12 +227,17 @@ export default function PartnersPage() {
                             {s.partner.naam.charAt(0)}
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">{s.partner.naam}</div>
+                            <Link href={`/partners/${s.partner.id}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline">{s.partner.naam}</Link>
                             {s.partner.email && <div className="text-xs text-gray-400">{s.partner.email}</div>}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-500">{s.partner.land ?? '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.afspraken > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {s.afspraken}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-semibold ${s.deals > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
                           {s.deals}
@@ -253,7 +271,8 @@ export default function PartnersPage() {
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold text-gray-700">
                 <td colSpan={2} className="px-4 py-3">Totaal</td>
-                <td className="px-4 py-3 text-right">{totals.deals}</td>
+                <td className="px-4 py-3 text-right">{stats.reduce((s, r) => s + r.afspraken, 0)}</td>
+                <td className="px-4 py-3 text-right">{totals.deals}</td>  {/* sales */}
                 <td className="px-4 py-3 text-right">{formatEuro(totals.omzet)}</td>
                 <td className="px-4 py-3 text-right">{formatEuro(totals.commissie)}</td>
                 <td className="px-4 py-3 text-right">

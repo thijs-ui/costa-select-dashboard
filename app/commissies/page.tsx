@@ -234,7 +234,7 @@ export default function CommissiesPage() {
           </thead>
           <tbody>
             {stats.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">Nog geen sales met makelaarscommissie</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">Nog geen sales met consultantcommissie</td></tr>
             )}
             {stats.map(s => (
               <tr key={s.makelaar.id} className="border-b border-slate-50 hover:bg-slate-50">
@@ -333,7 +333,7 @@ export default function CommissiesPage() {
           </thead>
           <tbody>
             {dealsMetCommissie.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">Geen deals met makelaarscommissie</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400 text-sm">Geen deals met consultantcommissie</td></tr>
             )}
             {dealsMetCommissie.map(deal => {
               const makelaar = makelaars.find(m => m.id === deal.makelaar_id)

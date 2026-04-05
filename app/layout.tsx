@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Bricolage_Grotesque, Raleway } from 'next/font/google'
 import './globals.css'
-import Sidebar from '@/components/sidebar'
+import ClientLayout from '@/components/client-layout'
 
 const bricolage = Bricolage_Grotesque({
   subsets: ['latin'],
@@ -18,8 +18,8 @@ const raleway = Raleway({
 })
 
 export const metadata: Metadata = {
-  title: 'Costa Select Valencia — Financieel Dashboard',
-  description: 'Financieel dashboard voor Costa Select Valencia vastgoedmakelaarsbureau',
+  title: 'Costa Select — Intern Platform',
+  description: 'Intern platform voor Costa Select medewerkers',
 }
 
 export default function RootLayout({
@@ -29,11 +29,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nl" className={`h-full ${bricolage.variable} ${raleway.variable}`}>
-      <body className="h-full flex">
-        <Sidebar />
-        <main className="flex-1 ml-[244px] min-h-screen px-6 pt-6" style={{ backgroundColor: '#FFFAEF', paddingBottom: '4rem' }}>
-          {children}
-        </main>
+      <body className="h-full">
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   )
