@@ -85,35 +85,37 @@ export async function POST(request: Request) {
   let propertyData: Record<string, unknown>
 
   if (mode === 'url' && url) {
-    // Fetch property via woningbot API
+    // Fetch property via woningbot lookup API (direct, no AI)
     try {
       const woningbotUrl = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
       const woningbotKey = process.env.WONINGBOT_API_KEY || ''
 
-      const res = await fetch(`${woningbotUrl}/api/chat`, {
+      const res = await fetch(`${woningbotUrl}/api/lookup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': woningbotKey,
         },
-        body: JSON.stringify({ message: `pitch voor ${url}` }),
+        body: JSON.stringify({ url }),
       })
 
-      if (!res.ok) throw new Error('Woningbot lookup failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Lookup failed')
+      }
 
-      const data = await res.json()
-      const prop = data.properties?.[0]
+      const prop = await res.json()
 
       propertyData = {
-        adres: prop?.title || url,
-        regio: prop?.location || regio || 'Onbekend',
-        type: prop?.source || 'woning',
-        vraagprijs: prop?.price || 0,
-        oppervlakte: prop?.size_m2 || 0,
-        slaapkamers: prop?.bedrooms || 0,
-        badkamers: prop?.bathrooms || 0,
-        omschrijving: data.response || '',
-        fotos: prop?.thumbnail ? [prop.thumbnail] : [],
+        adres: prop.title || url,
+        regio: prop.location || regio || 'Onbekend',
+        type: prop.property_type || 'woning',
+        vraagprijs: prop.price || 0,
+        oppervlakte: prop.size_m2 || 0,
+        slaapkamers: prop.bedrooms || 0,
+        badkamers: prop.bathrooms || 0,
+        omschrijving: prop.description || '',
+        fotos: prop.images?.length > 0 ? prop.images : (prop.thumbnail ? [prop.thumbnail] : []),
         url,
       }
     } catch (err) {
