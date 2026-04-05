@@ -29,6 +29,7 @@ import { useState } from 'react'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
+  { href: '/dossier', label: 'Dossier', icon: FileText },
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
   { href: '/training', label: 'Training', icon: GraduationCap },
   { href: '/kompas', label: 'Costa Kompas', icon: Compass },
