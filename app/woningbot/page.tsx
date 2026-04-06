@@ -74,11 +74,12 @@ export default function WoningbotPage() {
   const loadChats = useCallback(async () => {
     if (!user) return
     try {
-      const res = await fetch(`/api/woningbot/history?user_id=${user.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) setSavedChats(data)
-      }
+      const res = await fetch(`/api/woningbot/history?user_id=${user.id}`, { credentials: 'include' })
+      if (!res.ok) return
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) return
+      const data = await res.json()
+      if (Array.isArray(data)) setSavedChats(data)
     } catch { /* ignore */ }
   }, [user])
 
