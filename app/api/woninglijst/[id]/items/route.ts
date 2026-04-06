@@ -8,7 +8,9 @@ export const maxDuration = 120
 async function enrichFromUrl(url: string): Promise<Record<string, unknown>> {
   try {
     if (isCostaSelectUrl(url)) {
+      console.log('[enrich] Scraping CostaSelect:', url)
       const data = await scrapeCostaSelect(url)
+      console.log('[enrich] CostaSelect result:', data.adres, data.vraagprijs, data.fotos.length, 'fotos')
       return {
         title: data.adres,
         price: data.vraagprijs || null,
@@ -21,7 +23,9 @@ async function enrichFromUrl(url: string): Promise<Record<string, unknown>> {
       }
     }
     if (isIdealistaUrl(url)) {
+      console.log('[enrich] Scraping Idealista:', url)
       const data = await scrapeIdealista(url)
+      console.log('[enrich] Idealista result:', data.adres, data.vraagprijs, data.fotos.length, 'fotos')
       return {
         title: data.adres,
         price: data.vraagprijs || null,
@@ -33,8 +37,9 @@ async function enrichFromUrl(url: string): Promise<Record<string, unknown>> {
         source: 'idealista',
       }
     }
+    console.log('[enrich] URL not recognized as CostaSelect or Idealista:', url)
   } catch (err) {
-    console.error('[woninglijst/items] Enrich failed for', url, err)
+    console.error('[enrich] Failed for', url, err)
   }
   return {}
 }
@@ -56,8 +61,11 @@ export async function POST(
     // Auto-enrich if only a URL is provided (no title/thumbnail)
     let enriched: Record<string, unknown> = {}
     const url = (item.url as string) || ''
+    console.log('[items POST] item received:', { url, title: item.title, thumbnail: item.thumbnail })
     if (url && !item.title && !item.thumbnail) {
+      console.log('[items POST] Triggering enrich for:', url)
       enriched = await enrichFromUrl(url)
+      console.log('[items POST] Enriched result:', enriched)
     }
 
     return {
