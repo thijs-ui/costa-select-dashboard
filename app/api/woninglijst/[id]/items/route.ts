@@ -1,5 +1,43 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
+import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
+
+export const maxDuration = 120
+
+async function enrichFromUrl(url: string): Promise<Record<string, unknown>> {
+  try {
+    if (isCostaSelectUrl(url)) {
+      const data = await scrapeCostaSelect(url)
+      return {
+        title: data.adres,
+        price: data.vraagprijs || null,
+        location: data.regio,
+        bedrooms: data.slaapkamers || null,
+        bathrooms: data.badkamers || null,
+        size_m2: data.oppervlakte || null,
+        thumbnail: data.fotos[0] || null,
+        source: 'costaselect',
+      }
+    }
+    if (isIdealistaUrl(url)) {
+      const data = await scrapeIdealista(url)
+      return {
+        title: data.adres,
+        price: data.vraagprijs || null,
+        location: data.regio,
+        bedrooms: data.slaapkamers || null,
+        bathrooms: data.badkamers || null,
+        size_m2: data.oppervlakte || null,
+        thumbnail: data.fotos[0] || null,
+        source: 'idealista',
+      }
+    }
+  } catch (err) {
+    console.error('[woninglijst/items] Enrich failed for', url, err)
+  }
+  return {}
+}
 
 export async function POST(
   request: Request,
@@ -14,18 +52,27 @@ export async function POST(
 
   const supabase = createServiceClient()
 
-  const rows = items.map((item: Record<string, unknown>) => ({
-    shortlist_id: id,
-    title: item.title || '',
-    url: item.url || '',
-    price: item.price || null,
-    location: item.location || '',
-    bedrooms: item.bedrooms || null,
-    bathrooms: item.bathrooms || null,
-    size_m2: item.size_m2 || null,
-    thumbnail: item.thumbnail || null,
-    source: item.source || '',
-    notities: item.notities || '',
+  const rows = await Promise.all(items.map(async (item: Record<string, unknown>) => {
+    // Auto-enrich if only a URL is provided (no title/thumbnail)
+    let enriched: Record<string, unknown> = {}
+    const url = (item.url as string) || ''
+    if (url && !item.title && !item.thumbnail) {
+      enriched = await enrichFromUrl(url)
+    }
+
+    return {
+      shortlist_id: id,
+      title: item.title || enriched.title || url,
+      url,
+      price: item.price || enriched.price || null,
+      location: item.location || enriched.location || '',
+      bedrooms: item.bedrooms || enriched.bedrooms || null,
+      bathrooms: item.bathrooms || enriched.bathrooms || null,
+      size_m2: item.size_m2 || enriched.size_m2 || null,
+      thumbnail: item.thumbnail || enriched.thumbnail || null,
+      source: item.source || enriched.source || '',
+      notities: item.notities || '',
+    }
   }))
 
   const { error } = await supabase.from('shortlist_items').insert(rows)

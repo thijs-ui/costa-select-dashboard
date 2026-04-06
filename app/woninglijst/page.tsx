@@ -114,19 +114,25 @@ export default function WoninglijstPage() {
     fetchShortlists()
   }
 
+  const [addLoading, setAddLoading] = useState(false)
+
   async function handleAddUrl() {
     if (!selectedId || !addUrl.trim()) return
+    setAddLoading(true)
+    // Don't send title if empty — lets the backend auto-enrich from URL
+    const title = addTitle.trim()
     await fetch(`/api/woninglijst/${selectedId}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items: [{ url: addUrl.trim(), title: addTitle.trim() || addUrl.trim(), notities: addNote.trim() }],
+        items: [{ url: addUrl.trim(), ...(title ? { title } : {}), notities: addNote.trim() }],
       }),
     })
     setAddUrl('')
     setAddTitle('')
     setAddNote('')
     setShowAddUrl(false)
+    setAddLoading(false)
     fetchDetail(selectedId)
     fetchShortlists()
   }
@@ -267,7 +273,9 @@ export default function WoninglijstPage() {
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
           />
           <div className="flex gap-2">
-            <button onClick={handleAddUrl} className="px-4 py-2 bg-[#004B46] text-white text-sm rounded-lg cursor-pointer">Toevoegen</button>
+            <button onClick={handleAddUrl} disabled={addLoading} className="flex items-center gap-1.5 px-4 py-2 bg-[#004B46] text-white text-sm rounded-lg cursor-pointer disabled:opacity-50">
+              {addLoading ? <><Loader2 size={14} className="animate-spin" /> Ophalen...</> : 'Toevoegen'}
+            </button>
             <button onClick={() => { setShowAddUrl(false); setAddUrl(''); setAddTitle(''); setAddNote('') }} className="px-3 py-2 text-gray-400 hover:text-gray-600 cursor-pointer"><X size={16} /></button>
           </div>
         </div>
