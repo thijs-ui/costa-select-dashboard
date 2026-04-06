@@ -2,8 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageSquare, Send, Loader2, ExternalLink, Bed, Bath, Maximize2, Plus, Clock, Trash2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase-browser'
-import { useAuth } from '@/lib/auth-context'
 
 interface Property {
   id: string
@@ -69,46 +67,38 @@ export default function WoningbotPage() {
   const [showHistory, setShowHistory] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { user } = useAuth()
-  const supabase = createClient()
 
-  // Load chat history
+  // Load chat history via API
   const loadChats = useCallback(async () => {
-    if (!user) return
-    const { data } = await supabase
-      .from('web_chats')
-      .select('id, session_id, title, messages, updated_at')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false })
-      .limit(30)
-    if (data) setSavedChats(data)
-  }, [user, supabase])
+    try {
+      const res = await fetch('/api/woningbot/history')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) setSavedChats(data)
+      }
+    } catch { /* ignore */ }
+  }, [])
 
   useEffect(() => {
     loadChats()
   }, [loadChats])
 
-  // Save chat to Supabase after each bot response
+  // Save chat via API
   async function saveChat(msgs: ChatMessage[], sid: string | null, cid: string | null) {
-    if (!user || msgs.length === 0) return
+    if (msgs.length === 0) return
 
     const title = chatTitle(msgs)
 
-    if (cid) {
-      await supabase
-        .from('web_chats')
-        .update({ messages: msgs, title, session_id: sid || '', updated_at: new Date().toISOString() })
-        .eq('id', cid)
-    } else {
-      const { data } = await supabase
-        .from('web_chats')
-        .insert({ user_id: user.id, session_id: sid || '', title, messages: msgs })
-        .select('id')
-        .single()
-      if (data) setChatId(data.id)
-    }
-
-    loadChats()
+    try {
+      const res = await fetch('/api/woningbot/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sid, title, messages: msgs, chat_id: cid }),
+      })
+      const data = await res.json()
+      if (!cid && data.id) setChatId(data.id)
+      loadChats()
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
@@ -177,7 +167,11 @@ export default function WoningbotPage() {
 
   async function deleteChat(e: React.MouseEvent, id: string) {
     e.stopPropagation()
-    await supabase.from('web_chats').delete().eq('id', id)
+    await fetch('/api/woningbot/history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
     if (chatId === id) startNewChat()
     loadChats()
   }
