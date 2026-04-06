@@ -76,18 +76,32 @@ export async function scrapeCostaSelect(url: string): Promise<ScrapedProperty> {
     vraagprijs = parseInt(priceMatch[1].replace(/\./g, '').replace(',', ''), 10) || 0
   }
 
-  // Extract specs from text - bedrooms, bathrooms, surface
+  // Extract specs from dt/dd pairs (CostaSelect uses <dt>Aantal slaapkamers</dt><dd>5</dd>)
   let slaapkamers = 0
   let badkamers = 0
   let oppervlakte = 0
 
+  $('dt').each((_, el) => {
+    const label = $(el).text().toLowerCase().trim()
+    const value = $(el).next('dd').text().trim()
+    const num = parseInt(value, 10)
+    if (isNaN(num)) return
+    if (label.includes('slaapkamer') || label.includes('bedroom')) slaapkamers = num
+    if (label.includes('badkamer') || label.includes('bathroom')) badkamers = num
+  })
+
+  // Fallback: regex on body text
   const bodyText = $('body').text()
 
-  const bedMatch = bodyText.match(/(\d+)\s*(?:slaapkamer|bedroom|dormitorio)/i)
-  if (bedMatch) slaapkamers = parseInt(bedMatch[1], 10)
+  if (!slaapkamers) {
+    const bedMatch = bodyText.match(/(\d+)\s*(?:slaapkamer|bedroom|dormitorio)/i)
+    if (bedMatch) slaapkamers = parseInt(bedMatch[1], 10)
+  }
 
-  const bathMatch = bodyText.match(/(\d+)\s*(?:badkamer|bathroom|baño)/i)
-  if (bathMatch) badkamers = parseInt(bathMatch[1], 10)
+  if (!badkamers) {
+    const bathMatch = bodyText.match(/(\d+)\s*(?:badkamer|bathroom|baño)/i)
+    if (bathMatch) badkamers = parseInt(bathMatch[1], 10)
+  }
 
   const surfaceMatch = bodyText.match(/(\d+)\s*m[²2]/)
   if (surfaceMatch) oppervlakte = parseInt(surfaceMatch[1], 10)
