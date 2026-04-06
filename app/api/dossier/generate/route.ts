@@ -3,6 +3,12 @@ import Anthropic from '@anthropic-ai/sdk'
 import fs from 'fs'
 import path from 'path'
 import { docs } from '@/lib/kennisbank-docs'
+import { createServiceClient } from '@/lib/supabase'
+import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
+import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
+
+// Allow longer execution for Apify + Claude calls
+export const maxDuration = 120
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -85,38 +91,48 @@ export async function POST(request: Request) {
   let propertyData: Record<string, unknown>
 
   if (mode === 'url' && url) {
-    // Fetch property via woningbot lookup API (direct, no AI)
     try {
-      const woningbotUrl = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
-      const woningbotKey = process.env.WONINGBOT_API_KEY || ''
+      if (isCostaSelectUrl(url)) {
+        // Scrape directly from CostaSelect (our own site)
+        const scraped = await scrapeCostaSelect(url)
+        propertyData = { ...scraped }
+      } else if (isIdealistaUrl(url)) {
+        // Scrape via Apify actor
+        const scraped = await scrapeIdealista(url)
+        propertyData = { ...scraped }
+      } else {
+        // Fallback: Woningbot lookup for other URLs
+        const woningbotUrl = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
+        const woningbotKey = process.env.WONINGBOT_API_KEY || ''
 
-      const res = await fetch(`${woningbotUrl}/api/lookup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': woningbotKey,
-        },
-        body: JSON.stringify({ url }),
-      })
+        const res = await fetch(`${woningbotUrl}/api/lookup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': woningbotKey,
+          },
+          body: JSON.stringify({ url }),
+        })
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Lookup failed')
-      }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || 'Lookup failed')
+        }
 
-      const prop = await res.json()
+        const prop = await res.json()
 
-      propertyData = {
-        adres: prop.title || url,
-        regio: prop.location || regio || 'Onbekend',
-        type: prop.property_type || 'woning',
-        vraagprijs: prop.price || 0,
-        oppervlakte: prop.size_m2 || 0,
-        slaapkamers: prop.bedrooms || 0,
-        badkamers: prop.bathrooms || 0,
-        omschrijving: prop.description || '',
-        fotos: prop.images?.length > 0 ? prop.images : (prop.thumbnail ? [prop.thumbnail] : []),
-        url,
+        propertyData = {
+          adres: prop.title || url,
+          regio: prop.location || regio || 'Onbekend',
+          type: prop.property_type || 'woning',
+          vraagprijs: prop.price || 0,
+          oppervlakte: prop.size_m2 || 0,
+          slaapkamers: prop.bedrooms || 0,
+          badkamers: prop.bathrooms || 0,
+          omschrijving: prop.description || '',
+          fotos: prop.images?.length > 0 ? prop.images : (prop.thumbnail ? [prop.thumbnail] : []),
+          url,
+        }
       }
     } catch (err) {
       console.error('Property lookup failed:', err)
@@ -195,10 +211,27 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
     analyse.advies_consultant = 'De AI-analyse is niet beschikbaar. Beoordeel het object handmatig.'
   }
 
-  return NextResponse.json({
+  const dossierResult = {
     property: propertyData,
     regioInfo: regioContent ? regioContent.substring(0, 500) : 'Geen regio-informatie beschikbaar.',
     analyse,
     generatedAt: new Date().toISOString(),
-  })
+  }
+
+  // Save to history (fire-and-forget, don't block response)
+  try {
+    const supabase = createServiceClient()
+    await supabase.from('dossier_history').insert({
+      adres: String(propertyData.adres || 'Onbekend'),
+      regio: String(propertyData.regio || ''),
+      type: String(propertyData.type || ''),
+      vraagprijs: Number(propertyData.vraagprijs) || 0,
+      url: String(propertyData.url || ''),
+      dossier_data: dossierResult,
+    })
+  } catch (err) {
+    console.error('Failed to save dossier to history:', err)
+  }
+
+  return NextResponse.json(dossierResult)
 }

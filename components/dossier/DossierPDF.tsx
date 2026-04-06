@@ -5,8 +5,50 @@ import {
   View,
   Image,
   StyleSheet,
+  Font,
 } from '@react-pdf/renderer'
 
+// ─── Register brand fonts ──────────────────────────────────────────────
+Font.register({
+  family: 'Bricolage Grotesque',
+  fonts: [
+    {
+      src: 'https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9U6as8bTXq_nANBjzKo3IeZx8z6up5BeSl5jBNz_19PpbpMXuECpwUxJBOm_OJWiaaD30YfKfjZZoLvRviyM0.ttf',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9U6as8bTXq_nANBjzKo3IeZx8z6up5BeSl5jBNz_19PpbpMXuECpwUxJBOm_OJWiaaD30YfKfjZZoLvcXlyM0.ttf',
+      fontWeight: 600,
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9U6as8bTXq_nANBjzKo3IeZx8z6up5BeSl5jBNz_19PpbpMXuECpwUxJBOm_OJWiaaD30YfKfjZZoLvfzlyM0.ttf',
+      fontWeight: 700,
+    },
+  ],
+})
+
+Font.register({
+  family: 'Raleway',
+  fonts: [
+    {
+      src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVvaooCP.ttf',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVsEpYCP.ttf',
+      fontWeight: 600,
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVs9pYCP.ttf',
+      fontWeight: 700,
+    },
+  ],
+})
+
+// Disable hyphenation for cleaner text
+Font.registerHyphenationCallback((word) => [word])
+
+// ─── Types ─────────────────────────────────────────────────────────────
 export interface DossierData {
   property: {
     adres: string
@@ -33,197 +75,673 @@ export interface DossierData {
   generatedAt: string
 }
 
+// ─── Brand tokens ──────────────────────────────────────────────────────
 const DEEPSEA = '#004B46'
+const DEEPSEA_LIGHT = '#0A6B63'
 const SUN = '#F5AF40'
 const MARBLE = '#FFFAEF'
+const SEA = '#0EAE96'
 const GRAY = '#374151'
+const GRAY_MID = '#7A8C8B'
 const GRAY_LIGHT = '#9CA3AF'
+const WHITE = '#FFFFFF'
 
+// ─── Styles ────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  // ─── Page 1: Omslag ──────────────────────────────
-  page: { backgroundColor: MARBLE, fontFamily: 'Helvetica' },
-  header: { backgroundColor: DEEPSEA, paddingHorizontal: 40, paddingTop: 40, paddingBottom: 32 },
-  tagline: { color: SUN, fontSize: 10, letterSpacing: 3, fontFamily: 'Helvetica-Bold', marginTop: 8 },
-  logoText: { color: '#FFFAEF', fontSize: 18, fontFamily: 'Helvetica-Bold', letterSpacing: 2 },
-  logoSub: { color: '#FFFAEF', fontSize: 7, letterSpacing: 4, marginTop: 2, opacity: 0.5 },
-  omslagContent: { padding: 40 },
-  heroImage: { width: '100%', height: 220, objectFit: 'cover', borderRadius: 6, marginBottom: 20 },
-  adres: { fontSize: 22, fontFamily: 'Helvetica-Bold', color: DEEPSEA, marginBottom: 6 },
-  prijs: { fontSize: 30, fontFamily: 'Helvetica-Bold', color: DEEPSEA, marginBottom: 16 },
-  kenmerkenRij: { flexDirection: 'row', gap: 20, marginBottom: 24 },
-  kenmerk: { fontSize: 11, color: GRAY, fontFamily: 'Helvetica' },
-  kenmerkBold: { fontFamily: 'Helvetica-Bold', color: DEEPSEA },
-  datum: { fontSize: 9, color: GRAY_LIGHT, marginTop: 12 },
-  divider: { height: 2, backgroundColor: SUN, width: 40, marginVertical: 16 },
-
-  // ─── Page 2+3: Content ───────────────────────────
-  contentPage: { backgroundColor: MARBLE, padding: 40, paddingBottom: 60 },
-  sectionHeader: {
-    fontSize: 13, fontFamily: 'Helvetica-Bold', color: DEEPSEA,
-    marginTop: 20, marginBottom: 8, paddingBottom: 4,
-    borderBottomWidth: 1, borderBottomColor: DEEPSEA,
+  // ─── Cover page ─────────────────────────────────────────
+  coverPage: {
+    backgroundColor: DEEPSEA,
+    padding: 0,
+    fontFamily: 'Raleway',
   },
-  body: { fontSize: 10, color: GRAY, lineHeight: 1.6, marginBottom: 8 },
-  fotoGrid: { flexDirection: 'row', gap: 8, marginVertical: 12 },
-  gridFoto: { flex: 1, height: 120, objectFit: 'cover', borderRadius: 4 },
-  tweeKolommen: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  kolom: { flex: 1 },
-  subheader: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: DEEPSEA, marginBottom: 6 },
-  bulletRij: { flexDirection: 'row', gap: 6, marginBottom: 4 },
-  bulletGreen: { fontSize: 10, color: '#16a34a', fontFamily: 'Helvetica-Bold', width: 12 },
-  bulletAmber: { fontSize: 10, color: '#d97706', fontFamily: 'Helvetica-Bold', width: 12 },
-  bulletRed: { fontSize: 10, color: '#dc2626', fontFamily: 'Helvetica-Bold', width: 12 },
-  bulletText: { fontSize: 10, color: GRAY, flex: 1, lineHeight: 1.5 },
-
-  // ─── Adviesblok ──────────────────────────────────
-  adviesBlok: { backgroundColor: DEEPSEA, padding: 16, borderRadius: 6, marginTop: 20 },
-  adviesLabel: { fontSize: 8, color: SUN, letterSpacing: 2, fontFamily: 'Helvetica-Bold', marginBottom: 6 },
-  adviesText: { fontSize: 10, color: MARBLE, lineHeight: 1.6 },
-
-  // ─── Footer ──────────────────────────────────────
-  footer: {
-    position: 'absolute', bottom: 24, left: 40, right: 40,
-    flexDirection: 'row', justifyContent: 'space-between',
-    fontSize: 8, color: GRAY_LIGHT,
+  coverTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 48,
+    paddingTop: 36,
+    paddingBottom: 20,
   },
-  pageNum: { fontSize: 8, color: GRAY_LIGHT },
+  coverLogo: {
+    width: 160,
+    height: 40,
+  },
+  coverTagline: {
+    fontSize: 9,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: SUN,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+  },
+  coverBody: {
+    flexDirection: 'row',
+    flex: 1,
+    paddingHorizontal: 48,
+    paddingBottom: 36,
+    gap: 40,
+  },
+  coverLeft: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingRight: 8,
+  },
+  coverDivider: {
+    width: 48,
+    height: 3,
+    backgroundColor: SUN,
+    marginBottom: 20,
+  },
+  coverTitle: {
+    fontSize: 28,
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 700,
+    color: WHITE,
+    marginBottom: 12,
+    lineHeight: 1.2,
+  },
+  coverPrice: {
+    fontSize: 32,
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 700,
+    color: SUN,
+    marginBottom: 24,
+  },
+  coverSpecs: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 20,
+  },
+  coverSpec: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  coverSpecValue: {
+    fontSize: 16,
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 700,
+    color: WHITE,
+  },
+  coverSpecLabel: {
+    fontSize: 10,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: MARBLE,
+    opacity: 0.7,
+  },
+  coverRegio: {
+    fontSize: 11,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: SEA,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  coverType: {
+    fontSize: 10,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: MARBLE,
+    opacity: 0.6,
+  },
+  coverRight: {
+    width: 380,
+    justifyContent: 'center',
+  },
+  coverHero: {
+    width: '100%',
+    height: 320,
+    borderRadius: 12,
+    objectFit: 'cover',
+  },
+  coverFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 48,
+    paddingBottom: 24,
+  },
+  coverDate: {
+    fontSize: 9,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: MARBLE,
+    opacity: 0.5,
+  },
+  coverBranding: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: MARBLE,
+    opacity: 0.4,
+    letterSpacing: 1,
+  },
+
+  // ─── Content pages ──────────────────────────────────────
+  contentPage: {
+    backgroundColor: MARBLE,
+    fontFamily: 'Raleway',
+    padding: 0,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: DEEPSEA,
+    paddingHorizontal: 48,
+    paddingVertical: 14,
+  },
+  headerLogo: {
+    width: 120,
+    height: 30,
+  },
+  headerPageLabel: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: SUN,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+  },
+  contentBody: {
+    flex: 1,
+    paddingHorizontal: 48,
+    paddingTop: 28,
+    paddingBottom: 20,
+  },
+
+  // ─── Section headers ────────────────────────────────────
+  sectionLabel: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: SUN,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 700,
+    color: DEEPSEA,
+    marginBottom: 10,
+  },
+  sectionDivider: {
+    width: 32,
+    height: 2,
+    backgroundColor: SUN,
+    marginBottom: 16,
+  },
+
+  // ─── Body text ──────────────────────────────────────────
+  body: {
+    fontSize: 10,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: GRAY,
+    lineHeight: 1.7,
+    marginBottom: 6,
+  },
+
+  // ─── Layout helpers ─────────────────────────────────────
+  row: {
+    flexDirection: 'row',
+    gap: 32,
+  },
+  col: {
+    flex: 1,
+  },
+
+  // ─── Photo pages ─────────────────────────────────────────
+  photoPageGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  photoCell: {
+    width: '48%',
+    height: 220,
+    borderRadius: 10,
+    objectFit: 'cover',
+  },
+
+  // ─── Bullet lists ──────────────────────────────────────
+  bulletRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 5,
+    alignItems: 'flex-start',
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
+  },
+  bulletGreen: {
+    backgroundColor: SEA,
+  },
+  bulletAmber: {
+    backgroundColor: SUN,
+  },
+  bulletRed: {
+    backgroundColor: '#E05252',
+  },
+  bulletText: {
+    fontSize: 10,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: GRAY,
+    lineHeight: 1.6,
+    flex: 1,
+  },
+
+  // ─── Advies block ──────────────────────────────────────
+  adviesBlock: {
+    backgroundColor: DEEPSEA,
+    borderRadius: 12,
+    padding: 24,
+    marginTop: 16,
+  },
+  adviesLabel: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: SUN,
+    letterSpacing: 3,
+    marginBottom: 8,
+  },
+  adviesText: {
+    fontSize: 10,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: MARBLE,
+    lineHeight: 1.7,
+  },
+
+  // ─── Card style section ─────────────────────────────────
+  card: {
+    backgroundColor: WHITE,
+    borderRadius: 10,
+    padding: 20,
+    border: `1px solid rgba(0,75,70,0.08)`,
+  },
+
+  // ─── Footer ────────────────────────────────────────────
+  pageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 48,
+    paddingBottom: 16,
+  },
+  footerText: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 400,
+    color: GRAY_MID,
+  },
+  footerPage: {
+    fontSize: 8,
+    fontFamily: 'Raleway',
+    fontWeight: 600,
+    color: DEEPSEA,
+  },
 })
 
-function SectionHeader({ title }: { title: string }) {
-  return <Text style={s.sectionHeader}>{title}</Text>
+// ─── Helper: Section Header ───────────────────────────────────────────
+function SectionBlock({ label, title }: { label: string; title: string }) {
+  return (
+    <View>
+      <Text style={s.sectionLabel}>{label}</Text>
+      <Text style={s.sectionTitle}>{title}</Text>
+      <View style={s.sectionDivider} />
+    </View>
+  )
 }
 
-export function DossierPDF({ data }: { data: DossierData }) {
+// ─── Helper: Bullet Item ──────────────────────────────────────────────
+function BulletItem({
+  text,
+  color,
+}: {
+  text: string
+  color: 'green' | 'amber' | 'red'
+}) {
+  const dotStyle =
+    color === 'green'
+      ? s.bulletGreen
+      : color === 'amber'
+        ? s.bulletAmber
+        : s.bulletRed
+  return (
+    <View style={s.bulletRow}>
+      <View style={[s.bulletDot, dotStyle]} />
+      <Text style={s.bulletText}>{text}</Text>
+    </View>
+  )
+}
+
+// ─── Main PDF Component ───────────────────────────────────────────────
+export function DossierPDF({
+  data,
+  logoSrc,
+}: {
+  data: DossierData
+  logoSrc?: string
+}) {
   const { property, regioInfo, analyse, generatedAt } = data
   const fotos = property.fotos || []
+
   const prijsFormatted = property.vraagprijs
-    ? `€ ${property.vraagprijs.toLocaleString('nl-NL')}`
+    ? `\u20AC ${property.vraagprijs.toLocaleString('nl-NL')}`
     : 'Prijs op aanvraag'
+
   const datumFormatted = new Date(generatedAt).toLocaleDateString('nl-NL', {
-    day: 'numeric', month: 'long', year: 'numeric',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
   })
 
   return (
     <Document>
-      {/* ─── Pagina 1: Omslag ─────────────────────────────────── */}
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.logoText}>COSTA SELECT</Text>
-          <Text style={s.logoSub}>PREMIUM AANKOOPMAKELAAR SPANJE</Text>
-          <View style={s.divider} />
-          <Text style={s.tagline}>WONINGDOSSIER</Text>
+      {/* ─── PAGE 1: COVER ──────────────────────────────────────── */}
+      <Page size="A4" orientation="landscape" style={s.coverPage}>
+        {/* Top bar: Logo + tagline */}
+        <View style={s.coverTop}>
+          {logoSrc ? (
+            <Image src={logoSrc} style={s.coverLogo} />
+          ) : (
+            <Text
+              style={{
+                fontSize: 16,
+                fontFamily: 'Bricolage Grotesque',
+                fontWeight: 700,
+                color: WHITE,
+                letterSpacing: 2,
+              }}
+            >
+              COSTA SELECT
+            </Text>
+          )}
+          <Text style={s.coverTagline}>Woningdossier</Text>
         </View>
 
-        <View style={s.omslagContent}>
-          {fotos[0] && <Image src={fotos[0]} style={s.heroImage} />}
+        {/* Main content: left info + right hero image */}
+        <View style={s.coverBody}>
+          <View style={s.coverLeft}>
+            <View style={s.coverDivider} />
 
-          <Text style={s.adres}>{property.adres}</Text>
-          <Text style={s.prijs}>{prijsFormatted}</Text>
+            <Text style={s.coverRegio}>{property.regio}</Text>
+            <Text style={s.coverTitle}>{property.adres}</Text>
+            <Text style={s.coverPrice}>{prijsFormatted}</Text>
 
-          <View style={s.kenmerkenRij}>
-            {property.slaapkamers > 0 && (
-              <Text style={s.kenmerk}>
-                <Text style={s.kenmerkBold}>{property.slaapkamers}</Text> slaapkamers
-              </Text>
-            )}
-            {property.badkamers > 0 && (
-              <Text style={s.kenmerk}>
-                <Text style={s.kenmerkBold}>{property.badkamers}</Text> badkamers
-              </Text>
-            )}
-            {property.oppervlakte > 0 && (
-              <Text style={s.kenmerk}>
-                <Text style={s.kenmerkBold}>{property.oppervlakte}</Text> m²
-              </Text>
-            )}
-            {property.type && (
-              <Text style={s.kenmerk}>{property.type}</Text>
-            )}
+            <View style={s.coverSpecs}>
+              {property.slaapkamers > 0 && (
+                <View style={s.coverSpec}>
+                  <Text style={s.coverSpecValue}>
+                    {property.slaapkamers}
+                  </Text>
+                  <Text style={s.coverSpecLabel}>slaapkamers</Text>
+                </View>
+              )}
+              {property.badkamers > 0 && (
+                <View style={s.coverSpec}>
+                  <Text style={s.coverSpecValue}>
+                    {property.badkamers}
+                  </Text>
+                  <Text style={s.coverSpecLabel}>badkamers</Text>
+                </View>
+              )}
+              {property.oppervlakte > 0 && (
+                <View style={s.coverSpec}>
+                  <Text style={s.coverSpecValue}>
+                    {property.oppervlakte}
+                  </Text>
+                  <Text style={s.coverSpecLabel}>m2</Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={s.coverType}>
+              {property.type.charAt(0).toUpperCase() +
+                property.type.slice(1)}
+            </Text>
           </View>
 
-          <Text style={s.kenmerk}>Regio: {property.regio}</Text>
-          <Text style={s.datum}>Gegenereerd op {datumFormatted}</Text>
+          {fotos[0] && (
+            <View style={s.coverRight}>
+              <Image src={fotos[0]} style={s.coverHero} />
+            </View>
+          )}
         </View>
 
-        <View style={s.footer}>
-          <Text>Costa Select — Premium Aankoopmakelaar Spanje</Text>
-          <Text style={s.pageNum}>1</Text>
+        {/* Footer */}
+        <View style={s.coverFooter}>
+          <Text style={s.coverDate}>
+            Gegenereerd op {datumFormatted}
+          </Text>
+          <Text style={s.coverBranding}>
+            Costa Select | Premium Aankoopmakelaar Spanje
+          </Text>
         </View>
       </Page>
 
-      {/* ─── Pagina 2: Details & Analyse ──────────────────────── */}
-      <Page size="A4" style={s.contentPage}>
-        <SectionHeader title="Objectomschrijving" />
-        <Text style={s.body}>{analyse.samenvatting}</Text>
+      {/* ─── PAGE 2: ANALYSE ────────────────────────────────────── */}
+      <Page size="A4" orientation="landscape" style={s.contentPage}>
+        {/* Header bar */}
+        <View style={s.headerBar}>
+          {logoSrc ? (
+            <Image src={logoSrc} style={s.headerLogo} />
+          ) : (
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: 'Bricolage Grotesque',
+                fontWeight: 700,
+                color: WHITE,
+              }}
+            >
+              COSTA SELECT
+            </Text>
+          )}
+          <Text style={s.headerPageLabel}>Analyse</Text>
+        </View>
 
-        {property.omschrijving && (
-          <Text style={s.body}>{property.omschrijving.substring(0, 600)}</Text>
-        )}
-
-        {fotos.length > 1 && (
-          <View style={s.fotoGrid}>
-            {fotos.slice(1, 4).map((url, i) => (
-              <Image key={i} src={url} style={s.gridFoto} />
-            ))}
+        <View style={s.contentBody}>
+          {/* Samenvatting + Prijsanalyse */}
+          <View style={s.row}>
+            <View style={s.col}>
+              <SectionBlock label="Overzicht" title="Samenvatting" />
+              <Text style={s.body}>{analyse.samenvatting}</Text>
+              {property.omschrijving && (
+                <Text style={[s.body, { marginTop: 4, color: GRAY_MID }]}>
+                  {property.omschrijving.substring(0, 400)}
+                </Text>
+              )}
+            </View>
+            <View style={s.col}>
+              <SectionBlock label="Markt" title="Prijsanalyse" />
+              <Text style={s.body}>{analyse.prijsanalyse}</Text>
+            </View>
           </View>
-        )}
 
-        <SectionHeader title="Prijsanalyse" />
-        <Text style={s.body}>{analyse.prijsanalyse}</Text>
+          {/* Sterke punten + Aandachtspunten */}
+          <View style={[s.row, { marginTop: 20 }]}>
+            <View style={s.col}>
+              <Text
+                style={[
+                  s.sectionLabel,
+                  { color: SEA, marginBottom: 10 },
+                ]}
+              >
+                Sterke punten
+              </Text>
+              {analyse.sterke_punten.map((p, i) => (
+                <BulletItem key={i} text={p} color="green" />
+              ))}
+            </View>
+            <View style={s.col}>
+              <Text
+                style={[
+                  s.sectionLabel,
+                  { color: SUN, marginBottom: 10 },
+                ]}
+              >
+                Aandachtspunten
+              </Text>
+              {analyse.aandachtspunten.map((p, i) => (
+                <BulletItem key={i} text={p} color="amber" />
+              ))}
+            </View>
+          </View>
+        </View>
 
-        <View style={s.tweeKolommen}>
-          <View style={s.kolom}>
-            <Text style={s.subheader}>Sterke punten</Text>
-            {analyse.sterke_punten.map((p, i) => (
-              <View key={i} style={s.bulletRij}>
-                <Text style={s.bulletGreen}>✓</Text>
-                <Text style={s.bulletText}>{p}</Text>
+        {/* Footer */}
+        <View style={s.pageFooter}>
+          <Text style={s.footerText}>
+            Costa Select | Premium Aankoopmakelaar Spanje
+          </Text>
+          <Text style={s.footerPage}>2</Text>
+        </View>
+      </Page>
+
+      {/* ─── PAGE 3: REGIO & ADVIES ─────────────────────────────── */}
+      <Page size="A4" orientation="landscape" style={s.contentPage}>
+        {/* Header bar */}
+        <View style={s.headerBar}>
+          {logoSrc ? (
+            <Image src={logoSrc} style={s.headerLogo} />
+          ) : (
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: 'Bricolage Grotesque',
+                fontWeight: 700,
+                color: WHITE,
+              }}
+            >
+              COSTA SELECT
+            </Text>
+          )}
+          <Text style={s.headerPageLabel}>
+            Regio &amp; Advies
+          </Text>
+        </View>
+
+        <View style={s.contentBody}>
+          <View style={s.row}>
+            {/* Left column: Regio + Verhuur */}
+            <View style={s.col}>
+              <SectionBlock
+                label="Regio"
+                title={property.regio}
+              />
+              <Text style={s.body}>{regioInfo}</Text>
+
+              <View style={{ marginTop: 20 }}>
+                <SectionBlock
+                  label="Rendement"
+                  title="Verhuurpotentieel"
+                />
+                <Text style={s.body}>
+                  {analyse.verhuurpotentieel}
+                </Text>
               </View>
-            ))}
+            </View>
+
+            {/* Right column: Juridisch */}
+            <View style={s.col}>
+              {analyse.juridische_risicos.length > 0 && (
+                <View>
+                  <SectionBlock
+                    label="Juridisch"
+                    title="Aandachtspunten"
+                  />
+                  {analyse.juridische_risicos.map((r, i) => (
+                    <BulletItem key={i} text={r} color="red" />
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
-          <View style={s.kolom}>
-            <Text style={s.subheader}>Aandachtspunten</Text>
-            {analyse.aandachtspunten.map((p, i) => (
-              <View key={i} style={s.bulletRij}>
-                <Text style={s.bulletAmber}>!</Text>
-                <Text style={s.bulletText}>{p}</Text>
+
+          {/* Advies block */}
+          <View style={s.adviesBlock}>
+            <Text style={s.adviesLabel}>
+              Advies voor consultant
+            </Text>
+            <Text style={s.adviesText}>
+              {analyse.advies_consultant}
+            </Text>
+          </View>
+        </View>
+
+        {/* Footer */}
+        <View style={s.pageFooter}>
+          <Text style={s.footerText}>
+            Costa Select | Premium Aankoopmakelaar Spanje
+          </Text>
+          <Text style={s.footerPage}>3</Text>
+        </View>
+      </Page>
+
+      {/* ─── PHOTO PAGES (4 photos per page, up to 8 total) ──── */}
+      {fotos.length > 0 &&
+        [0, 1].map((pageIdx) => {
+          const pagePhotos = fotos.slice(pageIdx * 4, pageIdx * 4 + 4)
+          if (pagePhotos.length === 0) return null
+          return (
+            <Page
+              key={`photos-${pageIdx}`}
+              size="A4"
+              orientation="landscape"
+              style={s.contentPage}
+            >
+              <View style={s.headerBar}>
+                {logoSrc ? (
+                  <Image src={logoSrc} style={s.headerLogo} />
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontFamily: 'Bricolage Grotesque',
+                      fontWeight: 700,
+                      color: WHITE,
+                    }}
+                  >
+                    COSTA SELECT
+                  </Text>
+                )}
+                <Text style={s.headerPageLabel}>
+                  {`Foto\u2019s ${pageIdx + 1}`}
+                </Text>
               </View>
-            ))}
-          </View>
-        </View>
 
-        <View style={s.footer}>
-          <Text>Costa Select — Premium Aankoopmakelaar Spanje</Text>
-          <Text style={s.pageNum}>2</Text>
-        </View>
-      </Page>
+              <View style={s.contentBody}>
+                <View style={s.photoPageGrid}>
+                  {pagePhotos.map((url, i) => (
+                    <Image
+                      key={i}
+                      src={url}
+                      style={s.photoCell}
+                    />
+                  ))}
+                </View>
+              </View>
 
-      {/* ─── Pagina 3: Regio & Advies ─────────────────────────── */}
-      <Page size="A4" style={s.contentPage}>
-        <SectionHeader title={`Regio: ${property.regio}`} />
-        <Text style={s.body}>{regioInfo}</Text>
-
-        <SectionHeader title="Juridische aandachtspunten" />
-        {analyse.juridische_risicos.map((r, i) => (
-          <View key={i} style={s.bulletRij}>
-            <Text style={s.bulletRed}>⚠</Text>
-            <Text style={s.bulletText}>{r}</Text>
-          </View>
-        ))}
-
-        <SectionHeader title="Verhuurpotentieel" />
-        <Text style={s.body}>{analyse.verhuurpotentieel}</Text>
-
-        <View style={s.adviesBlok}>
-          <Text style={s.adviesLabel}>ADVIES CONSULTANT</Text>
-          <Text style={s.adviesText}>{analyse.advies_consultant}</Text>
-        </View>
-
-        <View style={s.footer}>
-          <Text>Costa Select — Premium Aankoopmakelaar Spanje</Text>
-          <Text style={s.pageNum}>3</Text>
-        </View>
-      </Page>
+              <View style={s.pageFooter}>
+                <Text style={s.footerText}>
+                  Costa Select | Premium Aankoopmakelaar Spanje
+                </Text>
+                <Text style={s.footerPage}>{4 + pageIdx}</Text>
+              </View>
+            </Page>
+          )
+        })}
     </Document>
   )
 }
