@@ -1,4 +1,4 @@
-import { ApifyClient } from 'apify-client'
+const APIFY_BASE = 'https://api.apify.com/v2'
 
 export interface IdealistaProperty {
   adres: string
@@ -38,35 +38,56 @@ export async function scrapeIdealista(url: string): Promise<IdealistaProperty> {
 
   const actorId = process.env.APIFY_IDEALISTA_ACTOR_ID || 'igolaizola/idealista-scraper'
   const propertyCode = extractPropertyCode(url)
-  const client = new ApifyClient({ token })
 
-  const run = await client.actor(actorId).call(
+  // Step 1: Start actor run via REST API (avoids apify-client bundling issues on Vercel)
+  const encodedActorId = actorId.replace('/', '~')
+  const startRes = await fetch(
+    `${APIFY_BASE}/acts/${encodedActorId}/runs?token=${token}&waitForFinish=120`,
     {
-      operation: 'sale',
-      country: 'es',
-      propertyCodes: [propertyCode],
-      fetchDetails: true,
-      fetchStats: false,
-      proxyConfiguration: {
-        useApifyProxy: true,
-        apifyProxyGroups: ['RESIDENTIAL'],
-      },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: 'sale',
+        country: 'es',
+        propertyCodes: [propertyCode],
+        fetchDetails: true,
+        fetchStats: false,
+        proxyConfiguration: {
+          useApifyProxy: true,
+          apifyProxyGroups: ['RESIDENTIAL'],
+        },
+      }),
     },
-    { waitSecs: 120 },
   )
 
-  if (run.status !== 'SUCCEEDED') {
-    throw new Error(`Apify actor run mislukt: status=${run.status}`)
+  if (!startRes.ok) {
+    const errText = await startRes.text().catch(() => '')
+    throw new Error(`Apify actor start failed (${startRes.status}): ${errText.substring(0, 200)}`)
   }
 
-  const { items } = await client.dataset(run.defaultDatasetId).listItems()
+  const run = await startRes.json() as { data: { status: string; defaultDatasetId: string } }
 
-  if (!items || items.length === 0) {
+  if (run.data.status !== 'SUCCEEDED') {
+    throw new Error(`Apify actor run mislukt: status=${run.data.status}`)
+  }
+
+  // Step 2: Fetch dataset items
+  const datasetRes = await fetch(
+    `${APIFY_BASE}/datasets/${run.data.defaultDatasetId}/items?token=${token}`,
+  )
+
+  if (!datasetRes.ok) {
+    throw new Error(`Apify dataset fetch failed (${datasetRes.status})`)
+  }
+
+  const items = await datasetRes.json()
+
+  if (!Array.isArray(items) || items.length === 0) {
     throw new Error('Geen resultaten van Apify actor voor deze woning')
   }
 
   // The igolaizola actor puts all detail data under _details
-  const raw = items[0] as Record<string, unknown>
+  const raw = items[0]
   const details = (raw._details || raw) as Record<string, unknown>
 
   // Extract photos from _details.multimedia.images

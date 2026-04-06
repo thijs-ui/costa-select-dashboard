@@ -13,7 +13,6 @@
     "@react-pdf/renderer": "^4.3.3",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
-    "apify-client": "^2.22.3",
     "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.38.0",
