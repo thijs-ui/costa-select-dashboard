@@ -20,6 +20,7 @@ import {
   MapPin,
   Users,
   Building2,
+  ClipboardList,
   LogOut,
   X,
   ChevronDown,
@@ -29,6 +30,7 @@ import { useState } from 'react'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
+  { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
   { href: '/dossier', label: 'Dossier', icon: FileText },
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
   { href: '/training', label: 'Training', icon: GraduationCap },

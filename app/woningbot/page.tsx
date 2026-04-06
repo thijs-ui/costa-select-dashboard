@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MessageSquare, Send, Loader2, ExternalLink, Bed, Bath, Maximize2, Plus, Clock, Trash2 } from 'lucide-react'
+import { MessageSquare, Send, Loader2, ExternalLink, Bed, Bath, Maximize2, Plus, Clock, Trash2, Check, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 
 interface Property {
@@ -69,6 +69,12 @@ export default function WoningbotPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
+
+  // Shortlist selection
+  const [selectedProps, setSelectedProps] = useState<Set<string>>(new Set())
+  const [shortlists, setShortlists] = useState<{ id: string; klant_naam: string }[]>([])
+  const [showShortlistPicker, setShowShortlistPicker] = useState(false)
+  const [shortlistSaving, setShortlistSaving] = useState(false)
 
   // Load chat history via API
   const loadChats = useCallback(async () => {
@@ -179,6 +185,61 @@ export default function WoningbotPage() {
     })
     if (chatId === id) startNewChat()
     loadChats()
+  }
+
+  // Get all properties from messages (for selection tracking)
+  function getAllProperties(): Property[] {
+    return messages.flatMap(m => m.properties || [])
+  }
+
+  function toggleProperty(propId: string) {
+    setSelectedProps(prev => {
+      const next = new Set(prev)
+      if (next.has(propId)) next.delete(propId)
+      else next.add(propId)
+      return next
+    })
+  }
+
+  async function openShortlistPicker() {
+    // Fetch available shortlists
+    try {
+      const res = await fetch('/api/woninglijst', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) setShortlists(data)
+      }
+    } catch { /* ignore */ }
+    setShowShortlistPicker(true)
+  }
+
+  async function addToShortlist(shortlistId: string) {
+    setShortlistSaving(true)
+    const allProps = getAllProperties()
+    const items = allProps
+      .filter(p => selectedProps.has(p.id))
+      .map(p => ({
+        title: p.title,
+        url: p.url,
+        price: p.price,
+        location: p.location,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        size_m2: p.size_m2,
+        thumbnail: p.thumbnail,
+        source: p.source,
+      }))
+
+    try {
+      await fetch(`/api/woninglijst/${shortlistId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      setSelectedProps(new Set())
+      setShowShortlistPicker(false)
+    } catch { /* ignore */ }
+    setShortlistSaving(false)
   }
 
   return (
@@ -327,13 +388,23 @@ export default function WoningbotPage() {
             {msg.properties && msg.properties.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                 {msg.properties.map((prop, j) => (
-                  <a
+                  <div
                     key={j}
-                    href={prop.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group"
+                    className="bg-white rounded-xl border overflow-hidden hover:shadow-md transition-shadow group relative"
+                    style={{ borderColor: selectedProps.has(prop.id) ? '#0EAE96' : '#F0F0F0' }}
                   >
+                    {/* Checkbox */}
+                    <button
+                      onClick={() => toggleProperty(prop.id)}
+                      className="absolute top-2 left-2 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center cursor-pointer transition-colors"
+                      style={{
+                        backgroundColor: selectedProps.has(prop.id) ? '#0EAE96' : 'rgba(255,255,255,0.9)',
+                        borderColor: selectedProps.has(prop.id) ? '#0EAE96' : '#D1D5DB',
+                      }}
+                    >
+                      {selectedProps.has(prop.id) && <Check size={14} color="#fff" strokeWidth={3} />}
+                    </button>
+
                     {prop.thumbnail && (
                       <div className="aspect-[16/10] overflow-hidden">
                         <img
@@ -348,7 +419,9 @@ export default function WoningbotPage() {
                         <h3 className="text-sm font-medium truncate" style={{ color: '#004B46' }}>
                           {prop.title}
                         </h3>
-                        <ExternalLink size={12} className="shrink-0 mt-0.5" style={{ color: '#7A8C8B' }} />
+                        <a href={prop.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                          <ExternalLink size={12} className="shrink-0 mt-0.5" style={{ color: '#7A8C8B' }} />
+                        </a>
                       </div>
                       <p className="text-xs mb-2" style={{ color: '#7A8C8B' }}>{prop.location}</p>
                       <p className="text-sm font-semibold mb-2" style={{ color: '#0EAE96' }}>
@@ -362,7 +435,7 @@ export default function WoningbotPage() {
                           <span className="flex items-center gap-1"><Bath size={11} /> {prop.bathrooms}</span>
                         )}
                         {prop.size_m2 && (
-                          <span className="flex items-center gap-1"><Maximize2 size={11} /> {prop.size_m2}m²</span>
+                          <span className="flex items-center gap-1"><Maximize2 size={11} /> {prop.size_m2}m2</span>
                         )}
                         <span className="ml-auto opacity-60">{prop.source}</span>
                       </div>
@@ -372,7 +445,7 @@ export default function WoningbotPage() {
                         </p>
                       )}
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
             )}
@@ -393,6 +466,59 @@ export default function WoningbotPage() {
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Shortlist selection bar */}
+      {selectedProps.size > 0 && (
+        <div className="flex items-center justify-between bg-[#004B46] text-white rounded-xl px-4 py-2.5 mb-2">
+          <span className="text-sm">{selectedProps.size} woning{selectedProps.size !== 1 ? 'en' : ''} geselecteerd</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedProps(new Set())}
+              className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+            >
+              Deselecteren
+            </button>
+            <button
+              onClick={openShortlistPicker}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#0EAE96] hover:bg-[#0c9d87] transition-colors cursor-pointer font-medium"
+            >
+              <ClipboardList size={13} /> Toevoegen aan shortlist
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Shortlist picker dropdown */}
+      {showShortlistPicker && (
+        <div className="bg-white border border-gray-200 rounded-xl shadow-lg mb-2 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100">
+            <p className="text-xs font-semibold text-[#004B46]">Kies een klant</p>
+          </div>
+          {shortlists.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-gray-400">Geen klanten gevonden. Maak er eerst een aan op de Woninglijsten pagina.</p>
+          ) : (
+            shortlists.map(s => (
+              <button
+                key={s.id}
+                onClick={() => addToShortlist(s.id)}
+                disabled={shortlistSaving}
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 border-b border-gray-50 last:border-0"
+                style={{ color: '#004B46' }}
+              >
+                {s.klant_naam}
+              </button>
+            ))
+          )}
+          <div className="px-4 py-2 border-t border-gray-100">
+            <button
+              onClick={() => setShowShortlistPicker(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="flex gap-2 pb-2">
