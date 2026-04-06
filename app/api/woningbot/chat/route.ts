@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 120
+
 const WONINGBOT_API_URL = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
 const WONINGBOT_API_KEY = process.env.WONINGBOT_API_KEY || ''
 

@@ -144,17 +144,18 @@ export default function WoningbotPage() {
 
       const updatedMessages = [...newMessages, botMessage]
       setMessages(updatedMessages)
+      setLoading(false)
 
-      // Save to Supabase
-      await saveChat(updatedMessages, data.sessionId || sessionId, chatId)
+      // Save to Supabase (fire-and-forget, don't block UI)
+      saveChat(updatedMessages, data.sessionId || sessionId, chatId).catch(() => {})
     } catch {
       const errorMessages = [...newMessages, {
         role: 'bot' as const,
         content: 'Er ging iets mis met de verbinding naar de woningbot. Probeer het opnieuw.',
       }]
       setMessages(errorMessages)
-    } finally {
       setLoading(false)
+    } finally {
       inputRef.current?.focus()
     }
   }
