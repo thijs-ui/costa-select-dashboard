@@ -59,9 +59,14 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { role, signOut, user } = useAuth()
+  const { role, loading: authLoading, signOut, user } = useAuth()
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
+  const [wasAdmin, setWasAdmin] = useState(false)
+
+  // Once we know the user is admin, remember it to prevent flicker
+  if (isAdmin && !wasAdmin) setWasAdmin(true)
+  const showDashboard = isAdmin || (authLoading && wasAdmin)
 
   function renderNavItem(item: { href: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> }) {
     const { href, label, icon: Icon } = item
@@ -115,7 +120,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {/* Dashboard section — admin only */}
-        {isAdmin && (
+        {showDashboard && (
           <>
             <div className="px-4 pt-6 pb-1">
               <button
