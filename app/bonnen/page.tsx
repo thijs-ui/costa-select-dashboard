@@ -30,8 +30,17 @@ export default function BonnenPage() {
   const [exportLoading, setExportLoading] = useState(false)
   const [selectedKwartaal, setSelectedKwartaal] = useState<string>('Q1')
   const [uploadProgress, setUploadProgress] = useState<{ name: string; done: boolean }[]>([])
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; naam: string; kwartaal: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const jaar = new Date().getFullYear()
+
+  function currentKwartaal(): string {
+    const m = new Date().getMonth() + 1
+    if (m <= 3) return 'Q1'
+    if (m <= 6) return 'Q2'
+    if (m <= 9) return 'Q3'
+    return 'Q4'
+  }
 
   useEffect(() => { loadAll() }, [])
 
@@ -49,7 +58,7 @@ export default function BonnenPage() {
     return 'Q4'
   }
 
-  async function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     const allowed = Array.from(files).filter(f => {
       const ext = f.name.split('.').pop()?.toLowerCase()
@@ -57,21 +66,32 @@ export default function BonnenPage() {
     })
     if (allowed.length === 0) { alert('Alleen PDF, JPG en PNG tot 10 MB toegestaan'); return }
 
-    setUploading(true)
-    setUploadProgress(allowed.map(f => ({ name: f.name, done: false })))
+    const kw = currentKwartaal()
+    setPendingFiles(allowed.map(f => ({ file: f, naam: f.name, kwartaal: kw })))
+  }
 
-    for (let i = 0; i < allowed.length; i++) {
-      const file = allowed[i]
+  function kwartaalToDatum(kwartaal: string): string {
+    const midMonth: Record<string, string> = { Q1: '02', Q2: '05', Q3: '08', Q4: '11' }
+    return `${jaar}-${midMonth[kwartaal] || '01'}-15`
+  }
+
+  async function confirmUpload() {
+    if (pendingFiles.length === 0) return
+    setUploading(true)
+    setUploadProgress(pendingFiles.map(p => ({ name: p.naam, done: false })))
+
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const { file, naam, kwartaal } = pendingFiles[i]
       const ext = file.name.split('.').pop()?.toLowerCase()
-      const pad = `${jaar}/${Date.now()}-${file.name}`
+      const pad = `${jaar}/${Date.now()}-${naam}`
       try {
         const { error: uploadError } = await supabase.storage.from('bonnen').upload(pad, file)
         if (uploadError) throw uploadError
         await supabase.from('bonnen').insert({
-          datum: new Date().toISOString().split('T')[0],
+          datum: kwartaalToDatum(kwartaal),
           bedrag: 0,
           omschrijving: null,
-          bestandsnaam: file.name,
+          bestandsnaam: naam,
           bestandspad: pad,
           bestandstype: ext ?? null,
           bestandsgrootte: file.size,
@@ -85,6 +105,7 @@ export default function BonnenPage() {
 
     await loadAll()
     setUploading(false)
+    setPendingFiles([])
     setTimeout(() => setUploadProgress([]), 2000)
   }
 
@@ -187,6 +208,58 @@ export default function BonnenPage() {
         <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden"
           onChange={e => handleFiles(e.target.files)} />
       </div>
+
+      {/* Review pending uploads */}
+      {pendingFiles.length > 0 && !uploading && (
+        <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-700">{pendingFiles.length} bestand{pendingFiles.length !== 1 ? 'en' : ''} klaar om te uploaden</h3>
+            <div className="flex gap-2">
+              <button onClick={() => setPendingFiles([])} className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer">Annuleren</button>
+              <button onClick={confirmUpload} className="flex items-center gap-1.5 bg-slate-900 text-white px-4 py-1.5 rounded-md text-sm hover:bg-slate-700 cursor-pointer">
+                <Upload size={14} /> Uploaden
+              </button>
+            </div>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="text-left px-2 py-1.5 text-xs uppercase tracking-wide text-slate-500 font-medium">Bestandsnaam</th>
+                <th className="text-left px-2 py-1.5 text-xs uppercase tracking-wide text-slate-500 font-medium w-28">Kwartaal</th>
+                <th className="w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingFiles.map((p, i) => (
+                <tr key={i} className="border-b border-slate-50">
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={p.naam}
+                      onChange={e => setPendingFiles(prev => prev.map((f, j) => j === i ? { ...f, naam: e.target.value } : f))}
+                      className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-slate-400"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <select
+                      value={p.kwartaal}
+                      onChange={e => setPendingFiles(prev => prev.map((f, j) => j === i ? { ...f, kwartaal: e.target.value } : f))}
+                      className="border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none"
+                    >
+                      {KWARTALEN.map(q => <option key={q} value={q}>{q} {jaar}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <button
+                      onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
+                      className="text-slate-300 hover:text-red-400 cursor-pointer"
+                    ><X size={14} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex items-center gap-3">
