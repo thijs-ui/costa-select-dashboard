@@ -26,7 +26,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
@@ -59,14 +59,17 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { role, loading: authLoading, signOut, user } = useAuth()
+  const { role, signOut, user } = useAuth()
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
-  const [wasAdmin, setWasAdmin] = useState(false)
+  const wasAdminRef = useRef(false)
 
-  // Once we know the user is admin, remember it to prevent flicker
-  if (isAdmin && !wasAdmin) setWasAdmin(true)
-  const showDashboard = isAdmin || (authLoading && wasAdmin)
+  useEffect(() => {
+    if (isAdmin) wasAdminRef.current = true
+  }, [isAdmin])
+
+  // Show dashboard if admin, or if role is still loading but user was admin before
+  const showDashboard = isAdmin || (role === null && wasAdminRef.current)
 
   function renderNavItem(item: { href: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> }) {
     const { href, label, icon: Icon } = item
