@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageSquare, Send, Loader2, ExternalLink, Bed, Bath, Maximize2, Plus, Clock, Trash2 } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
 
 interface Property {
   id: string
@@ -67,17 +68,19 @@ export default function WoningbotPage() {
   const [showHistory, setShowHistory] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { user } = useAuth()
 
   // Load chat history via API
   const loadChats = useCallback(async () => {
+    if (!user) return
     try {
-      const res = await fetch('/api/woningbot/history')
+      const res = await fetch(`/api/woningbot/history?user_id=${user.id}`)
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data)) setSavedChats(data)
       }
     } catch { /* ignore */ }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     loadChats()
@@ -85,7 +88,7 @@ export default function WoningbotPage() {
 
   // Save chat via API
   async function saveChat(msgs: ChatMessage[], sid: string | null, cid: string | null) {
-    if (msgs.length === 0) return
+    if (!user || msgs.length === 0) return
 
     const title = chatTitle(msgs)
 
@@ -93,11 +96,11 @@ export default function WoningbotPage() {
       const res = await fetch('/api/woningbot/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sid, title, messages: msgs, chat_id: cid }),
+        body: JSON.stringify({ user_id: user.id, session_id: sid, title, messages: msgs, chat_id: cid }),
       })
       const data = await res.json()
       if (!cid && data.id) setChatId(data.id)
-      loadChats()
+      await loadChats()
     } catch { /* ignore */ }
   }
 
@@ -167,10 +170,11 @@ export default function WoningbotPage() {
 
   async function deleteChat(e: React.MouseEvent, id: string) {
     e.stopPropagation()
+    if (!user) return
     await fetch('/api/woningbot/history', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, user_id: user.id }),
     })
     if (chatId === id) startNewChat()
     loadChats()

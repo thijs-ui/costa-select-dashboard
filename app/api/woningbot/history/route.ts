@@ -1,38 +1,31 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { createClient as createServerClient } from '@/lib/supabase-server'
 
-async function getAuthUser() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
-}
-
-export async function GET() {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json([], { status: 200 })
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const userId = searchParams.get('user_id')
+  if (!userId) return NextResponse.json([])
 
   const supabase = createServiceClient()
   const { data, error } = await supabase
     .from('web_chats')
     .select('id, session_id, title, messages, updated_at')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('updated_at', { ascending: false })
     .limit(30)
 
   if (error) {
     console.error('[woningbot/history] GET error:', error)
-    return NextResponse.json([], { status: 200 })
+    return NextResponse.json([])
   }
 
   return NextResponse.json(data ?? [])
 }
 
 export async function POST(request: Request) {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const { user_id, session_id, title, messages, chat_id } = await request.json()
+  if (!user_id) return NextResponse.json({ error: 'user_id is verplicht' }, { status: 400 })
 
-  const { session_id, title, messages, chat_id } = await request.json()
   const supabase = createServiceClient()
 
   if (chat_id) {
@@ -40,14 +33,14 @@ export async function POST(request: Request) {
       .from('web_chats')
       .update({ messages, title, session_id: session_id || '', updated_at: new Date().toISOString() })
       .eq('id', chat_id)
-      .eq('user_id', user.id)
+      .eq('user_id', user_id)
 
     return NextResponse.json({ id: chat_id })
   }
 
   const { data, error } = await supabase
     .from('web_chats')
-    .insert({ user_id: user.id, session_id: session_id || '', title, messages })
+    .insert({ user_id, session_id: session_id || '', title, messages })
     .select('id')
     .single()
 
@@ -60,17 +53,15 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const { id, user_id } = await request.json()
+  if (!user_id || !id) return NextResponse.json({ error: 'Missende parameters' }, { status: 400 })
 
-  const { id } = await request.json()
   const supabase = createServiceClient()
-
   await supabase
     .from('web_chats')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('user_id', user_id)
 
   return NextResponse.json({ ok: true })
 }
