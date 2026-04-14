@@ -5,6 +5,7 @@ import { PageLayout } from '@/components/page-layout'
 import {
   FileText, Link2, PenLine, Loader2, Download, Check,
   AlertTriangle, ChevronDown, Plus, X, Clock, ExternalLink, Pencil,
+  Eye, Megaphone, RefreshCw,
 } from 'lucide-react'
 
 const REGIOS = [
@@ -13,6 +14,16 @@ const REGIOS = [
   'Barcelona', 'Madrid', 'Balearen', 'Canarische Eilanden',
   'Costa Tropical', 'Costa de la Luz', 'Málaga',
 ]
+
+type BrochureType = 'presentatie' | 'pitch'
+
+interface PitchContent {
+  voordelen: string[]
+  nadelen: string[]
+  buurtcontext: string
+  investering: string
+  advies: string
+}
 
 interface DossierAnalyse {
   samenvatting: string
@@ -35,9 +46,12 @@ interface DossierResult {
     badkamers: number
     omschrijving: string
     fotos: string[]
+    url?: string
   }
   regioInfo: string
-  analyse: DossierAnalyse
+  analyse?: DossierAnalyse
+  pitch_content?: PitchContent
+  brochure_type: BrochureType
   generatedAt: string
 }
 
@@ -48,6 +62,7 @@ interface HistoryItem {
   type: string
   vraagprijs: number
   url: string
+  brochure_type: BrochureType | null
   created_at: string
 }
 
@@ -57,10 +72,12 @@ type Mode = 'url' | 'manual'
 export default function DossierPage() {
   const [tab, setTab] = useState<Tab>('generate')
   const [mode, setMode] = useState<Mode>('url')
+  const [brochureType, setBrochureType] = useState<BrochureType>('presentatie')
   const [loading, setLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [dossier, setDossier] = useState<DossierResult | null>(null)
   const [editAnalyse, setEditAnalyse] = useState<DossierAnalyse | null>(null)
+  const [editPitch, setEditPitch] = useState<PitchContent | null>(null)
   const [error, setError] = useState('')
 
   // History
@@ -76,25 +93,18 @@ export default function DossierPage() {
     try {
       const res = await fetch('/api/dossier/history', { credentials: 'include' })
       const contentType = res.headers.get('content-type') || ''
-
-      // If redirected to login page (HTML instead of JSON)
       if (!contentType.includes('application/json')) {
         setError('Sessie verlopen — herlaad de pagina en log opnieuw in.')
         return
       }
-
       if (!res.ok) {
         const data = await res.json()
         setError(data.error || 'Kon geschiedenis niet laden.')
         return
       }
-
       const data = await res.json()
-      if (Array.isArray(data)) {
-        setHistory(data)
-      }
-    } catch (err) {
-      console.error('History fetch error:', err)
+      if (Array.isArray(data)) setHistory(data)
+    } catch {
       setError('Kon geschiedenis niet laden.')
     } finally {
       setHistoryLoading(false)
@@ -108,12 +118,10 @@ export default function DossierPage() {
   async function handleHistoryDownload(id: string) {
     setHistoryPdfLoading(id)
     try {
-      // Fetch full dossier data
       const res = await fetch(`/api/dossier/history/${id}`)
       if (!res.ok) throw new Error('Kon dossier niet ophalen')
       const { dossier_data } = await res.json()
 
-      // Generate PDF
       const pdfRes = await fetch('/api/dossier/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,14 +176,16 @@ export default function DossierPage() {
     setError('')
     setDossier(null)
     setEditAnalyse(null)
+    setEditPitch(null)
 
     const body = mode === 'url'
-      ? { mode: 'url', url }
+      ? { mode: 'url', url, brochure_type: brochureType }
       : {
           mode: 'manual',
           adres, regio, type, vraagprijs, oppervlakte,
           slaapkamers, badkamers, omschrijving,
           fotos: fotosRaw.split(/[\n,]/).map(s => s.trim()).filter(Boolean),
+          brochure_type: brochureType,
         }
 
     try {
@@ -184,17 +194,15 @@ export default function DossierPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-
       const data = await res.json()
-
       if (!res.ok) {
         setError(data.error || 'Er ging iets mis bij het genereren.')
         setLoading(false)
         return
       }
-
       setDossier(data)
-      setEditAnalyse({ ...data.analyse })
+      if (data.analyse) setEditAnalyse({ ...data.analyse })
+      if (data.pitch_content) setEditPitch({ ...data.pitch_content })
     } catch {
       setError('Kon geen verbinding maken met de server.')
     } finally {
@@ -203,10 +211,14 @@ export default function DossierPage() {
   }
 
   async function handleDownloadPdf() {
-    if (!dossier || !editAnalyse) return
+    if (!dossier) return
     setPdfLoading(true)
     try {
-      const dossierWithEdits = { ...dossier, analyse: editAnalyse }
+      const dossierWithEdits = {
+        ...dossier,
+        ...(editAnalyse ? { analyse: editAnalyse } : {}),
+        ...(editPitch ? { pitch_content: editPitch } : {}),
+      }
       const res = await fetch('/api/dossier/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,12 +226,12 @@ export default function DossierPage() {
       })
       if (!res.ok) throw new Error('PDF generation failed')
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = blobUrl
       a.download = `costa-select-dossier-${dossier.property.adres.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()}.pdf`
       a.click()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(blobUrl)
     } catch {
       setError('PDF kon niet worden gegenereerd.')
     } finally {
@@ -227,10 +239,12 @@ export default function DossierPage() {
     }
   }
 
-  return (
-    <PageLayout title="Woningdossier" subtitle="Genereer een professioneel PDF-dossier voor je klant">
+  const isPitch = dossier?.brochure_type === 'pitch'
 
-      {/* Tab toggle: Genereren / Geschiedenis */}
+  return (
+    <PageLayout title="Woningdossier" subtitle="Genereer een professioneel dossier voor je klant">
+
+      {/* Tab toggle */}
       <div className="flex gap-2 mb-6">
         <button
           onClick={() => setTab('generate')}
@@ -254,6 +268,7 @@ export default function DossierPage() {
         </button>
       </div>
 
+      {/* ===== GESCHIEDENIS ===== */}
       {tab === 'history' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="font-heading text-lg font-bold text-[#004B46] mb-4">Eerdere dossiers</h2>
@@ -288,6 +303,12 @@ export default function DossierPage() {
                       </button>
                     )}
                     <div className="flex items-center gap-3 mt-0.5">
+                      {/* Brochure type badge */}
+                      {item.brochure_type === 'pitch' ? (
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Pitch</span>
+                      ) : item.brochure_type === 'presentatie' ? (
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">Presentatie</span>
+                      ) : null}
                       {item.regio && <span className="text-xs text-gray-400">{item.regio}</span>}
                       {item.vraagprijs > 0 && (
                         <span className="text-xs text-gray-400">
@@ -301,12 +322,7 @@ export default function DossierPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {item.url && (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gray-300 hover:text-[#004B46] transition-colors"
-                      >
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-[#004B46] transition-colors">
                         <ExternalLink size={15} />
                       </a>
                     )}
@@ -315,11 +331,7 @@ export default function DossierPage() {
                       disabled={historyPdfLoading === item.id}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-[#004B46] text-[#FFFAEF] text-xs font-medium rounded-lg hover:bg-[#0A6B63] transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {historyPdfLoading === item.id ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <Download size={12} />
-                      )}
+                      {historyPdfLoading === item.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                       PDF
                     </button>
                   </div>
@@ -336,25 +348,59 @@ export default function DossierPage() {
         </div>
       )}
 
+      {/* ===== GENEREREN ===== */}
       {tab === 'generate' && <>
-      {/* Mode toggle */}
+
+      {/* Brochure type keuze */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <button
+          onClick={() => setBrochureType('presentatie')}
+          className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            brochureType === 'presentatie'
+              ? 'border-[#004B46] bg-[#004B46]/5'
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Eye size={18} className={brochureType === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
+            <span className={`text-sm font-semibold ${brochureType === 'presentatie' ? 'text-[#004B46]' : 'text-gray-700'}`}>
+              Presenteren
+            </span>
+          </div>
+          <p className="text-xs text-gray-500">Feitelijke woningpresentatie — geen mening, puur informatief</p>
+        </button>
+        <button
+          onClick={() => setBrochureType('pitch')}
+          className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            brochureType === 'pitch'
+              ? 'border-[#004B46] bg-[#004B46]/5'
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Megaphone size={18} className={brochureType === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
+            <span className={`text-sm font-semibold ${brochureType === 'pitch' ? 'text-[#004B46]' : 'text-gray-700'}`}>
+              Pitchen
+            </span>
+          </div>
+          <p className="text-xs text-gray-500">Met advies, voordelen, nadelen en buurtcontext van Costa Select</p>
+        </button>
+      </div>
+
+      {/* Mode toggle: URL / Handmatig */}
       <div className="flex gap-2 mb-6">
         <button
-          onClick={() => { setMode('url'); setDossier(null); setEditAnalyse(null); setError('') }}
+          onClick={() => { setMode('url'); setDossier(null); setEditAnalyse(null); setEditPitch(null); setError('') }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
-            mode === 'url'
-              ? 'bg-[#004B46] text-[#FFFAEF]'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            mode === 'url' ? 'bg-[#004B46] text-[#FFFAEF]' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
           }`}
         >
           <Link2 size={15} /> URL invoeren
         </button>
         <button
-          onClick={() => { setMode('manual'); setDossier(null); setEditAnalyse(null); setError('') }}
+          onClick={() => { setMode('manual'); setDossier(null); setEditAnalyse(null); setEditPitch(null); setError('') }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
-            mode === 'manual'
-              ? 'bg-[#004B46] text-[#FFFAEF]'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            mode === 'manual' ? 'bg-[#004B46] text-[#FFFAEF]' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
           }`}
         >
           <PenLine size={15} /> Handmatig invullen
@@ -401,6 +447,8 @@ export default function DossierPage() {
                   <option value="woning">Woning</option>
                   <option value="villa">Villa</option>
                   <option value="nieuwbouw">Nieuwbouw</option>
+                  <option value="penthouse">Penthouse</option>
+                  <option value="townhouse">Townhouse</option>
                 </select>
                 <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -438,7 +486,7 @@ export default function DossierPage() {
           </div>
         )}
 
-        {error && (
+        {error && !dossier && (
           <div className="flex items-center gap-2 mt-4 p-3 bg-red-50 rounded-xl text-sm text-red-700">
             <AlertTriangle size={16} /> {error}
           </div>
@@ -450,161 +498,214 @@ export default function DossierPage() {
           className="mt-6 w-full sm:w-auto bg-[#004B46] text-[#FFFAEF] font-semibold px-6 py-3 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
         >
           {loading ? (
-            <><Loader2 size={16} className="animate-spin" /> Dossier wordt gegenereerd...</>
+            <><Loader2 size={16} className="animate-spin" />
+              {brochureType === 'pitch' ? 'Analyse wordt gegenereerd...' : 'Woning wordt opgehaald...'}
+            </>
           ) : (
-            <><FileText size={16} /> Dossier genereren</>
+            <><FileText size={16} /> {brochureType === 'pitch' ? 'Pitch genereren' : 'Presentatie genereren'}</>
           )}
         </button>
       </div>
 
-      {/* Editable Preview + Download */}
-      {dossier && editAnalyse && (
+      {/* ===== RESULTAAT ===== */}
+      {dossier && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          {/* Header met badge */}
           <div className="flex items-center justify-between mb-2">
             <div>
-              <h2 className="font-heading text-xl font-bold text-[#004B46] flex items-center gap-2">
-                <Check size={20} className="text-green-500" /> Dossier gereed
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">{dossier.property.adres}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="font-heading text-xl font-bold text-[#004B46] flex items-center gap-2">
+                  <Check size={20} className="text-green-500" /> Dossier gereed
+                </h2>
+                {isPitch ? (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">Pitch</span>
+                ) : (
+                  <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">Presentatie</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">{dossier.property.adres}</p>
             </div>
             <button
               onClick={handleDownloadPdf}
               disabled={pdfLoading}
               className="bg-[#004B46] text-[#FFFAEF] font-semibold px-6 py-3 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {pdfLoading ? (
-                <><Loader2 size={16} className="animate-spin" /> PDF genereren...</>
-              ) : (
-                <><Download size={16} /> Download PDF</>
-              )}
+              {pdfLoading ? <><Loader2 size={16} className="animate-spin" /> PDF genereren...</> : <><Download size={16} /> Download PDF</>}
             </button>
           </div>
-          <p className="text-xs text-gray-400 mb-6">Pas de teksten hieronder aan voordat je de PDF downloadt.</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-            <div>
-              <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Samenvatting</label>
-              <textarea
-                value={editAnalyse.samenvatting}
-                onChange={e => setEditAnalyse({ ...editAnalyse, samenvatting: e.target.value })}
-                rows={3}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Prijsanalyse</label>
-              <textarea
-                value={editAnalyse.prijsanalyse}
-                onChange={e => setEditAnalyse({ ...editAnalyse, prijsanalyse: e.target.value })}
-                rows={3}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y"
-              />
-            </div>
-
-            {/* Sterke punten - editable list */}
-            <div>
-              <label className="block text-sm font-semibold text-green-700 mb-1.5">Sterke punten</label>
-              {editAnalyse.sterke_punten.map((p, i) => (
-                <div key={i} className="flex items-start gap-1.5 mb-1.5">
-                  <span className="text-green-500 font-bold text-xs mt-2.5 shrink-0">✓</span>
-                  <input
-                    value={p}
-                    onChange={e => {
-                      const updated = [...editAnalyse.sterke_punten]
-                      updated[i] = e.target.value
-                      setEditAnalyse({ ...editAnalyse, sterke_punten: updated })
-                    }}
-                    className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20"
-                  />
-                  <button
-                    onClick={() => setEditAnalyse({ ...editAnalyse, sterke_punten: editAnalyse.sterke_punten.filter((_, j) => j !== i) })}
-                    className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"
-                  ><X size={14} /></button>
-                </div>
-              ))}
-              <button
-                onClick={() => setEditAnalyse({ ...editAnalyse, sterke_punten: [...editAnalyse.sterke_punten, ''] })}
-                className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 mt-1 cursor-pointer"
-              ><Plus size={12} /> Punt toevoegen</button>
-            </div>
-
-            {/* Aandachtspunten - editable list */}
-            <div>
-              <label className="block text-sm font-semibold text-amber-700 mb-1.5">Aandachtspunten</label>
-              {editAnalyse.aandachtspunten.map((p, i) => (
-                <div key={i} className="flex items-start gap-1.5 mb-1.5">
-                  <span className="text-amber-500 font-bold text-xs mt-2.5 shrink-0">!</span>
-                  <input
-                    value={p}
-                    onChange={e => {
-                      const updated = [...editAnalyse.aandachtspunten]
-                      updated[i] = e.target.value
-                      setEditAnalyse({ ...editAnalyse, aandachtspunten: updated })
-                    }}
-                    className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20"
-                  />
-                  <button
-                    onClick={() => setEditAnalyse({ ...editAnalyse, aandachtspunten: editAnalyse.aandachtspunten.filter((_, j) => j !== i) })}
-                    className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"
-                  ><X size={14} /></button>
-                </div>
-              ))}
-              <button
-                onClick={() => setEditAnalyse({ ...editAnalyse, aandachtspunten: [...editAnalyse.aandachtspunten, ''] })}
-                className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 mt-1 cursor-pointer"
-              ><Plus size={12} /> Punt toevoegen</button>
-            </div>
+          {/* Feitelijke data (altijd zichtbaar) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 mb-6">
+            <Stat label="Vraagprijs" value={dossier.property.vraagprijs > 0 ? `€ ${dossier.property.vraagprijs.toLocaleString('nl-NL')}` : '—'} />
+            <Stat label="Oppervlakte" value={dossier.property.oppervlakte > 0 ? `${dossier.property.oppervlakte} m²` : '—'} />
+            <Stat label="Slaapkamers" value={dossier.property.slaapkamers > 0 ? String(dossier.property.slaapkamers) : '—'} />
+            <Stat label="Badkamers" value={dossier.property.badkamers > 0 ? String(dossier.property.badkamers) : '—'} />
           </div>
 
-          {/* Juridische risico's - editable list */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-red-700 mb-1.5">Juridische aandachtspunten</label>
-            {editAnalyse.juridische_risicos.map((r, i) => (
-              <div key={i} className="flex items-start gap-1.5 mb-1.5">
-                <span className="text-red-500 font-bold text-xs mt-2.5 shrink-0">⚠</span>
-                <input
-                  value={r}
-                  onChange={e => {
-                    const updated = [...editAnalyse.juridische_risicos]
-                    updated[i] = e.target.value
-                    setEditAnalyse({ ...editAnalyse, juridische_risicos: updated })
-                  }}
-                  className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20"
-                />
-                <button
-                  onClick={() => setEditAnalyse({ ...editAnalyse, juridische_risicos: editAnalyse.juridische_risicos.filter((_, j) => j !== i) })}
-                  className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"
-                ><X size={14} /></button>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+            <Stat label="Type" value={dossier.property.type || '—'} />
+            <Stat label="Regio" value={dossier.property.regio || '—'} />
+            {dossier.property.url && (
+              <div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">Listing</div>
+                <a href={dossier.property.url} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-[#004B46] hover:underline flex items-center gap-1">
+                  Bekijk origineel <ExternalLink size={12} />
+                </a>
               </div>
-            ))}
-            <button
-              onClick={() => setEditAnalyse({ ...editAnalyse, juridische_risicos: [...editAnalyse.juridische_risicos, ''] })}
-              className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 mt-1 cursor-pointer"
-            ><Plus size={12} /> Punt toevoegen</button>
+            )}
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Verhuurpotentieel</label>
-            <textarea
-              value={editAnalyse.verhuurpotentieel}
-              onChange={e => setEditAnalyse({ ...editAnalyse, verhuurpotentieel: e.target.value })}
-              rows={2}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y"
-            />
-          </div>
+          {dossier.property.omschrijving && (
+            <div className="mb-6">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Omschrijving</div>
+              <p className="text-sm text-gray-600 leading-relaxed">{dossier.property.omschrijving.substring(0, 600)}{dossier.property.omschrijving.length > 600 ? '...' : ''}</p>
+            </div>
+          )}
 
-          <div className="bg-[#004B46]/5 border border-[#004B46]/15 rounded-xl p-4">
-            <label className="block text-[10px] font-semibold text-[#004B46] uppercase tracking-wider mb-1.5">Advies voor consultant</label>
-            <textarea
-              value={editAnalyse.advies_consultant}
-              onChange={e => setEditAnalyse({ ...editAnalyse, advies_consultant: e.target.value })}
-              rows={3}
-              className="w-full bg-transparent border border-[#004B46]/15 rounded-lg px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y"
-            />
-          </div>
+          {/* Foto's */}
+          {dossier.property.fotos?.length > 0 && (
+            <div className="mb-6">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-2">Foto&apos;s</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {dossier.property.fotos.slice(0, 8).map((foto, i) => (
+                  <img key={i} src={foto} alt={`Foto ${i + 1}`}
+                    className="w-full h-32 object-cover rounded-lg border border-gray-100" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== PITCH SECTIES (alleen bij pitch) ===== */}
+          {isPitch && editPitch && editAnalyse && (
+            <div className="mt-8 space-y-5">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-[10px] text-[#004B46] font-semibold uppercase tracking-widest">Costa Select analyse</span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
+
+              {/* Samenvatting + Prijsanalyse */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Samenvatting</label>
+                  <textarea value={editAnalyse.samenvatting}
+                    onChange={e => setEditAnalyse({ ...editAnalyse, samenvatting: e.target.value })}
+                    rows={3} className={textareaClass} />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Prijsanalyse</label>
+                  <textarea value={editAnalyse.prijsanalyse}
+                    onChange={e => setEditAnalyse({ ...editAnalyse, prijsanalyse: e.target.value })}
+                    rows={3} className={textareaClass} />
+                </div>
+              </div>
+
+              {/* Voordelen */}
+              <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-emerald-800 mb-2">Voordelen</label>
+                {editPitch.voordelen.map((p, i) => (
+                  <div key={i} className="flex items-start gap-1.5 mb-1.5">
+                    <span className="text-emerald-500 font-bold text-xs mt-2.5 shrink-0">✓</span>
+                    <input value={p}
+                      onChange={e => { const u = [...editPitch.voordelen]; u[i] = e.target.value; setEditPitch({ ...editPitch, voordelen: u }) }}
+                      className={listInputClass} />
+                    <button onClick={() => setEditPitch({ ...editPitch, voordelen: editPitch.voordelen.filter((_, j) => j !== i) })}
+                      className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"><X size={14} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setEditPitch({ ...editPitch, voordelen: [...editPitch.voordelen, ''] })}
+                  className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 mt-1 cursor-pointer">
+                  <Plus size={12} /> Punt toevoegen
+                </button>
+              </div>
+
+              {/* Nadelen */}
+              <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-amber-800 mb-2">Nadelen / aandachtspunten</label>
+                {editPitch.nadelen.map((p, i) => (
+                  <div key={i} className="flex items-start gap-1.5 mb-1.5">
+                    <span className="text-amber-500 font-bold text-xs mt-2.5 shrink-0">!</span>
+                    <input value={p}
+                      onChange={e => { const u = [...editPitch.nadelen]; u[i] = e.target.value; setEditPitch({ ...editPitch, nadelen: u }) }}
+                      className={listInputClass} />
+                    <button onClick={() => setEditPitch({ ...editPitch, nadelen: editPitch.nadelen.filter((_, j) => j !== i) })}
+                      className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"><X size={14} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setEditPitch({ ...editPitch, nadelen: [...editPitch.nadelen, ''] })}
+                  className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 mt-1 cursor-pointer">
+                  <Plus size={12} /> Punt toevoegen
+                </button>
+              </div>
+
+              {/* Buurtcontext */}
+              <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-sky-800 mb-1.5">Buurtcontext</label>
+                <textarea value={editPitch.buurtcontext}
+                  onChange={e => setEditPitch({ ...editPitch, buurtcontext: e.target.value })}
+                  rows={3} className={textareaClass} />
+              </div>
+
+              {/* Investeringspotentieel */}
+              {editPitch.investering && (
+                <div>
+                  <label className="block text-sm font-semibold text-[#004B46] mb-1.5">Investeringspotentieel</label>
+                  <textarea value={editPitch.investering}
+                    onChange={e => setEditPitch({ ...editPitch, investering: e.target.value })}
+                    rows={2} className={textareaClass} />
+                </div>
+              )}
+
+              {/* Juridische risico's */}
+              <div className="bg-red-50/60 border border-red-100 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-red-800 mb-2">Juridische aandachtspunten</label>
+                {editAnalyse.juridische_risicos.map((r, i) => (
+                  <div key={i} className="flex items-start gap-1.5 mb-1.5">
+                    <span className="text-red-500 font-bold text-xs mt-2.5 shrink-0">⚠</span>
+                    <input value={r}
+                      onChange={e => { const u = [...editAnalyse.juridische_risicos]; u[i] = e.target.value; setEditAnalyse({ ...editAnalyse, juridische_risicos: u }) }}
+                      className={listInputClass} />
+                    <button onClick={() => setEditAnalyse({ ...editAnalyse, juridische_risicos: editAnalyse.juridische_risicos.filter((_, j) => j !== i) })}
+                      className="text-gray-300 hover:text-red-400 mt-1.5 shrink-0 cursor-pointer"><X size={14} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setEditAnalyse({ ...editAnalyse, juridische_risicos: [...editAnalyse.juridische_risicos, ''] })}
+                  className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 mt-1 cursor-pointer">
+                  <Plus size={12} /> Punt toevoegen
+                </button>
+              </div>
+
+              {/* Costa Select advies */}
+              <div className="bg-[#004B46]/5 border border-[#004B46]/15 rounded-xl p-4">
+                <label className="block text-[10px] font-semibold text-[#004B46] uppercase tracking-wider mb-1.5">Costa Select advies</label>
+                <textarea value={editPitch.advies}
+                  onChange={e => setEditPitch({ ...editPitch, advies: e.target.value })}
+                  rows={3} className="w-full bg-transparent border border-[#004B46]/15 rounded-lg px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y" />
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 mt-4 p-3 bg-red-50 rounded-xl text-sm text-red-700">
+              <AlertTriangle size={16} /> {error}
+            </div>
+          )}
         </div>
       )}
       </>}
     </PageLayout>
   )
 }
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-0.5">{label}</div>
+      <div className="text-sm font-semibold text-gray-800">{value}</div>
+    </div>
+  )
+}
+
+const textareaClass = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y'
+const listInputClass = 'flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20'

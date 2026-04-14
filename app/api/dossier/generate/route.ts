@@ -32,10 +32,8 @@ const REGIO_TO_SLUG: Record<string, string> = {
 }
 
 function getRegioContent(regio: string): string {
-  // Try exact match first
   let slug = REGIO_TO_SLUG[regio]
 
-  // Try partial match
   if (!slug) {
     const regioLower = regio.toLowerCase()
     for (const [key, val] of Object.entries(REGIO_TO_SLUG)) {
@@ -46,7 +44,6 @@ function getRegioContent(regio: string): string {
     }
   }
 
-  // Try from docs list
   if (!slug) {
     const doc = docs.find(d =>
       d.title.toLowerCase().includes(regio.toLowerCase()) ||
@@ -60,7 +57,6 @@ function getRegioContent(regio: string): string {
   try {
     const filePath = path.join(process.cwd(), 'content', 'kennisbank', `${slug}.md`)
     const content = fs.readFileSync(filePath, 'utf-8')
-    // Clean up mammoth artifacts and limit to first 2000 chars for Claude context
     return content
       .replace(/<a id="[^"]*"><\/a>/g, '')
       .replace(/\\\./g, '.')
@@ -71,94 +67,122 @@ function getRegioContent(regio: string): string {
   }
 }
 
-export async function POST(request: Request) {
-  const body = await request.json()
-
-  const {
-    mode, // 'url' | 'manual'
-    url,
-    adres,
-    regio,
-    type,
-    vraagprijs,
-    oppervlakte,
-    slaapkamers,
-    badkamers,
-    omschrijving,
-    fotos,
-  } = body
-
-  let propertyData: Record<string, unknown>
+async function scrapeProperty(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { mode, url, adres, regio, type, vraagprijs, oppervlakte, slaapkamers, badkamers, omschrijving, fotos } = body
 
   if (mode === 'url' && url) {
-    try {
-      if (isCostaSelectUrl(url)) {
-        // Scrape directly from CostaSelect (our own site)
-        const scraped = await scrapeCostaSelect(url)
-        propertyData = { ...scraped }
-      } else if (isIdealistaUrl(url)) {
-        // Scrape via Apify actor
-        const scraped = await scrapeIdealista(url)
-        propertyData = { ...scraped }
-      } else {
-        // Fallback: Woningbot lookup for other URLs
-        const woningbotUrl = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
-        const woningbotKey = process.env.WONINGBOT_API_KEY || ''
-
-        const res = await fetch(`${woningbotUrl}/api/lookup`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': woningbotKey,
-          },
-          body: JSON.stringify({ url }),
-        })
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.error || 'Lookup failed')
-        }
-
-        const prop = await res.json()
-
-        propertyData = {
-          adres: prop.title || url,
-          regio: prop.location || regio || 'Onbekend',
-          type: prop.property_type || 'woning',
-          vraagprijs: prop.price || 0,
-          oppervlakte: prop.size_m2 || 0,
-          slaapkamers: prop.bedrooms || 0,
-          badkamers: prop.bathrooms || 0,
-          omschrijving: prop.description || '',
-          fotos: prop.images?.length > 0 ? prop.images : (prop.thumbnail ? [prop.thumbnail] : []),
-          url,
-        }
-      }
-    } catch (err) {
-      console.error('Property lookup failed:', err)
-      return NextResponse.json(
-        { error: 'Kon de woning niet ophalen via de URL. Probeer handmatige invoer.' },
-        { status: 400 }
-      )
+    if (isCostaSelectUrl(url as string)) {
+      return { ...(await scrapeCostaSelect(url as string)) }
     }
-  } else {
-    propertyData = {
-      adres: adres || 'Onbekend adres',
-      regio: regio || 'Onbekend',
-      type: type || 'woning',
-      vraagprijs: Number(vraagprijs) || 0,
-      oppervlakte: Number(oppervlakte) || 0,
-      slaapkamers: Number(slaapkamers) || 0,
-      badkamers: Number(badkamers) || 0,
-      omschrijving: omschrijving || '',
-      fotos: fotos || [],
+    if (isIdealistaUrl(url as string)) {
+      return { ...(await scrapeIdealista(url as string)) }
+    }
+    // Fallback: Woningbot lookup
+    const woningbotUrl = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
+    const woningbotKey = process.env.WONINGBOT_API_KEY || ''
+    const res = await fetch(`${woningbotUrl}/api/lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': woningbotKey },
+      body: JSON.stringify({ url }),
+    })
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new Error(errData.error || 'Lookup failed')
+    }
+    const prop = await res.json()
+    return {
+      adres: prop.title || url,
+      regio: prop.location || regio || 'Onbekend',
+      type: prop.property_type || 'woning',
+      vraagprijs: prop.price || 0,
+      oppervlakte: prop.size_m2 || 0,
+      slaapkamers: prop.bedrooms || 0,
+      badkamers: prop.bathrooms || 0,
+      omschrijving: prop.description || '',
+      fotos: prop.images?.length > 0 ? prop.images : (prop.thumbnail ? [prop.thumbnail] : []),
+      url,
     }
   }
 
-  // Get regio content from kennisbank
+  return {
+    adres: adres || 'Onbekend adres',
+    regio: regio || 'Onbekend',
+    type: type || 'woning',
+    vraagprijs: Number(vraagprijs) || 0,
+    oppervlakte: Number(oppervlakte) || 0,
+    slaapkamers: Number(slaapkamers) || 0,
+    badkamers: Number(badkamers) || 0,
+    omschrijving: omschrijving || '',
+    fotos: fotos || [],
+  }
+}
+
+const PITCH_SYSTEM_PROMPT = `Je bent een ervaren vastgoedconsultant van Costa Select, een Nederlandse aankoopmakelaardij in Spanje. Je analyseert woningen voor klanten die een tweede huis of investering zoeken.
+
+Schrijfstijl:
+- Helder, direct, geen overdrijving
+- Eerlijk over nadelen — dat bouwt vertrouwen
+- Geen woorden als: goedkoop, snel scoren, koopje, no-brainer, fantastisch, perfect, garantie
+- Wel woorden als: kwaliteit, doordacht, zorgvuldig, perspectief, waarde
+- Schrijf in jij-vorm richting de koper
+- Eén gedachte per zin, geen bijzinnen bij bijzinnen
+- Schrijf in het Nederlands`
+
+export async function POST(request: Request) {
+  const body = await request.json()
+  const brochureType: 'presentatie' | 'pitch' = body.brochure_type || 'pitch'
+
+  let propertyData: Record<string, unknown>
+  try {
+    propertyData = await scrapeProperty(body)
+  } catch (err) {
+    console.error('Property lookup failed:', err)
+    return NextResponse.json(
+      { error: 'Kon de woning niet ophalen via de URL. Probeer handmatige invoer.' },
+      { status: 400 }
+    )
+  }
+
   const regioContent = getRegioContent(String(propertyData.regio))
 
-  // Claude analysis
+  // Presentatie-modus: alleen feitelijke data, geen AI
+  if (brochureType === 'presentatie') {
+    const dossierResult = {
+      property: propertyData,
+      regioInfo: regioContent ? regioContent.substring(0, 500) : '',
+      brochure_type: 'presentatie' as const,
+      generatedAt: new Date().toISOString(),
+    }
+
+    // Save to history
+    try {
+      const supabase = createServiceClient()
+      await supabase.from('dossier_history').insert({
+        adres: String(propertyData.adres || 'Onbekend'),
+        regio: String(propertyData.regio || ''),
+        type: String(propertyData.type || ''),
+        vraagprijs: Number(propertyData.vraagprijs) || 0,
+        url: String(propertyData.url || ''),
+        dossier_data: dossierResult,
+        brochure_type: 'presentatie',
+      })
+    } catch (err) {
+      console.error('Failed to save dossier to history:', err)
+    }
+
+    return NextResponse.json(dossierResult)
+  }
+
+  // Pitch-modus: scrapen + Claude analyse
+  let pitchContent = {
+    voordelen: [] as string[],
+    nadelen: [] as string[],
+    buurtcontext: '',
+    investering: '',
+    advies: '',
+  }
+
+  // Bestaande analyse (voor backwards compatibility met bestaande dossiers)
   let analyse = {
     samenvatting: '',
     prijsanalyse: '',
@@ -172,28 +196,40 @@ export async function POST(request: Request) {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 2500,
+      system: PITCH_SYSTEM_PROMPT,
       messages: [{
         role: 'user',
-        content: `Je bent een senior vastgoedadviseur bij Costa Select, een Nederlandse aankoopmakelaar in Spanje.
+        content: `Analyseer deze woning en genereer een pitch-rapport.
 
-Genereer een professionele analyse voor dit object voor een Nederlandse klant.
-Schrijf in het Nederlands. Toon: informatief, helder, eerlijk — geen verkooppraatjes.
-
-OBJECT:
+WONINGDATA:
 ${JSON.stringify(propertyData, null, 2)}
 
 ${regioContent ? `REGIO-INFORMATIE:\n${regioContent}\n` : ''}
+
+Genereer de volgende secties op basis van de woningdata:
+
+1. VOORDELEN (3-5 bullet points, concreet en specifiek)
+2. NADELEN / AANDACHTSPUNTEN (2-4 bullet points, eerlijk en specifiek)
+3. BUURTCONTEXT (3-5 zinnen over de buurt, type bewoners, voorzieningen)
+4. INVESTERINGSPOTENTIEEL (alleen als er genoeg data is, anders lege string)
+5. COSTA SELECT ADVIES (1 alinea: voor wie geschikt, waarom wel/niet aanbevelen)
+
+Geef ook een samenvatting en prijsanalyse.
+
+Baseer je ALLEEN op de meegeleverde woningdata. Verzin geen feiten. Als je iets niet weet, zeg dat eerlijk.
 
 Geef terug als JSON:
 {
   "samenvatting": "2-3 zinnen objectieve samenvatting",
   "prijsanalyse": "Analyse van de prijs t.o.v. de markt (2-3 zinnen)",
-  "sterke_punten": ["punt 1", "punt 2", "punt 3"],
-  "aandachtspunten": ["punt 1", "punt 2"],
+  "voordelen": ["punt 1", "punt 2", "punt 3"],
+  "nadelen": ["punt 1", "punt 2"],
+  "buurtcontext": "3-5 zinnen over de buurt",
+  "investering": "Kort oordeel over investeringspotentieel (of lege string)",
+  "advies": "1 alinea Costa Select advies",
   "juridische_risicos": ["risico 1", "risico 2"],
-  "verhuurpotentieel": "Kort oordeel over verhuurmogelijkheden",
-  "advies_consultant": "1 alinea advies voor de consultant"
+  "verhuurpotentieel": "Kort oordeel over verhuurmogelijkheden"
 }
 
 Geef ALLEEN de JSON terug, geen andere tekst.`
@@ -203,7 +239,24 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      analyse = JSON.parse(jsonMatch[0])
+      const parsed = JSON.parse(jsonMatch[0])
+      pitchContent = {
+        voordelen: parsed.voordelen || [],
+        nadelen: parsed.nadelen || [],
+        buurtcontext: parsed.buurtcontext || '',
+        investering: parsed.investering || '',
+        advies: parsed.advies || '',
+      }
+      // Map naar bestaand analyse-formaat voor backwards compatibility
+      analyse = {
+        samenvatting: parsed.samenvatting || '',
+        prijsanalyse: parsed.prijsanalyse || '',
+        sterke_punten: parsed.voordelen || [],
+        aandachtspunten: parsed.nadelen || [],
+        juridische_risicos: parsed.juridische_risicos || [],
+        verhuurpotentieel: parsed.verhuurpotentieel || '',
+        advies_consultant: parsed.advies || '',
+      }
     }
   } catch (err) {
     console.error('Claude analysis failed:', err)
@@ -215,10 +268,12 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
     property: propertyData,
     regioInfo: regioContent ? regioContent.substring(0, 500) : 'Geen regio-informatie beschikbaar.',
     analyse,
+    pitch_content: pitchContent,
+    brochure_type: 'pitch' as const,
     generatedAt: new Date().toISOString(),
   }
 
-  // Save to history (fire-and-forget, don't block response)
+  // Save to history
   try {
     const supabase = createServiceClient()
     await supabase.from('dossier_history').insert({
@@ -228,6 +283,9 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
       vraagprijs: Number(propertyData.vraagprijs) || 0,
       url: String(propertyData.url || ''),
       dossier_data: dossierResult,
+      brochure_type: 'pitch',
+      pitch_content: pitchContent,
+      pitch_generated_at: new Date().toISOString(),
     })
   } catch (err) {
     console.error('Failed to save dossier to history:', err)
