@@ -22,6 +22,7 @@ import {
   Building2,
   ClipboardList,
   CheckSquare,
+  Route,
   LogOut,
   X,
   ChevronDown,
@@ -33,6 +34,7 @@ import { createClient } from '@/lib/supabase-browser'
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
   { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
+  { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
   { href: '/dossier', label: 'Dossier', icon: FileText },
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
   { href: '/training', label: 'Training', icon: GraduationCap },
