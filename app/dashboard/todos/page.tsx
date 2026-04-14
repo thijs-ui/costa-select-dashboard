@@ -41,6 +41,7 @@ interface Todo {
 interface UserInfo {
   id: string
   email: string
+  naam: string | null
 }
 
 export default function TodosPage() {
@@ -95,14 +96,15 @@ export default function TodosPage() {
         setUsers(data.users ?? [])
       }
     } catch {
-      if (user) setUsers([{ id: user.id, email: user.email ?? 'Onbekend' }])
+      if (user) setUsers([{ id: user.id, email: user.email ?? 'Onbekend', naam: null }])
     }
 
     setLoading(false)
   }
 
-  function getUserEmail(userId: string) {
-    return users.find(u => u.id === userId)?.email ?? 'Onbekend'
+  function getUserName(userId: string) {
+    const u = users.find(u => u.id === userId)
+    return u?.naam ?? u?.email ?? 'Onbekend'
   }
 
   function openDetail(todo: Todo) {
@@ -270,7 +272,7 @@ export default function TodosPage() {
               >
                 <option value="">Kies gebruiker</option>
                 {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.email}</option>
+                  <option key={u.id} value={u.id}>{u.naam ?? u.email}</option>
                 ))}
               </select>
             </div>
@@ -400,7 +402,7 @@ export default function TodosPage() {
                     </div>
                   </td>
                   <td className={`px-3 py-2.5 ${done ? 'text-slate-400' : 'text-slate-600'}`}>
-                    {getUserEmail(todo.assigned_to)}
+                    {getUserName(todo.assigned_to)}
                   </td>
                   <td className={`px-3 py-2.5 whitespace-nowrap ${overdue ? 'text-red-500 font-medium' : done ? 'text-slate-400' : 'text-slate-600'}`}>
                     {todo.deadline
@@ -409,7 +411,7 @@ export default function TodosPage() {
                     }
                   </td>
                   <td className={`px-3 py-2.5 ${done ? 'text-slate-400' : 'text-slate-600'}`}>
-                    {getUserEmail(todo.created_by)}
+                    {getUserName(todo.created_by)}
                   </td>
                   <td className={`px-3 py-2.5 whitespace-nowrap ${done ? 'text-slate-400' : 'text-slate-500'}`}>
                     {new Date(todo.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
@@ -521,11 +523,11 @@ export default function TodosPage() {
                     className={inp}
                   >
                     {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.email}</option>
+                      <option key={u.id} value={u.id}>{u.naam ?? u.email}</option>
                     ))}
                   </select>
                 ) : (
-                  <p className="text-sm text-slate-600">{getUserEmail(selectedTodo.assigned_to)}</p>
+                  <p className="text-sm text-slate-600">{getUserName(selectedTodo.assigned_to)}</p>
                 )}
               </div>
 
@@ -552,7 +554,7 @@ export default function TodosPage() {
               <div className="pt-3 border-t border-slate-100 space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-400">Aangemaakt door</span>
-                  <span className="text-slate-600">{getUserEmail(selectedTodo.created_by)}</span>
+                  <span className="text-slate-600">{getUserName(selectedTodo.created_by)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-400">Aangemaakt op</span>

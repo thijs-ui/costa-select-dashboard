@@ -9,6 +9,7 @@ type Role = 'admin' | 'consultant'
 interface AuthContextType {
   user: User | null
   role: Role | null
+  naam: string | null
   loading: boolean
   signOut: () => Promise<void>
 }
@@ -16,6 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
+  naam: null,
   loading: true,
   signOut: async () => {},
 })
@@ -27,23 +29,25 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<Role | null>(null)
+  const [naam, setNaam] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+
+  async function loadUserRole(u: User) {
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role, naam')
+      .eq('user_id', u.id)
+      .single()
+    setRole(data?.role ?? 'consultant')
+    setNaam(data?.naam ?? null)
+  }
 
   useEffect(() => {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-
-      if (user) {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single()
-        setRole(data?.role ?? 'consultant')
-      }
-
+      if (user) await loadUserRole(user)
       setLoading(false)
     }
 
@@ -55,30 +59,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser)
 
         if (currentUser) {
-          const { data } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', currentUser.id)
-            .single()
-          setRole(data?.role ?? 'consultant')
+          await loadUserRole(currentUser)
         } else {
           setRole(null)
+          setNaam(null)
         }
       }
     )
 
     return () => subscription.unsubscribe()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase])
 
   async function signOut() {
     await supabase.auth.signOut()
     setUser(null)
     setRole(null)
+    setNaam(null)
     window.location.href = '/login'
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role, naam, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -19,16 +19,24 @@ export async function GET() {
 
   // Haal alle users op via de service client (admin API)
   const serviceClient = createServiceClient()
-  const { data: { users }, error } = await serviceClient.auth.admin.listUsers()
+  const [authRes, rolesRes] = await Promise.all([
+    serviceClient.auth.admin.listUsers(),
+    serviceClient.from('user_roles').select('user_id, naam'),
+  ])
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (authRes.error) {
+    return NextResponse.json({ error: authRes.error.message }, { status: 500 })
   }
 
-  // Return alleen id en email
-  const userList = (users ?? []).map(u => ({
+  const nameMap = new Map<string, string>()
+  for (const r of (rolesRes.data ?? []) as { user_id: string; naam: string | null }[]) {
+    if (r.naam) nameMap.set(r.user_id, r.naam)
+  }
+
+  const userList = (authRes.data.users ?? []).map(u => ({
     id: u.id,
     email: u.email ?? 'Onbekend',
+    naam: nameMap.get(u.id) ?? null,
   }))
 
   return NextResponse.json({ users: userList })

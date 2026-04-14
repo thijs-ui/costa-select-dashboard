@@ -62,7 +62,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { role, loading: authLoading, signOut, user } = useAuth()
+  const { role, loading: authLoading, signOut, user, naam } = useAuth()
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
   const [todoCount, setTodoCount] = useState(0)
@@ -170,7 +170,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="px-4 py-4 border-t border-white/10">
           {user && (
             <div className="text-[11px] text-white/40 mb-2 truncate">
-              {user.email}
+              {naam ?? user.email}
             </div>
           )}
           <button

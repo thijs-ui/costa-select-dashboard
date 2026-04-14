@@ -43,7 +43,7 @@ const platformCards = [
 ]
 
 export default function HomePage() {
-  const { user, role, loading } = useAuth()
+  const { user, role, naam, loading } = useAuth()
 
   if (loading) {
     return (
@@ -55,7 +55,7 @@ export default function HomePage() {
     )
   }
 
-  const firstName = user?.email?.split('@')[0] || ''
+  const firstName = naam ?? user?.email?.split('@')[0] ?? ''
 
   return (
     <PageLayout
