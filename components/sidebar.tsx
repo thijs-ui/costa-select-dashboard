@@ -21,12 +21,14 @@ import {
   Users,
   Building2,
   ClipboardList,
+  CheckSquare,
   LogOut,
   X,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase-browser'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
@@ -50,6 +52,7 @@ const dashboardItems = [
   { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
   { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
   { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
+  { href: '/dashboard/todos', label: 'To-do', icon: CheckSquare },
 ]
 
 interface SidebarProps {
@@ -62,6 +65,24 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { role, loading: authLoading, signOut, user } = useAuth()
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
+  const [todoCount, setTodoCount] = useState(0)
+
+  useEffect(() => {
+    if (!user) return
+    const supabase = createClient()
+    async function fetchTodoCount() {
+      const { count } = await supabase
+        .from('todos')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'open')
+        .eq('assigned_to', user!.id)
+      setTodoCount(count ?? 0)
+    }
+    fetchTodoCount()
+    // Poll elke 60 seconden voor updates
+    const interval = setInterval(fetchTodoCount, 60000)
+    return () => clearInterval(interval)
+  }, [user])
 
   // Show dashboard if admin, or while auth is still loading (prevents flicker)
   const showDashboard = isAdmin || authLoading
@@ -81,7 +102,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         }`}
       >
         <Icon size={16} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
-        <span>{label}</span>
+        <span className="flex-1">{label}</span>
+        {href === '/dashboard/todos' && todoCount > 0 && (
+          <span className="bg-rose-500 text-white text-[10px] font-semibold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+            {todoCount}
+          </span>
+        )}
       </Link>
     )
   }
