@@ -13,6 +13,7 @@ interface Settings {
   deal_types: string[]
   bronnen: string[]
   afspraak_types: string[]
+  todo_labels: string[]
   targets: { deals_2026: number; netto_omzet_2026: number }
   pipedrive_sync_interval: number
   pipedrive_activiteit_namen: string[]
@@ -50,6 +51,7 @@ const defaultSettings: Settings = {
   deal_types: [],
   bronnen: [],
   afspraak_types: [],
+  todo_labels: [],
   targets: { deals_2026: 20, netto_omzet_2026: 200000 },
   pipedrive_sync_interval: 15,
   pipedrive_activiteit_namen: [],
@@ -96,6 +98,7 @@ export default function AannamensPage() {
           deal_types: (map.deal_types as string[]) || [],
           bronnen: (map.bronnen as string[]) || [],
           afspraak_types: (map.afspraak_types as string[]) || [],
+          todo_labels: (map.todo_labels as string[]) || [],
           targets: (map.targets as { deals_2026: number; netto_omzet_2026: number }) || defaultSettings.targets,
           pipedrive_sync_interval: Number(map.pipedrive_sync_interval) || 15,
           pipedrive_activiteit_namen: (map.pipedrive_activiteit_namen as string[]) || [],
@@ -135,6 +138,7 @@ export default function AannamensPage() {
       saveSetting('deal_types', settings.deal_types),
       saveSetting('bronnen', settings.bronnen),
       saveSetting('afspraak_types', settings.afspraak_types),
+      saveSetting('todo_labels', settings.todo_labels),
       saveSetting('targets', settings.targets),
       saveSetting('pipedrive_sync_interval', settings.pipedrive_sync_interval),
       saveSetting('pipedrive_activiteit_namen', settings.pipedrive_activiteit_namen),
@@ -399,6 +403,7 @@ export default function AannamensPage() {
           { key: 'deal_types' as const, label: 'Deal types' },
           { key: 'bronnen' as const, label: 'Bronnen' },
           { key: 'afspraak_types' as const, label: 'Afspraak types' },
+          { key: 'todo_labels' as const, label: 'To-do labels' },
           { key: 'pipedrive_activiteit_namen' as const, label: 'Pipedrive activiteitsnamen (auto-import)' },
         ]).map(({ key, label }) => (
           <Section key={key} title={label}>

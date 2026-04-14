@@ -3,7 +3,27 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import { useAuth } from '@/lib/auth-context'
-import { Trash2, CheckCircle2, Circle, ClipboardList, X } from 'lucide-react'
+import { Trash2, CheckCircle2, Circle, ClipboardList, X, Tag } from 'lucide-react'
+
+const LABEL_COLORS: Record<string, { bg: string; text: string }> = {}
+const COLOR_PALETTE = [
+  { bg: 'bg-blue-100', text: 'text-blue-700' },
+  { bg: 'bg-purple-100', text: 'text-purple-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  { bg: 'bg-rose-100', text: 'text-rose-700' },
+  { bg: 'bg-cyan-100', text: 'text-cyan-700' },
+  { bg: 'bg-orange-100', text: 'text-orange-700' },
+  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+]
+
+function getLabelColor(label: string) {
+  if (!LABEL_COLORS[label]) {
+    const idx = Object.keys(LABEL_COLORS).length % COLOR_PALETTE.length
+    LABEL_COLORS[label] = COLOR_PALETTE[idx]
+  }
+  return LABEL_COLORS[label]
+}
 
 interface Todo {
   id: string
@@ -12,6 +32,7 @@ interface Todo {
   assigned_to: string
   description: string
   notities: string | null
+  label: string | null
   deadline: string | null
   status: 'open' | 'afgerond'
   completed_at: string | null
@@ -37,12 +58,14 @@ export default function TodosPage() {
   const [description, setDescription] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [deadline, setDeadline] = useState('')
+  const [formLabel, setFormLabel] = useState('')
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [labels, setLabels] = useState<string[]>([])
 
   // Detail panel state
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null)
-  const [editFields, setEditFields] = useState({ description: '', notities: '', deadline: '', assigned_to: '' })
+  const [editFields, setEditFields] = useState({ description: '', notities: '', deadline: '', assigned_to: '', label: '' })
   const [detailSaving, setDetailSaving] = useState(false)
 
   useEffect(() => {
@@ -54,12 +77,16 @@ export default function TodosPage() {
   }, [user, role])
 
   async function loadData() {
-    const todosRes = await supabase
-      .from('todos')
-      .select('*')
-      .order('deadline', { ascending: true, nullsFirst: false })
+    const [todosRes, settingsRes] = await Promise.all([
+      supabase.from('todos').select('*').order('deadline', { ascending: true, nullsFirst: false }),
+      supabase.from('settings').select('key, value').eq('key', 'todo_labels'),
+    ])
 
     setTodos((todosRes.data ?? []) as Todo[])
+
+    if (settingsRes.data?.[0]?.value) {
+      setLabels(settingsRes.data[0].value as string[])
+    }
 
     try {
       const res = await fetch('/api/todos/users')
@@ -85,6 +112,7 @@ export default function TodosPage() {
       notities: todo.notities ?? '',
       deadline: todo.deadline ?? '',
       assigned_to: todo.assigned_to,
+      label: todo.label ?? '',
     })
   }
 
@@ -98,6 +126,7 @@ export default function TodosPage() {
 
     const updates: Record<string, unknown> = {
       notities: editFields.notities.trim() || null,
+      label: editFields.label || null,
     }
 
     // Admins kunnen alles bewerken
@@ -135,6 +164,7 @@ export default function TodosPage() {
       assigned_to: targetUser,
       created_by: user!.id,
       deadline: deadline || null,
+      label: formLabel || null,
     })
 
     if (error) {
@@ -142,6 +172,7 @@ export default function TodosPage() {
     } else {
       setDescription('')
       setDeadline('')
+      setFormLabel('')
       if (isAdmin) setAssignedTo('')
       await loadData()
     }
@@ -245,6 +276,22 @@ export default function TodosPage() {
             </div>
           )}
 
+          {labels.length > 0 && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Label</label>
+              <select
+                value={formLabel}
+                onChange={(e) => setFormLabel(e.target.value)}
+                className={inp}
+              >
+                <option value="">Geen label</option>
+                {labels.map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs text-slate-500 mb-1">Deadline</label>
             <div className="flex gap-2">
@@ -343,6 +390,10 @@ export default function TodosPage() {
                   <td className={`px-3 py-2.5 ${done ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                     <div className="flex items-center gap-2">
                       {todo.description}
+                      {todo.label && (() => {
+                        const c = getLabelColor(todo.label)
+                        return <span className={`text-[10px] ${c.bg} ${c.text} px-1.5 py-0.5 rounded font-medium flex-shrink-0`}>{todo.label}</span>
+                      })()}
                       {todo.notities && (
                         <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">notitie</span>
                       )}
@@ -442,6 +493,23 @@ export default function TodosPage() {
                   className={`${inp} resize-none`}
                 />
               </div>
+
+              {/* Label */}
+              {labels.length > 0 && (
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Label</label>
+                  <select
+                    value={editFields.label}
+                    onChange={(e) => setEditFields({ ...editFields, label: e.target.value })}
+                    className={inp}
+                  >
+                    <option value="">Geen label</option>
+                    {labels.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Toewijzen aan */}
               <div>
