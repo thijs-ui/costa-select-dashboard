@@ -17,6 +17,12 @@ interface Settings {
   targets: { deals_2026: number; netto_omzet_2026: number }
   pipedrive_sync_interval: number
   pipedrive_activiteit_namen: string[]
+  renovation_cosmetic_per_m2: number
+  renovation_partial_per_m2: number
+  renovation_full_per_m2: number
+  renovation_luxury_per_m2: number
+  renovation_contingency_pct: number
+  renovation_architect_fee: number
 }
 
 interface UserRow {
@@ -63,6 +69,12 @@ const defaultSettings: Settings = {
   targets: { deals_2026: 20, netto_omzet_2026: 200000 },
   pipedrive_sync_interval: 15,
   pipedrive_activiteit_namen: [],
+  renovation_cosmetic_per_m2: 300,
+  renovation_partial_per_m2: 600,
+  renovation_full_per_m2: 1000,
+  renovation_luxury_per_m2: 1500,
+  renovation_contingency_pct: 15,
+  renovation_architect_fee: 3000,
 }
 
 export default function AannamensPage() {
@@ -115,6 +127,12 @@ export default function AannamensPage() {
           targets: (map.targets as { deals_2026: number; netto_omzet_2026: number }) || defaultSettings.targets,
           pipedrive_sync_interval: Number(map.pipedrive_sync_interval) || 15,
           pipedrive_activiteit_namen: (map.pipedrive_activiteit_namen as string[]) || [],
+          renovation_cosmetic_per_m2: Number(map.renovation_cosmetic_per_m2) || 300,
+          renovation_partial_per_m2: Number(map.renovation_partial_per_m2) || 600,
+          renovation_full_per_m2: Number(map.renovation_full_per_m2) || 1000,
+          renovation_luxury_per_m2: Number(map.renovation_luxury_per_m2) || 1500,
+          renovation_contingency_pct: Number(map.renovation_contingency_pct) || 15,
+          renovation_architect_fee: Number(map.renovation_architect_fee) || 3000,
         })
         // Load field mapping
         if (map.pipedrive_deal_field_mapping) {
@@ -165,6 +183,12 @@ export default function AannamensPage() {
       saveSetting('targets', settings.targets),
       saveSetting('pipedrive_sync_interval', settings.pipedrive_sync_interval),
       saveSetting('pipedrive_activiteit_namen', settings.pipedrive_activiteit_namen),
+      saveSetting('renovation_cosmetic_per_m2', settings.renovation_cosmetic_per_m2),
+      saveSetting('renovation_partial_per_m2', settings.renovation_partial_per_m2),
+      saveSetting('renovation_full_per_m2', settings.renovation_full_per_m2),
+      saveSetting('renovation_luxury_per_m2', settings.renovation_luxury_per_m2),
+      saveSetting('renovation_contingency_pct', settings.renovation_contingency_pct),
+      saveSetting('renovation_architect_fee', settings.renovation_architect_fee),
     ])
     setSaving(false)
     setSaved(true)
@@ -639,6 +663,42 @@ export default function AannamensPage() {
             </button>
           </div>
         </div>
+
+        {/* Renovatiekosten defaults */}
+        <Section title="Renovatiekosten (defaults voor calculator)">
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Cosmetisch (€/m²)">
+              <input type="number" value={settings.renovation_cosmetic_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_cosmetic_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Gedeeltelijk (€/m²)">
+              <input type="number" value={settings.renovation_partial_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_partial_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Volledig (€/m²)">
+              <input type="number" value={settings.renovation_full_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_full_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Luxe (€/m²)">
+              <input type="number" value={settings.renovation_luxury_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_luxury_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Onvoorzien (%)">
+              <input type="number" value={settings.renovation_contingency_pct}
+                onChange={e => setSettings({ ...settings, renovation_contingency_pct: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Architect / vergunningen (€)">
+              <input type="number" value={settings.renovation_architect_fee}
+                onChange={e => setSettings({ ...settings, renovation_architect_fee: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+          </div>
+        </Section>
 
         {/* Kostencategorieën */}
         <div className="bg-white rounded-lg border border-slate-200 p-5">
