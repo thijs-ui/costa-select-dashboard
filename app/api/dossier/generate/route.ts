@@ -174,6 +174,7 @@ export async function POST(request: Request) {
   }
 
   // Pitch-modus: scrapen + Claude analyse
+  let aiRegioInfo = ''
   let pitchContent = {
     voordelen: [] as string[],
     nadelen: [] as string[],
@@ -196,7 +197,7 @@ export async function POST(request: Request) {
   try {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2500,
+      max_tokens: 4000,
       system: PITCH_SYSTEM_PROMPT,
       messages: [{
         role: 'user',
@@ -205,19 +206,23 @@ export async function POST(request: Request) {
 WONINGDATA:
 ${JSON.stringify(propertyData, null, 2)}
 
-${regioContent ? `REGIO-INFORMATIE:\n${regioContent}\n` : ''}
+${regioContent ? `REGIO-INFORMATIE UIT ONZE DATABASE:\n${regioContent}\n` : `Let op: we hebben geen regio-informatie in onze database voor "${propertyData.regio}". Gebruik je eigen kennis over deze locatie in Spanje om de buurtcontext te schrijven. Wees transparant als je over het bredere gebied schrijft.\n`}
 
-Genereer de volgende secties op basis van de woningdata:
+Genereer de volgende secties:
 
-1. VOORDELEN (3-5 bullet points, concreet en specifiek)
+1. VOORDELEN (3-5 bullet points, concreet en specifiek aan deze woning)
 2. NADELEN / AANDACHTSPUNTEN (2-4 bullet points, eerlijk en specifiek)
-3. BUURTCONTEXT (3-5 zinnen over de buurt, type bewoners, voorzieningen)
-4. INVESTERINGSPOTENTIEEL (alleen als er genoeg data is, anders lege string)
+3. BUURTCONTEXT — Schrijf een uitgebreide buurtanalyse van minimaal 150 woorden en maximaal 250 woorden. Behandel:
+   - KARAKTER VAN DE BUURT: Wat voor type wijk? Residentieel, toeristisch, gemengd? Welk type bewoners (lokaal Spaans, expats, gepensioneerden, gezinnen)?
+   - VOORZIENINGEN: Wat is er op loopafstand? Supermarkt, restaurants, strand, haven, scholen, medische voorzieningen. Noem afstanden in minuten waar mogelijk.
+   - BEREIKBAARHEID: Afstand tot luchthaven, snelweg. Hoe bereikbaar voor iemand uit Nederland/België?
+   - ONTWIKKELING: Hoe ontwikkelt de buurt zich? Nieuwbouwprojecten? Prijstrend?
+   - VOOR WIE GESCHIKT: Welk type koper past bij deze buurt?
+   Schrijf als een lokale expert, niet als iemand die Wikipedia heeft gelezen. Gebruik concrete details.
+4. INVESTERINGSPOTENTIEEL (geschatte huurinkomsten, yield, touristenverhuur — als er genoeg data is, anders lege string)
 5. COSTA SELECT ADVIES (1 alinea: voor wie geschikt, waarom wel/niet aanbevelen)
 
-Geef ook een samenvatting en prijsanalyse.
-
-Baseer je ALLEEN op de meegeleverde woningdata. Verzin geen feiten. Als je iets niet weet, zeg dat eerlijk.
+Geef ook een samenvatting, prijsanalyse en regio-informatie.
 
 Geef terug als JSON:
 {
@@ -225,8 +230,9 @@ Geef terug als JSON:
   "prijsanalyse": "Analyse van de prijs t.o.v. de markt (2-3 zinnen)",
   "voordelen": ["punt 1", "punt 2", "punt 3"],
   "nadelen": ["punt 1", "punt 2"],
-  "buurtcontext": "3-5 zinnen over de buurt",
+  "buurtcontext": "150-250 woorden uitgebreide buurtanalyse",
   "investering": "Kort oordeel over investeringspotentieel (of lege string)",
+  "regio_info": "3-5 zinnen over de regio waar deze woning zich bevindt",
   "advies": "1 alinea Costa Select advies",
   "juridische_risicos": ["risico 1", "risico 2"],
   "verhuurpotentieel": "Kort oordeel over verhuurmogelijkheden"
@@ -247,7 +253,6 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
         investering: parsed.investering || '',
         advies: parsed.advies || '',
       }
-      // Map naar bestaand analyse-formaat voor backwards compatibility
       analyse = {
         samenvatting: parsed.samenvatting || '',
         prijsanalyse: parsed.prijsanalyse || '',
@@ -256,6 +261,10 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
         juridische_risicos: parsed.juridische_risicos || [],
         verhuurpotentieel: parsed.verhuurpotentieel || '',
         advies_consultant: parsed.advies || '',
+      }
+      // AI-gegenereerde regio-info als fallback
+      if (!regioContent && parsed.regio_info) {
+        aiRegioInfo = parsed.regio_info
       }
     }
   } catch (err) {
@@ -266,7 +275,7 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
 
   const dossierResult = {
     property: propertyData,
-    regioInfo: regioContent ? regioContent.substring(0, 500) : 'Geen regio-informatie beschikbaar.',
+    regioInfo: regioContent ? regioContent.substring(0, 500) : aiRegioInfo,
     analyse,
     pitch_content: pitchContent,
     brochure_type: 'pitch' as const,

@@ -8,7 +8,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const SECTION_PROMPTS: Record<string, string> = {
   voordelen: 'Genereer 3-5 concrete voordelen (bullet points) van deze woning. Geef terug als JSON array van strings: ["punt 1", "punt 2", ...]',
   nadelen: 'Genereer 2-4 eerlijke nadelen/aandachtspunten (bullet points) van deze woning. Geef terug als JSON array van strings: ["punt 1", "punt 2", ...]',
-  buurtcontext: 'Schrijf 3-5 zinnen over de buurt: type buurt, voorzieningen, geschikt voor welk type koper. Geef terug als JSON string (geen array).',
+  buurtcontext: `Schrijf een uitgebreide buurtanalyse van minimaal 150 woorden en maximaal 250 woorden. Behandel: 1) KARAKTER: type wijk, sfeer, type bewoners (lokaal Spaans, expats, gepensioneerden, gezinnen). 2) VOORZIENINGEN: wat op loopafstand, noem afstanden in minuten. 3) BEREIKBAARHEID: afstand luchthaven, snelweg. 4) ONTWIKKELING: prijstrend, nieuwbouwprojecten. 5) VOOR WIE GESCHIKT: welk type koper. Schrijf als lokale expert, geen Wikipedia. Geef terug als JSON string (geen array).`,
   investering: 'Geef een kort oordeel over het investeringspotentieel: geschatte huurinkomsten, yield, touristenverhuur. Geef terug als JSON string (geen array). Als er te weinig data is, geef een lege string.',
   advies: 'Schrijf 1 alinea Costa Select advies: voor wie is deze woning geschikt en waarom wel/niet aanbevelen. Geef terug als JSON string (geen array).',
 }

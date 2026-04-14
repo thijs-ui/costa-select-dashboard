@@ -308,91 +308,68 @@ export function DossierPDF({ data, logoSrc }: { data: DossierData; logoSrc?: str
           <PageFooterBar pageNum={++pageCounter} />
         </Page>
       ) : (
-        /* PITCH: analyse pagina */
-        <>
-          <Page size="A4" orientation="landscape" style={s.contentPage}>
-            <PageHeader logoSrc={logoSrc} label="Analyse" />
-            <View style={s.contentBody}>
-              <View style={s.row}>
-                <View style={s.col}>
-                  <SectionBlock label="Overzicht" title="Samenvatting" />
-                  <Text style={s.body}>{samenvatting}</Text>
-                  {property.omschrijving && (
-                    <Text style={[s.body, { marginTop: 4, color: GRAY_MID }]}>{property.omschrijving.substring(0, 400)}</Text>
-                  )}
-                </View>
-                <View style={s.col}>
-                  <SectionBlock label="Markt" title="Prijsanalyse" />
-                  <Text style={s.body}>{prijsanalyse}</Text>
-                </View>
-              </View>
+        /* PITCH: single-column layout, content bepaalt paginering */
+        <Page size="A4" orientation="landscape" style={s.contentPage} wrap>
+          <PageHeader logoSrc={logoSrc} label="Analyse & Advies" />
+          <View style={[s.contentBody, { paddingBottom: 40 }]} wrap>
+            {/* Samenvatting */}
+            <SectionBlock label="Overzicht" title="Samenvatting" />
+            <Text style={s.body}>{samenvatting}</Text>
+            {prijsanalyse && (
+              <Text style={[s.body, { marginTop: 4 }]}>{prijsanalyse}</Text>
+            )}
 
-              <View style={[s.row, { marginTop: 20 }]}>
-                <View style={s.col}>
-                  <Text style={[s.sectionLabel, { color: SEA, marginBottom: 10 }]}>Voordelen</Text>
-                  {voordelen.map((p, i) => <BulletItem key={i} text={p} color="green" />)}
-                </View>
-                <View style={s.col}>
-                  <Text style={[s.sectionLabel, { color: SUN, marginBottom: 10 }]}>Nadelen / aandachtspunten</Text>
-                  {nadelen.map((p, i) => <BulletItem key={i} text={p} color="amber" />)}
-                </View>
-              </View>
+            {/* Voordelen */}
+            <View style={{ marginTop: 20 }} wrap={false}>
+              <Text style={[s.sectionLabel, { color: SEA, marginBottom: 10 }]}>Voordelen</Text>
+              {voordelen.map((p, i) => <BulletItem key={i} text={p} color="green" />)}
             </View>
-            <PageFooterBar pageNum={++pageCounter} />
-          </Page>
 
-          {/* PITCH PAGE 3: Regio, buurt, advies */}
-          <Page size="A4" orientation="landscape" style={s.contentPage}>
-            <PageHeader logoSrc={logoSrc} label="Regio & Advies" />
-            <View style={s.contentBody}>
-              <View style={s.row}>
-                <View style={s.col}>
-                  {buurtcontext && (
-                    <View style={s.buurtBlock}>
-                      <Text style={s.buurtLabel}>Buurtcontext</Text>
-                      <Text style={s.buurtText}>{buurtcontext}</Text>
-                    </View>
-                  )}
-
-                  {verhuur && (
-                    <View style={{ marginTop: 16 }}>
-                      <SectionBlock label="Rendement" title="Verhuurpotentieel" />
-                      <Text style={s.body}>{verhuur}</Text>
-                    </View>
-                  )}
-
-                  {investering && (
-                    <View style={{ marginTop: 16 }}>
-                      <SectionBlock label="Investering" title="Investeringspotentieel" />
-                      <Text style={s.body}>{investering}</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={s.col}>
-                  {juridisch.length > 0 && (
-                    <View>
-                      <SectionBlock label="Juridisch" title="Aandachtspunten" />
-                      {juridisch.map((r, i) => <BulletItem key={i} text={r} color="red" />)}
-                    </View>
-                  )}
-
-                  {regioInfo ? (
-                    <View style={{ marginTop: 16 }}>
-                      <SectionBlock label="Regio" title={property.regio} />
-                      <Text style={s.body}>{regioInfo}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-
-              <View style={s.adviesBlock}>
-                <Text style={s.adviesLabel}>Costa Select advies</Text>
-                <Text style={s.adviesText}>{advies}</Text>
-              </View>
+            {/* Nadelen */}
+            <View style={{ marginTop: 16 }} wrap={false}>
+              <Text style={[s.sectionLabel, { color: SUN, marginBottom: 10 }]}>Nadelen / aandachtspunten</Text>
+              {nadelen.map((p, i) => <BulletItem key={i} text={p} color="amber" />)}
             </View>
-            <PageFooterBar pageNum={++pageCounter} />
-          </Page>
-        </>
+
+            {/* Buurtcontext */}
+            {buurtcontext && (
+              <View style={[s.buurtBlock, { marginTop: 20 }]} wrap={false}>
+                <Text style={s.buurtLabel}>Buurtcontext</Text>
+                <Text style={s.buurtText}>{buurtcontext}</Text>
+              </View>
+            )}
+
+            {/* Verhuurpotentieel */}
+            {verhuur && (
+              <View style={{ marginTop: 20 }} wrap={false}>
+                <SectionBlock label="Rendement" title="Verhuurpotentieel" />
+                <Text style={s.body}>{verhuur}</Text>
+              </View>
+            )}
+
+            {/* Investeringspotentieel */}
+            {investering && (
+              <View style={{ marginTop: 16 }} wrap={false}>
+                <SectionBlock label="Investering" title="Investeringspotentieel" />
+                <Text style={s.body}>{investering}</Text>
+              </View>
+            )}
+
+            {/* Juridische aandachtspunten */}
+            {juridisch.length > 0 && (
+              <View style={{ marginTop: 16 }} wrap={false}>
+                <SectionBlock label="Juridisch" title="Aandachtspunten" />
+                {juridisch.map((r, i) => <BulletItem key={i} text={r} color="red" />)}
+              </View>
+            )}
+
+            {/* Costa Select advies */}
+            <View style={[s.adviesBlock, { marginTop: 20 }]} wrap={false}>
+              <Text style={s.adviesLabel}>Costa Select advies</Text>
+              <Text style={s.adviesText}>{advies}</Text>
+            </View>
+          </View>
+        </Page>
       )}
 
       {/* ─── PHOTO PAGES ────────────────────────────────────── */}
