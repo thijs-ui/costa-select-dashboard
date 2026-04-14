@@ -19,6 +19,14 @@ interface Settings {
   pipedrive_activiteit_namen: string[]
 }
 
+interface UserRow {
+  id: string
+  email: string
+  naam: string | null
+  role: string
+  isNew?: boolean
+}
+
 interface MakelaarRow {
   id: string | null
   naam: string
@@ -62,6 +70,11 @@ export default function AannamensPage() {
   const [makelaars, setMakelaars] = useState<MakelaarRow[]>([])
   const [categorieen, setCategorieen] = useState<CategorieRow[]>([])
   const [posten, setPosten] = useState<PostRow[]>([])
+  const [appUsers, setAppUsers] = useState<UserRow[]>([])
+  const [newUser, setNewUser] = useState({ email: '', naam: '', role: 'consultant' })
+  const [savingUsers, setSavingUsers] = useState(false)
+  const [savedUsers, setSavedUsers] = useState(false)
+  const [userError, setUserError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [savingMakelaars, setSavingMakelaars] = useState(false)
@@ -116,6 +129,16 @@ export default function AannamensPage() {
       }
       if (catRes.data) setCategorieen(catRes.data as CategorieRow[])
       if (postRes.data) setPosten(postRes.data as PostRow[])
+
+      // Haal gebruikers op via API
+      try {
+        const res = await fetch('/api/users')
+        if (res.ok) {
+          const data = await res.json()
+          setAppUsers(data.users ?? [])
+        }
+      } catch { /* ignore */ }
+
       setLoading(false)
     }
     load()
@@ -271,6 +294,55 @@ export default function AannamensPage() {
     setTimeout(() => setSavedMapping(false), 2000)
   }
 
+  async function saveUsers() {
+    setSavingUsers(true)
+    for (const u of appUsers) {
+      await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: u.id, naam: u.naam, role: u.role }),
+      })
+    }
+    setSavingUsers(false)
+    setSavedUsers(true)
+    setTimeout(() => setSavedUsers(false), 2000)
+  }
+
+  async function inviteUser() {
+    setUserError('')
+    if (!newUser.email.trim()) { setUserError('Email is verplicht'); return }
+    setSavingUsers(true)
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setUserError(data.error ?? 'Fout bij aanmaken')
+    } else {
+      setNewUser({ email: '', naam: '', role: 'consultant' })
+      // Herlaad users
+      const listRes = await fetch('/api/users')
+      if (listRes.ok) {
+        const listData = await listRes.json()
+        setAppUsers(listData.users ?? [])
+      }
+    }
+    setSavingUsers(false)
+  }
+
+  async function deleteUser(userId: string, email: string) {
+    if (!confirm(`Gebruiker "${email}" verwijderen? Dit verwijdert het account volledig.`)) return
+    const res = await fetch('/api/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    })
+    if (res.ok) {
+      setAppUsers(prev => prev.filter(u => u.id !== userId))
+    }
+  }
 
   if (loading) return <div className="text-slate-400 text-sm p-8">Laden...</div>
 
@@ -288,6 +360,91 @@ export default function AannamensPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Gebruikers */}
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-700">Gebruikers</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Beheer accounts, namen en rollen</p>
+            </div>
+            <button onClick={saveUsers} disabled={savingUsers}
+              className="flex items-center gap-2 text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-50 disabled:opacity-50">
+              <Save size={12} />
+              {savingUsers ? 'Opslaan...' : savedUsers ? 'Opgeslagen!' : 'Gebruikers opslaan'}
+            </button>
+          </div>
+          <table className="w-full text-sm mb-4">
+            <thead>
+              <tr className="border-b border-slate-100">
+                {['Email', 'Naam', 'Rol', ''].map(h => (
+                  <th key={h} className="text-left pb-2 text-xs text-slate-400 font-medium pr-3">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {appUsers.map((u, i) => (
+                <tr key={u.id} className="border-b border-slate-50">
+                  <td className="py-2 pr-3">
+                    <span className="text-sm text-slate-600">{u.email}</span>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input type="text" value={u.naam ?? ''} placeholder="Voornaam"
+                      onChange={e => setAppUsers(prev => prev.map((r, ri) => ri === i ? { ...r, naam: e.target.value || null } : r))}
+                      className="w-full border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-slate-400" />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <select value={u.role}
+                      onChange={e => setAppUsers(prev => prev.map((r, ri) => ri === i ? { ...r, role: e.target.value } : r))}
+                      className="border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-slate-400">
+                      <option value="consultant">Consultant</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td className="py-2">
+                    <button onClick={() => deleteUser(u.id, u.email)}
+                      className="text-slate-300 hover:text-red-500 p-1">
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Nieuwe gebruiker uitnodigen */}
+          <div className="border-t border-slate-100 pt-4">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Nieuwe gebruiker</div>
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <input type="email" value={newUser.email} placeholder="Email *"
+                  onChange={e => { setNewUser({ ...newUser, email: e.target.value }); setUserError('') }}
+                  className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <input type="text" value={newUser.naam} placeholder="Voornaam"
+                  onChange={e => setNewUser({ ...newUser, naam: e.target.value })}
+                  className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <select value={newUser.role}
+                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                  className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-slate-400">
+                  <option value="consultant">Consultant</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <button onClick={inviteUser} disabled={savingUsers}
+                  className="flex items-center gap-1 text-sm bg-slate-900 text-white px-3 py-1.5 rounded-md hover:bg-slate-700 disabled:opacity-50">
+                  <Plus size={14} /> Toevoegen
+                </button>
+              </div>
+            </div>
+            {userError && <p className="text-xs text-red-500 mt-2">{userError}</p>}
+            <p className="text-xs text-slate-400 mt-2">De gebruiker krijgt een tijdelijk wachtwoord. Zij moeten dit resetten bij eerste login.</p>
+          </div>
+        </div>
+
         {/* Team */}
         <div className="bg-white rounded-lg border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
