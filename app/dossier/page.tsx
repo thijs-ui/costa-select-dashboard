@@ -5,7 +5,7 @@ import { PageLayout } from '@/components/page-layout'
 import {
   FileText, Link2, PenLine, Loader2, Download, Check,
   AlertTriangle, ChevronDown, Plus, X, Clock, ExternalLink, Pencil,
-  Eye, Megaphone, RefreshCw,
+  Eye, Megaphone, RefreshCw, Mail, MessageCircle,
 } from 'lucide-react'
 
 const REGIOS = [
@@ -79,6 +79,46 @@ export default function DossierPage() {
   const [editAnalyse, setEditAnalyse] = useState<DossierAnalyse | null>(null)
   const [editPitch, setEditPitch] = useState<PitchContent | null>(null)
   const [error, setError] = useState('')
+  const [regenerating, setRegenerating] = useState<string | null>(null)
+
+  async function regenerateSection(section: string) {
+    if (!dossier) return
+    setRegenerating(section)
+    try {
+      const res = await fetch('/api/dossier/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section, property_data: dossier.property }),
+      })
+      if (!res.ok) throw new Error('Regeneratie mislukt')
+      const { content } = await res.json()
+
+      if (section === 'voordelen' || section === 'nadelen') {
+        setEditPitch(prev => prev ? { ...prev, [section]: content } : null)
+      } else {
+        setEditPitch(prev => prev ? { ...prev, [section]: content } : null)
+      }
+    } catch {
+      setError('Sectie kon niet opnieuw worden gegenereerd.')
+    } finally {
+      setRegenerating(null)
+    }
+  }
+
+  function getWhatsAppLink() {
+    if (!dossier) return ''
+    const p = dossier.property
+    const msg = `Hoi, hierbij een woning die goed bij je zoekopdracht past: ${p.adres} in ${p.regio} — €${p.vraagprijs?.toLocaleString('nl-NL') ?? ''}. ${p.url ? `Bekijk de listing: ${p.url}` : ''}`
+    return `https://wa.me/?text=${encodeURIComponent(msg)}`
+  }
+
+  function getEmailLink() {
+    if (!dossier) return ''
+    const p = dossier.property
+    const subject = `Woningvoorstel: ${p.adres} in ${p.regio}`
+    const body = `Beste,\n\nHierbij een woningvoorstel dat goed bij je zoekopdracht past:\n\n${p.adres}\n${p.regio} — €${p.vraagprijs?.toLocaleString('nl-NL') ?? ''}\n${p.url ? `\nBekijk de listing: ${p.url}` : ''}\n\nMet vriendelijke groet,\nCosta Select`
+    return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }
 
   // History
   const [history, setHistory] = useState<HistoryItem[]>([])
@@ -525,13 +565,29 @@ export default function DossierPage() {
               </div>
               <p className="text-sm text-gray-500">{dossier.property.adres}</p>
             </div>
-            <button
-              onClick={handleDownloadPdf}
-              disabled={pdfLoading}
-              className="bg-[#004B46] text-[#FFFAEF] font-semibold px-6 py-3 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {pdfLoading ? <><Loader2 size={16} className="animate-spin" /> PDF genereren...</> : <><Download size={16} /> Download PDF</>}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownloadPdf}
+                disabled={pdfLoading}
+                className="bg-[#004B46] text-[#FFFAEF] font-semibold px-5 py-2.5 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+              >
+                {pdfLoading ? <><Loader2 size={14} className="animate-spin" /> PDF...</> : <><Download size={14} /> PDF</>}
+              </button>
+              <a
+                href={getWhatsAppLink()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#25D366] text-white font-semibold px-4 py-2.5 rounded-xl hover:bg-[#20BD5A] transition-colors flex items-center gap-2 cursor-pointer text-sm"
+              >
+                <MessageCircle size={14} /> WhatsApp
+              </a>
+              <a
+                href={getEmailLink()}
+                className="bg-blue-600 text-white font-semibold px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 cursor-pointer text-sm"
+              >
+                <Mail size={14} /> Email
+              </a>
+            </div>
           </div>
 
           {/* Feitelijke data (altijd zichtbaar) */}
@@ -603,7 +659,14 @@ export default function DossierPage() {
 
               {/* Voordelen */}
               <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4">
-                <label className="block text-sm font-semibold text-emerald-800 mb-2">Voordelen</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-emerald-800">Voordelen</label>
+                  <button onClick={() => regenerateSection('voordelen')} disabled={regenerating === 'voordelen'}
+                    className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-800 cursor-pointer disabled:opacity-50">
+                    <RefreshCw size={11} className={regenerating === 'voordelen' ? 'animate-spin' : ''} />
+                    {regenerating === 'voordelen' ? 'Genereren...' : 'AI opnieuw'}
+                  </button>
+                </div>
                 {editPitch.voordelen.map((p, i) => (
                   <div key={i} className="flex items-start gap-1.5 mb-1.5">
                     <span className="text-emerald-500 font-bold text-xs mt-2.5 shrink-0">✓</span>
@@ -622,7 +685,14 @@ export default function DossierPage() {
 
               {/* Nadelen */}
               <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-4">
-                <label className="block text-sm font-semibold text-amber-800 mb-2">Nadelen / aandachtspunten</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-amber-800">Nadelen / aandachtspunten</label>
+                  <button onClick={() => regenerateSection('nadelen')} disabled={regenerating === 'nadelen'}
+                    className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-800 cursor-pointer disabled:opacity-50">
+                    <RefreshCw size={11} className={regenerating === 'nadelen' ? 'animate-spin' : ''} />
+                    {regenerating === 'nadelen' ? 'Genereren...' : 'AI opnieuw'}
+                  </button>
+                </div>
                 {editPitch.nadelen.map((p, i) => (
                   <div key={i} className="flex items-start gap-1.5 mb-1.5">
                     <span className="text-amber-500 font-bold text-xs mt-2.5 shrink-0">!</span>
@@ -641,7 +711,14 @@ export default function DossierPage() {
 
               {/* Buurtcontext */}
               <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-4">
-                <label className="block text-sm font-semibold text-sky-800 mb-1.5">Buurtcontext</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-semibold text-sky-800">Buurtcontext</label>
+                  <button onClick={() => regenerateSection('buurtcontext')} disabled={regenerating === 'buurtcontext'}
+                    className="flex items-center gap-1 text-[10px] text-sky-600 hover:text-sky-800 cursor-pointer disabled:opacity-50">
+                    <RefreshCw size={11} className={regenerating === 'buurtcontext' ? 'animate-spin' : ''} />
+                    {regenerating === 'buurtcontext' ? 'Genereren...' : 'AI opnieuw'}
+                  </button>
+                </div>
                 <textarea value={editPitch.buurtcontext}
                   onChange={e => setEditPitch({ ...editPitch, buurtcontext: e.target.value })}
                   rows={3} className={textareaClass} />
@@ -678,7 +755,14 @@ export default function DossierPage() {
 
               {/* Costa Select advies */}
               <div className="bg-[#004B46]/5 border border-[#004B46]/15 rounded-xl p-4">
-                <label className="block text-[10px] font-semibold text-[#004B46] uppercase tracking-wider mb-1.5">Costa Select advies</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] font-semibold text-[#004B46] uppercase tracking-wider">Costa Select advies</label>
+                  <button onClick={() => regenerateSection('advies')} disabled={regenerating === 'advies'}
+                    className="flex items-center gap-1 text-[10px] text-[#004B46]/60 hover:text-[#004B46] cursor-pointer disabled:opacity-50">
+                    <RefreshCw size={11} className={regenerating === 'advies' ? 'animate-spin' : ''} />
+                    {regenerating === 'advies' ? 'Genereren...' : 'AI opnieuw'}
+                  </button>
+                </div>
                 <textarea value={editPitch.advies}
                   onChange={e => setEditPitch({ ...editPitch, advies: e.target.value })}
                   rows={3} className="w-full bg-transparent border border-[#004B46]/15 rounded-lg px-3 py-2.5 text-sm text-gray-700 leading-relaxed focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-y" />
