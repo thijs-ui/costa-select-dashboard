@@ -38,6 +38,7 @@ const platformItems = [
   { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
   { href: '/calculators', label: 'Calculators', icon: Calculator },
   { href: '/agentschappen', label: 'Agentschappen', icon: Building2 },
+  { href: '/nieuwbouwkaart', label: 'Nieuwbouwkaart', icon: MapPin },
   { href: '/dossier', label: 'Dossier', icon: FileText },
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
   { href: '/training', label: 'Training', icon: GraduationCap },
