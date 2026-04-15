@@ -65,6 +65,7 @@ interface HistoryItem {
   vraagprijs: number
   url: string
   brochure_type: BrochureType | null
+  source: string | null
   created_at: string
 }
 
@@ -82,6 +83,8 @@ export default function DossierPage() {
   const [editPitch, setEditPitch] = useState<PitchContent | null>(null)
   const [error, setError] = useState('')
   const [regenerating, setRegenerating] = useState<string | null>(null)
+  const [unitsData, setUnitsData] = useState<Array<{ typology: string; rooms: number | null; size_m2: number | null; price: number | null }>>([])
+  const [showAvailableOnly, setShowAvailableOnly] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [regions, setRegions] = useState<any[]>([])
   const [renoDefaults, setRenoDefaults] = useState({ cosmetic: 300, partial: 600, full: 1000, luxury: 1500, contingency: 15, architect: 3000, terrace: 150, garden: 80, pool: 400 })
@@ -379,6 +382,11 @@ export default function DossierPage() {
                       ) : item.brochure_type === 'presentatie' ? (
                         <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">Presentatie</span>
                       ) : null}
+                      {item.source === 'idealista_newbuild' ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Idealista</span>
+                      ) : item.source === 'costa_select' ? (
+                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">CS</span>
+                      ) : null}
                       {item.regio && <span className="text-xs text-gray-400">{item.regio}</span>}
                       {item.vraagprijs > 0 && (
                         <span className="text-xs text-gray-400">
@@ -658,6 +666,40 @@ export default function DossierPage() {
                   <img key={i} src={foto} alt={`Foto ${i + 1}`}
                     className="w-full h-32 object-cover rounded-lg border border-gray-100" />
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== UNITS (nieuwbouw dossiers) ===== */}
+          {unitsData.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Beschikbare units ({unitsData.length})</div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-3 py-2 text-xs text-gray-500 font-medium">Type</th>
+                      <th className="text-left px-3 py-2 text-xs text-gray-500 font-medium">Kamers</th>
+                      <th className="text-left px-3 py-2 text-xs text-gray-500 font-medium">m²</th>
+                      <th className="text-left px-3 py-2 text-xs text-gray-500 font-medium">Prijs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unitsData.map((u, i) => (
+                      <tr key={i} className="border-b border-gray-50">
+                        <td className="px-3 py-2 text-gray-700">{u.typology || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{u.rooms ? `${u.rooms} slk` : '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{u.size_m2 ? `${u.size_m2} m²` : '—'}</td>
+                        <td className="px-3 py-2 text-[#0EAE96] font-medium">{u.price ? `€ ${u.price.toLocaleString('nl-NL')}` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-3 py-2 bg-gray-50 text-xs text-gray-500">
+                  {unitsData.length} units{unitsData.filter(u => u.price).length > 0 ? ` · Vanaf € ${Math.min(...unitsData.filter(u => u.price).map(u => u.price!)).toLocaleString('nl-NL')}` : ''}
+                </div>
               </div>
             </div>
           )}

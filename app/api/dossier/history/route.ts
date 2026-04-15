@@ -8,7 +8,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('dossier_history')
-      .select('id, adres, regio, type, vraagprijs, url, brochure_type, created_at')
+      .select('id, adres, regio, type, vraagprijs, url, brochure_type, source, created_at')
       .order('created_at', { ascending: false })
       .limit(50)
 

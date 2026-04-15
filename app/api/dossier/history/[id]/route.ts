@@ -10,7 +10,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from('dossier_history')
-    .select('dossier_data, financial_data, internal_notes')
+    .select('dossier_data, financial_data, internal_notes, units_data, source')
     .eq('id', id)
     .single()
 

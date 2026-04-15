@@ -11,6 +11,41 @@ const PITCH_SYSTEM = `Je bent een ervaren vastgoedconsultant van Costa Select, e
 
 Schrijfstijl: helder, direct, geen overdrijving. Eerlijk over nadelen. Schrijf in jij-vorm richting de koper. Schrijf in het Nederlands.`
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractPhotos(listing: any): string[] {
+  const photos: string[] = []
+  const seen = new Set<string>()
+
+  // main_image_url als eerste
+  if (listing.main_image_url) { photos.push(listing.main_image_url); seen.add(listing.main_image_url) }
+
+  // images JSONB: kan array van {url, tag} objecten zijn, of array van strings
+  if (listing.images && Array.isArray(listing.images)) {
+    for (const img of listing.images) {
+      const url = typeof img === 'string' ? img : img?.url
+      if (url && !seen.has(url)) { photos.push(url); seen.add(url) }
+    }
+  }
+
+  // details_data kan ook images bevatten
+  if (listing.details_data?.multimedia?.images && Array.isArray(listing.details_data.multimedia.images)) {
+    for (const img of listing.details_data.multimedia.images) {
+      const url = typeof img === 'string' ? img : img?.url
+      if (url && !seen.has(url)) { photos.push(url); seen.add(url) }
+    }
+  }
+
+  // raw_data fallback
+  if (photos.length === 0 && listing.raw_data?.multimedia?.images) {
+    for (const img of listing.raw_data.multimedia.images) {
+      const url = typeof img === 'string' ? img : img?.url
+      if (url && !seen.has(url)) { photos.push(url); seen.add(url) }
+    }
+  }
+
+  return photos
+}
+
 export async function POST(request: Request) {
   const { listing_id, mode, client_id } = await request.json()
 
@@ -42,7 +77,7 @@ export async function POST(request: Request) {
     slaapkamers: listing.rooms || 0,
     badkamers: listing.bathrooms || 0,
     omschrijving: listing.description || '',
-    fotos: listing.images ? (Array.isArray(listing.images) ? listing.images.map((img: { url?: string } | string) => typeof img === 'string' ? img : img.url).filter(Boolean) : []) : (listing.main_image_url ? [listing.main_image_url] : []),
+    fotos: extractPhotos(listing),
     url: listing.url || '',
     kenmerken: {
       zwembad: listing.has_swimming_pool,
