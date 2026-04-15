@@ -34,20 +34,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   async function loadUserRole(u: User) {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role, naam')
-      .eq('user_id', u.id)
-      .single()
-    setRole(data?.role ?? 'consultant')
-    setNaam(data?.naam ?? null)
+    try {
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role, naam')
+        .eq('user_id', u.id)
+        .single()
+      setRole(data?.role ?? 'consultant')
+      setNaam(data?.naam ?? null)
+    } catch {
+      setRole('consultant')
+      setNaam(null)
+    }
   }
 
   useEffect(() => {
     async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
-      if (user) await loadUserRole(user)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+        if (user) await loadUserRole(user)
+      } catch {
+        setUser(null)
+        setRole(null)
+      }
       setLoading(false)
     }
 
