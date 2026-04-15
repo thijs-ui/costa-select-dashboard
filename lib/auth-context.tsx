@@ -34,18 +34,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   async function loadUserRole(u: User) {
+    // Methode 1: browser client (snel, maar kan falen door RLS)
     try {
       const { data } = await supabase
         .from('user_roles')
         .select('role, naam')
         .eq('user_id', u.id)
         .single()
-      setRole(data?.role ?? 'consultant')
-      setNaam(data?.naam ?? null)
-    } catch {
-      setRole('consultant')
-      setNaam(null)
-    }
+      if (data?.role) {
+        setRole(data.role as Role)
+        setNaam(data.naam ?? null)
+        return
+      }
+    } catch { /* fallback naar methode 2 */ }
+
+    // Methode 2: via API route (service client, altijd betrouwbaar)
+    try {
+      const res = await fetch('/api/todos/users')
+      if (res.ok) {
+        const { users } = await res.json()
+        const me = users?.find((usr: { id: string }) => usr.id === u.id)
+        if (me) {
+          setRole((me.role as Role) ?? 'consultant')
+          setNaam(me.naam ?? null)
+          return
+        }
+      }
+    } catch { /* ignore */ }
+
+    // Fallback
+    setRole('consultant')
+    setNaam(null)
   }
 
   useEffect(() => {
