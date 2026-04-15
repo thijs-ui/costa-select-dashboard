@@ -8,15 +8,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const full = searchParams.get('id')
 
-  // Volledige data voor één project (zijpaneel)
+  // Volledige data voor één project (zijpaneel) + units
   if (full) {
-    const { data, error } = await supabase
-      .from('listings')
-      .select('*')
-      .eq('id', full)
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data)
+    const [listingRes, unitsRes] = await Promise.all([
+      supabase.from('listings').select('*').eq('id', full).single(),
+      supabase.from('units').select('id, typology, sub_typology, price, size_m2, rooms, floor').eq('listing_id', full).order('price', { ascending: true }),
+    ])
+    if (listingRes.error) return NextResponse.json({ error: listingRes.error.message }, { status: 500 })
+    return NextResponse.json({ ...listingRes.data, units: unitsRes.data ?? [] })
   }
 
   // Lichte data voor kaart — projecten met coördinaten

@@ -32,6 +32,50 @@ interface FullListing extends Listing {
   has_swimming_pool: boolean
   has_terrace: boolean
   has_parking: boolean
+  units: Unit[]
+}
+
+interface Unit {
+  id: string
+  typology: string | null
+  sub_typology: string | null
+  price: number | null
+  size_m2: number | null
+  rooms: number | null
+  floor: string | null
+}
+
+interface UnitGroup {
+  label: string
+  count: number
+  priceMin: number | null
+  priceMax: number | null
+  sizeMin: number | null
+  sizeMax: number | null
+  rooms: number | null
+}
+
+function groupUnits(units: Unit[]): UnitGroup[] {
+  const groups = new Map<string, Unit[]>()
+  for (const u of units) {
+    const key = `${u.typology || 'Onbekend'}|${u.rooms ?? '?'}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(u)
+  }
+  return Array.from(groups.entries()).map(([key, items]) => {
+    const [typology, rooms] = key.split('|')
+    const prices = items.map(i => i.price).filter(Boolean) as number[]
+    const sizes = items.map(i => i.size_m2).filter(Boolean) as number[]
+    return {
+      label: `${typology}${rooms !== '?' ? ` · ${rooms} slk` : ''}`,
+      count: items.length,
+      priceMin: prices.length ? Math.min(...prices) : null,
+      priceMax: prices.length ? Math.max(...prices) : null,
+      sizeMin: sizes.length ? Math.min(...sizes) : null,
+      sizeMax: sizes.length ? Math.max(...sizes) : null,
+      rooms: rooms !== '?' ? Number(rooms) : null,
+    }
+  }).sort((a, b) => (a.priceMin ?? Infinity) - (b.priceMin ?? Infinity))
 }
 
 const REGIOS = [
@@ -268,6 +312,44 @@ export default function NieuwbouwkaartPage() {
                   {selected.has_terrace && <Tag label="Terras" />}
                   {selected.has_parking && <Tag label="Parking" />}
                 </div>
+                {/* Units per type */}
+                {selected.units?.length > 0 && (() => {
+                  const groups = groupUnits(selected.units)
+                  return (
+                    <div>
+                      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                        Beschikbare units ({selected.units.length})
+                      </div>
+                      <div className="space-y-2">
+                        {groups.map((g, i) => (
+                          <div key={i} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-[#004B46]">{g.label}</span>
+                              <span className="text-[10px] bg-[#0EAE96]/10 text-[#0EAE96] px-2 py-0.5 rounded-full font-semibold">{g.count}x</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-500">
+                              {g.priceMin && (
+                                <span>
+                                  {g.priceMin === g.priceMax
+                                    ? `€ ${g.priceMin.toLocaleString('nl-NL')}`
+                                    : `€ ${g.priceMin.toLocaleString('nl-NL')} — ${g.priceMax!.toLocaleString('nl-NL')}`}
+                                </span>
+                              )}
+                              {g.sizeMin && (
+                                <span>
+                                  {g.sizeMin === g.sizeMax
+                                    ? `${g.sizeMin} m²`
+                                    : `${g.sizeMin} — ${g.sizeMax} m²`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {selected.agency_name && (
                   <div>
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Ontwikkelaar</div>
