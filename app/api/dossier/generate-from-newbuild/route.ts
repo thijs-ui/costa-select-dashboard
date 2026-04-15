@@ -46,7 +46,14 @@ function extractPhotos(listing: any): string[] {
   return photos
 }
 
-async function downloadAndStorePhotos(photos: string[], dossierId: string, supabase: ReturnType<typeof createServiceClient>): Promise<string[]> {
+async function downloadAndStorePhotos(photos: string[], dossierId: string): Promise<string[]> {
+  // Maak een eigen service client voor storage (service_role bypast storage RLS)
+  const { createClient } = await import('@supabase/supabase-js')
+  const storageClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
   const storedUrls: string[] = []
   const maxPhotos = Math.min(photos.length, 6)
 
@@ -55,25 +62,33 @@ async function downloadAndStorePhotos(photos: string[], dossierId: string, supab
       const res = await fetch(photos[i], {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
       })
-      if (!res.ok) continue
+      if (!res.ok) { console.log(`Photo ${i} download failed: ${res.status}`); continue }
 
-      const buffer = Buffer.from(await res.arrayBuffer())
+      const arrayBuf = await res.arrayBuffer()
+      const uint8 = new Uint8Array(arrayBuf)
       const contentType = res.headers.get('content-type') || 'image/jpeg'
       const ext = contentType.includes('png') ? 'png' : 'jpg'
-      const path = `${dossierId}/${i + 1}.${ext}`
+      const filePath = `${dossierId}/${i + 1}.${ext}`
 
-      const { error } = await supabase.storage.from('dossier-fotos').upload(path, buffer, {
+      const { error: uploadError } = await storageClient.storage.from('dossier-fotos').upload(filePath, uint8, {
         contentType,
         upsert: true,
       })
 
-      if (!error) {
-        const { data: urlData } = supabase.storage.from('dossier-fotos').getPublicUrl(path)
-        storedUrls.push(urlData.publicUrl)
+      if (uploadError) {
+        console.log(`Photo ${i} upload failed:`, uploadError.message)
+        continue
       }
-    } catch { /* skip failed photo */ }
+
+      const { data: urlData } = storageClient.storage.from('dossier-fotos').getPublicUrl(filePath)
+      storedUrls.push(urlData.publicUrl)
+      console.log(`Photo ${i} stored:`, urlData.publicUrl)
+    } catch (err) {
+      console.log(`Photo ${i} error:`, err)
+    }
   }
 
+  console.log(`Stored ${storedUrls.length}/${maxPhotos} photos`)
   return storedUrls.length > 0 ? storedUrls : photos.slice(0, 6)
 }
 
@@ -208,7 +223,7 @@ export async function POST(request: Request) {
   // 5. Download foto's naar Supabase Storage (voor PDF-generatie)
   const originalFotos = propertyData.fotos || []
   if (originalFotos.length > 0) {
-    const storedFotos = await downloadAndStorePhotos(originalFotos, dossier.id, dashboard)
+    const storedFotos = await downloadAndStorePhotos(originalFotos, dossier.id)
     // Update dossier_data met storage URLs
     dossierResult.property.fotos = storedFotos
     await dashboard.from('dossier_history').update({
