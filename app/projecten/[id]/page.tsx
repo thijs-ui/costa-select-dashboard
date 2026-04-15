@@ -111,6 +111,36 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     await supabase.from('todos').update({ is_week_focus: newFocus, week_focus_date: newFocus ? monday : null }).eq('id', todo.id)
   }
 
+  async function renamePhase(phaseId: string, name: string) {
+    if (!name.trim()) return
+    await fetch('/api/projecten/phases', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: phaseId, name: name.trim() }),
+    })
+    setProject(prev => prev ? { ...prev, phases: prev.phases.map(p => p.id === phaseId ? { ...p, name: name.trim() } : p) } : null)
+  }
+
+  async function deletePhase(phaseId: string) {
+    if (!confirm('Fase verwijderen? Alle taken in deze fase worden losgekoppeld.')) return
+    await fetch('/api/projecten/phases', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: phaseId }),
+    })
+    await loadProject()
+  }
+
+  async function deleteProject() {
+    if (!confirm('Project verwijderen? Dit kan niet ongedaan worden gemaakt.')) return
+    await fetch('/api/projecten', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    window.location.href = '/projecten'
+  }
+
   async function deleteTodo(todoId: string) {
     setProject(prev => prev ? { ...prev, todos: prev.todos.filter(t => t.id !== todoId) } : null)
     await supabase.from('todos').delete().eq('id', todoId)
@@ -149,6 +179,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </select>
         <input type="date" value={project.target_date ?? ''} onChange={e => updateProject({ target_date: e.target.value || null })}
           className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+        <button onClick={deleteProject} className="text-slate-300 hover:text-red-500 p-1.5 cursor-pointer" title="Project verwijderen">
+          <Trash2 size={15} />
+        </button>
         <div className="flex items-center gap-2 ml-auto text-sm text-slate-500">
           <div className="flex-1 w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: project.color }} />
@@ -173,6 +206,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               onToggleWeekFocus={toggleWeekFocus}
               onDeleteTodo={deleteTodo}
               onAddTodo={addTodo}
+              onRenamePhase={renamePhase}
+              onDeletePhase={deletePhase}
               newTodoPhase={newTodoPhase}
               newTodoDesc={newTodoDesc}
               setNewTodoPhase={setNewTodoPhase}
@@ -203,10 +238,11 @@ function getMonday() {
   return new Date(d.setDate(diff)).toISOString().split('T')[0]
 }
 
-function PhaseCard({ phase, todos, projectColor, getUserName, onToggleTodo, onToggleWeekFocus, onDeleteTodo, onAddTodo, newTodoPhase, newTodoDesc, setNewTodoPhase, setNewTodoDesc }: {
+function PhaseCard({ phase, todos, projectColor, getUserName, onToggleTodo, onToggleWeekFocus, onDeleteTodo, onAddTodo, onRenamePhase, onDeletePhase, newTodoPhase, newTodoDesc, setNewTodoPhase, setNewTodoDesc }: {
   phase: Phase; todos: Todo[]; projectColor: string
   getUserName: (id: string | null) => string
   onToggleTodo: (t: Todo) => void; onToggleWeekFocus: (t: Todo) => void; onDeleteTodo: (id: string) => void; onAddTodo: (phaseId: string) => void
+  onRenamePhase: (phaseId: string, name: string) => void; onDeletePhase: (phaseId: string) => void
   newTodoPhase: string; newTodoDesc: string; setNewTodoPhase: (s: string) => void; setNewTodoDesc: (s: string) => void
 }) {
   const phaseDone = todos.filter(t => t.status === 'afgerond').length
@@ -214,15 +250,25 @@ function PhaseCard({ phase, todos, projectColor, getUserName, onToggleTodo, onTo
   const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0
   const isComplete = phaseTotal > 0 && phaseDone === phaseTotal
   const [expanded, setExpanded] = useState(!isComplete)
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState(phase.name)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <button onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors cursor-pointer">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors">
+        <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-3 flex-1 cursor-pointer">
           {expanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
-          <span className={`text-sm font-semibold ${isComplete ? 'text-slate-400' : 'text-slate-700'}`}>{phase.name}</span>
-        </div>
+          {editingName ? (
+            <input autoFocus value={nameValue} onChange={e => setNameValue(e.target.value)}
+              onClick={e => e.stopPropagation()}
+              onBlur={() => { onRenamePhase(phase.id, nameValue); setEditingName(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') { onRenamePhase(phase.id, nameValue); setEditingName(false) }; if (e.key === 'Escape') { setNameValue(phase.name); setEditingName(false) } }}
+              className="text-sm font-semibold text-slate-700 bg-transparent border-b border-[#004B46] focus:outline-none" />
+          ) : (
+            <span onDoubleClick={(e) => { e.stopPropagation(); setEditingName(true) }}
+              className={`text-sm font-semibold ${isComplete ? 'text-slate-400' : 'text-slate-700'}`}>{phase.name}</span>
+          )}
+        </button>
         <div className="flex items-center gap-3">
           {isComplete ? (
             <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Afgerond</span>
@@ -234,8 +280,10 @@ function PhaseCard({ phase, todos, projectColor, getUserName, onToggleTodo, onTo
               <span className="text-xs text-slate-500 tabular-nums">{phasePct}%</span>
             </>
           )}
+          <button onClick={(e) => { e.stopPropagation(); onDeletePhase(phase.id) }}
+            className="text-slate-300 hover:text-red-500 p-1 cursor-pointer"><Trash2 size={13} /></button>
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="px-5 pb-4 border-t border-slate-50">
