@@ -93,6 +93,10 @@ export default function AannamensPage() {
   const [savingUsers, setSavingUsers] = useState(false)
   const [savedUsers, setSavedUsers] = useState(false)
   const [userError, setUserError] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [regionalSettings, setRegionalSettings] = useState<any[]>([])
+  const [savingRegional, setSavingRegional] = useState(false)
+  const [savedRegional, setSavedRegional] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [savingMakelaars, setSavingMakelaars] = useState(false)
@@ -156,6 +160,12 @@ export default function AannamensPage() {
       }
       if (catRes.data) setCategorieen(catRes.data as CategorieRow[])
       if (postRes.data) setPosten(postRes.data as PostRow[])
+
+      // Haal regionale settings op
+      try {
+        const regRes = await fetch('/api/regional-settings')
+        if (regRes.ok) setRegionalSettings(await regRes.json())
+      } catch { /* ignore */ }
 
       // Haal gebruikers op via API
       try {
@@ -328,6 +338,20 @@ export default function AannamensPage() {
     setSavingMapping(false)
     setSavedMapping(true)
     setTimeout(() => setSavedMapping(false), 2000)
+  }
+
+  async function saveRegionalSettings() {
+    setSavingRegional(true)
+    for (const r of regionalSettings) {
+      await fetch('/api/regional-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(r),
+      })
+    }
+    setSavingRegional(false)
+    setSavedRegional(true)
+    setTimeout(() => setSavedRegional(false), 2000)
   }
 
   async function saveUsers() {
@@ -726,6 +750,51 @@ export default function AannamensPage() {
             </Field>
           </div>
         </Section>
+
+        {/* Regionale kosten koper */}
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-700">Regionale kosten koper</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Belastingtarieven en kosten per regio</p>
+            </div>
+            <button onClick={saveRegionalSettings} disabled={savingRegional}
+              className="flex items-center gap-2 text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-50 disabled:opacity-50">
+              <Save size={12} />
+              {savingRegional ? 'Opslaan...' : savedRegional ? 'Opgeslagen!' : 'Regio-settings opslaan'}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  {['Regio', 'ITP %', 'AJD %', 'IVA %', 'Notaris %', 'Registro %', 'Advocaat %', 'Adv. min €'].map(h => (
+                    <th key={h} className="text-left pb-2 text-xs text-slate-400 font-medium pr-2">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {regionalSettings.map((r, i) => (
+                  <tr key={r.id} className="border-b border-slate-50">
+                    <td className="py-2 pr-2 font-medium text-slate-700 text-xs whitespace-nowrap">{r.region}</td>
+                    {(['itp_percentage', 'ajd_percentage', 'iva_percentage', 'notary_percentage', 'registro_percentage', 'lawyer_percentage'] as const).map(field => (
+                      <td key={field} className="py-2 pr-2">
+                        <input type="number" step="0.1" value={r[field] ?? 0}
+                          onChange={e => setRegionalSettings(prev => prev.map((s, si) => si === i ? { ...s, [field]: Number(e.target.value) } : s))}
+                          className="w-16 border border-slate-200 rounded px-1.5 py-0.5 text-xs tabular-nums focus:outline-none focus:border-slate-400" />
+                      </td>
+                    ))}
+                    <td className="py-2 pr-2">
+                      <input type="number" value={r.lawyer_minimum ?? 1500}
+                        onChange={e => setRegionalSettings(prev => prev.map((s, si) => si === i ? { ...s, lawyer_minimum: Number(e.target.value) } : s))}
+                        className="w-20 border border-slate-200 rounded px-1.5 py-0.5 text-xs tabular-nums focus:outline-none focus:border-slate-400" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {/* Kostencategorieën */}
         <div className="bg-white rounded-lg border border-slate-200 p-5">

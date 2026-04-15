@@ -88,11 +88,22 @@ export async function PUT(request: Request) {
 
   const service = createServiceClient()
 
-  const { error } = await service.from('user_roles').upsert({
-    user_id,
-    role: role || 'consultant',
-    naam: naam || null,
-  }, { onConflict: 'user_id' })
+  // Check of er al een record bestaat
+  const { data: existing } = await service.from('user_roles').select('id').eq('user_id', user_id).single()
+
+  let error
+  if (existing) {
+    ;({ error } = await service.from('user_roles').update({
+      role: role || 'consultant',
+      naam: naam !== undefined ? (naam || null) : undefined,
+    }).eq('user_id', user_id))
+  } else {
+    ;({ error } = await service.from('user_roles').insert({
+      user_id,
+      role: role || 'consultant',
+      naam: naam || null,
+    }))
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

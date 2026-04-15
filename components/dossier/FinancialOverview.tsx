@@ -76,7 +76,11 @@ const inp = 'w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:
 
 export default function FinancialOverview({ price, regio, oppervlakte, type: propertyType, regions, renovationDefaults, initialData, onSave }: Props) {
   const [open, setOpen] = useState(false)
-  const region = regions.find(r => r.region.toLowerCase().includes(regio.toLowerCase()) || regio.toLowerCase().includes(r.region.toLowerCase()))
+
+  // Regio-selector: probeer automatisch te matchen, anders handmatig kiezen
+  const autoMatch = regions.find(r => r.region.toLowerCase().includes(regio.toLowerCase()) || regio.toLowerCase().includes(r.region.toLowerCase()))
+  const [selectedRegionId, setSelectedRegionId] = useState(autoMatch?.region ?? '')
+  const region = regions.find(r => r.region === selectedRegionId)
 
   // Kosten koper state
   const [kkType, setKkType] = useState<'bestaand' | 'nieuwbouw'>(initialData?.kosten_koper.type === 'nieuwbouw' ? 'nieuwbouw' : propertyType === 'nieuwbouw' ? 'nieuwbouw' : 'bestaand')
@@ -183,12 +187,17 @@ export default function FinancialOverview({ price, regio, oppervlakte, type: pro
             {/* ─── KOSTEN KOPER ─── */}
             <div>
               <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Kosten koper</h4>
-              <div className="mb-3">
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <select value={selectedRegionId} onChange={e => setSelectedRegionId(e.target.value)} className={inp}>
+                  <option value="">Kies regio...</option>
+                  {regions.map(r => <option key={r.region} value={r.region}>{r.region}</option>)}
+                </select>
                 <select value={kkType} onChange={e => setKkType(e.target.value as 'bestaand' | 'nieuwbouw')} className={inp}>
                   <option value="bestaand">Bestaande bouw</option>
                   <option value="nieuwbouw">Nieuwbouw</option>
                 </select>
               </div>
+              {!region && <p className="text-xs text-amber-600 mb-2">Selecteer een regio om kosten te berekenen</p>}
               <div className="space-y-1.5 text-sm">
                 {kkType === 'bestaand' ? (
                   <CalcRow label={`ITP (${region?.itp_percentage ?? 10}%)`} value={itp} />

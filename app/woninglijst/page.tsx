@@ -284,12 +284,21 @@ export default function WoninglijstPage() {
         >
           <ArrowLeft size={15} /> Terug naar overzicht
         </button>
-        <button
-          onClick={() => setShowAddUrl(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#004B46] text-[#FFFAEF] text-sm font-medium rounded-xl hover:bg-[#0A6B63] transition-colors cursor-pointer"
-        >
-          <Link2 size={15} /> Woning toevoegen
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => setShowAddUrl(true)}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#004B46] text-[#FFFAEF] text-sm font-medium rounded-xl hover:bg-[#0A6B63] transition-colors cursor-pointer"
+          >
+            <Link2 size={15} /> Woning toevoegen
+          </button>
+          <button
+            onClick={downloadPdf}
+            disabled={pdfLoading || !detail?.shortlist_items?.length}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white text-[#004B46] border border-[#004B46] text-sm font-medium rounded-xl hover:bg-[#004B46]/5 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {pdfLoading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Download overzicht
+          </button>
+        </div>
       </div>
 
       {showAddUrl && (
@@ -332,20 +341,15 @@ export default function WoninglijstPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Filters + Download */}
-          <div className="flex items-center gap-3 mb-2">
-            {detail.shortlist_items.some(i => i.is_favorite) && (
+          {/* Favorieten filter */}
+          {detail.shortlist_items.some(i => i.is_favorite) && (
+            <div className="flex items-center gap-2 mb-2">
               <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                 <input type="checkbox" checked={showFavoritesOnly} onChange={e => setShowFavoritesOnly(e.target.checked)} className="rounded border-gray-300" />
                 Alleen favorieten
               </label>
-            )}
-            <button onClick={downloadPdf} disabled={pdfLoading}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-[#004B46] text-[#FFFAEF] text-xs font-medium rounded-lg hover:bg-[#0A6B63] transition-colors cursor-pointer disabled:opacity-50">
-              {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-              Download overzicht
-            </button>
-          </div>
+            </div>
+          )}
           {[...detail.shortlist_items]
             .sort((a, b) => (a.is_favorite === b.is_favorite ? 0 : a.is_favorite ? -1 : 1))
             .filter(item => !showFavoritesOnly || item.is_favorite)

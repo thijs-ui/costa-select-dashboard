@@ -61,6 +61,12 @@ export interface DossierData {
     investering: string
     advies: string
   }
+  financial_data?: {
+    kosten_koper?: { type: string; totaal: number }
+    renovatie?: { totaal: number }
+    hypotheek?: { hypotheekbedrag: number; maandlast: number; rente: number; looptijd: number; eigen_inbreng_pct: number }
+    totale_investering?: number
+  }
   generatedAt: string
 }
 
@@ -130,6 +136,8 @@ const s = StyleSheet.create({
   buurtLabel: { fontSize: 8, fontFamily: 'Raleway', fontWeight: 600, color: '#1E40AF', letterSpacing: 3, marginBottom: 8 },
   buurtText: { fontSize: 10, fontFamily: 'Raleway', fontWeight: 400, color: GRAY, lineHeight: 1.7 },
 })
+
+function fmtEuro(n: number) { return `\u20AC ${Math.round(n).toLocaleString('nl-NL')}` }
 
 function SectionBlock({ label, title }: { label: string; title: string }) {
   return (
@@ -368,6 +376,28 @@ export function DossierPDF({ data, logoSrc }: { data: DossierData; logoSrc?: str
               <Text style={s.adviesLabel}>Costa Select advies</Text>
               <Text style={s.adviesText}>{advies}</Text>
             </View>
+
+            {/* Financieel overzicht */}
+            {data.financial_data?.totale_investering && (
+              <View style={{ marginTop: 20, backgroundColor: WHITE, borderRadius: 10, padding: 20, border: '1px solid rgba(0,75,70,0.08)' }} wrap={false}>
+                <Text style={[s.sectionLabel, { marginBottom: 12 }]}>Financieel overzicht</Text>
+                <View style={{ flexDirection: 'row', gap: 24 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.body}>Aankoopprijs: {fmtEuro(property.vraagprijs)}</Text>
+                    {data.financial_data.kosten_koper && <Text style={s.body}>Kosten koper: {fmtEuro(data.financial_data.kosten_koper.totaal)}</Text>}
+                    {data.financial_data.renovatie && data.financial_data.renovatie.totaal > 0 && <Text style={s.body}>Renovatie: {fmtEuro(data.financial_data.renovatie.totaal)}</Text>}
+                    <Text style={[s.body, { fontWeight: 700, color: DEEPSEA, marginTop: 4 }]}>Totale investering: {fmtEuro(data.financial_data.totale_investering)}</Text>
+                  </View>
+                  {data.financial_data.hypotheek && (
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.body}>Hypotheek: {fmtEuro(data.financial_data.hypotheek.hypotheekbedrag)}</Text>
+                      <Text style={s.body}>Rente: {data.financial_data.hypotheek.rente}% / {data.financial_data.hypotheek.looptijd} jaar</Text>
+                      <Text style={[s.body, { fontWeight: 700, color: DEEPSEA, marginTop: 4 }]}>Maandlast: {fmtEuro(data.financial_data.hypotheek.maandlast)}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
         </Page>
       )}
