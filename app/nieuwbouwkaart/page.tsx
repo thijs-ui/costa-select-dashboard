@@ -3,7 +3,8 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { PageLayout } from '@/components/page-layout'
 import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api'
-import { Search, X, ExternalLink, Bed, Bath, Maximize2, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
+import { Search, X, ExternalLink, Bed, Bath, Maximize2, ChevronDown, ChevronUp, MapPin, FileText, Eye, Megaphone, Loader2, Check } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface Listing {
   id: string
@@ -114,6 +115,41 @@ export default function NieuwbouwkaartPage() {
   const [selected, setSelected] = useState<FullListing | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showTable, setShowTable] = useState(false)
+
+  const router = useRouter()
+
+  // Dossier modal
+  const [showDossierModal, setShowDossierModal] = useState(false)
+  const [dossierMode, setDossierMode] = useState<'presentatie' | 'pitch' | ''>('')
+  const [dossierGenerating, setDossierGenerating] = useState(false)
+  const [dossierResult, setDossierResult] = useState<{ id: string } | null>(null)
+  const [dossierError, setDossierError] = useState('')
+
+  async function generateDossier() {
+    if (!selected || !dossierMode) return
+    setDossierGenerating(true)
+    setDossierError('')
+    try {
+      const res = await fetch('/api/dossier/generate-from-newbuild', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listing_id: selected.id, mode: dossierMode }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Mislukt') }
+      const data = await res.json()
+      setDossierResult({ id: data.id })
+    } catch (err) {
+      setDossierError(err instanceof Error ? err.message : 'Dossier genereren mislukt')
+    }
+    setDossierGenerating(false)
+  }
+
+  function closeDossierModal() {
+    setShowDossierModal(false)
+    setDossierMode('')
+    setDossierResult(null)
+    setDossierError('')
+  }
 
   // Admin: amenities
   const [fetchingAmenities, setFetchingAmenities] = useState(false)
@@ -398,9 +434,75 @@ export default function NieuwbouwkaartPage() {
             <div className="px-6 py-4 border-t border-slate-100 flex items-center gap-2">
               {selected.url && (
                 <a href={selected.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-[#004B46] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#0A6B63]">
+                  className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50">
                   <ExternalLink size={13} /> Bekijk listing
                 </a>
+              )}
+              <button onClick={() => setShowDossierModal(true)}
+                className="flex items-center gap-1.5 bg-[#004B46] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
+                <FileText size={13} /> Genereer dossier
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+      {/* Dossier modal */}
+      {showDossierModal && selected && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={closeDossierModal} />
+          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+              {dossierResult ? (
+                /* Succes */
+                <div className="text-center py-4">
+                  <Check size={40} className="mx-auto mb-3 text-emerald-500" />
+                  <h3 className="text-lg font-bold text-[#004B46] mb-1">Dossier aangemaakt!</h3>
+                  <p className="text-sm text-slate-500 mb-6">{selected.title}</p>
+                  <div className="flex justify-center gap-3">
+                    <button onClick={() => router.push(`/dossier`)}
+                      className="bg-[#004B46] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
+                      Bekijk dossier
+                    </button>
+                    <button onClick={closeDossierModal}
+                      className="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
+                      Blijf op kaart
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Keuze */
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Dossier genereren</h3>
+                    <button onClick={closeDossierModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">{selected.title}</p>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <button onClick={() => setDossierMode('presentatie')}
+                      className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'presentatie' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Eye size={18} className={dossierMode === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-sm font-semibold mt-1">Presenteren</div>
+                      <div className="text-[10px] text-gray-500">Feitelijk + units</div>
+                    </button>
+                    <button onClick={() => setDossierMode('pitch')}
+                      className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'pitch' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Megaphone size={18} className={dossierMode === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-sm font-semibold mt-1">Pitchen</div>
+                      <div className="text-[10px] text-gray-500">Met AI-analyse + units</div>
+                    </button>
+                  </div>
+
+                  {dossierError && <p className="text-xs text-red-500 mb-3">{dossierError}</p>}
+
+                  <div className="flex justify-end gap-2">
+                    <button onClick={closeDossierModal} className="text-sm text-slate-500 hover:text-slate-700 px-3 py-2 cursor-pointer">Annuleren</button>
+                    <button onClick={generateDossier} disabled={!dossierMode || dossierGenerating}
+                      className="bg-[#004B46] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#0A6B63] disabled:opacity-50 cursor-pointer flex items-center gap-2">
+                      {dossierGenerating ? <><Loader2 size={14} className="animate-spin" /> Genereren...</> : 'Genereer'}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>

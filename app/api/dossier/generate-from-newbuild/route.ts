@@ -1,0 +1,143 @@
+import { NextResponse } from 'next/server'
+import Anthropic from '@anthropic-ai/sdk'
+import { createServiceClient } from '@/lib/supabase'
+import { createBotsClient } from '@/lib/supabase-bots'
+
+export const maxDuration = 120
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const PITCH_SYSTEM = `Je bent een ervaren vastgoedconsultant van Costa Select, een Nederlandse aankoopmakelaardij in Spanje. Analyseer dit nieuwbouwproject voor klanten die een tweede huis of investering zoeken.
+
+Schrijfstijl: helder, direct, geen overdrijving. Eerlijk over nadelen. Schrijf in jij-vorm richting de koper. Schrijf in het Nederlands.`
+
+export async function POST(request: Request) {
+  const { listing_id, mode, client_id } = await request.json()
+
+  if (!listing_id) return NextResponse.json({ error: 'listing_id verplicht' }, { status: 400 })
+
+  const bots = createBotsClient()
+  const dashboard = createServiceClient()
+
+  // 1. Haal listing + units op uit Bots Supabase
+  const [listingRes, unitsRes] = await Promise.all([
+    bots.from('listings').select('*').eq('id', listing_id).single(),
+    bots.from('units').select('*').eq('listing_id', listing_id).order('price', { ascending: true }),
+  ])
+
+  if (listingRes.error || !listingRes.data) {
+    return NextResponse.json({ error: 'Project niet gevonden' }, { status: 404 })
+  }
+
+  const listing = listingRes.data
+  const units = unitsRes.data ?? []
+
+  // 2. Map naar dossier_data format
+  const propertyData = {
+    adres: listing.title || listing.address || 'Onbekend',
+    regio: listing.province || '',
+    type: listing.property_type || 'nieuwbouw',
+    vraagprijs: listing.price || 0,
+    oppervlakte: listing.size_m2 || 0,
+    slaapkamers: listing.rooms || 0,
+    badkamers: listing.bathrooms || 0,
+    omschrijving: listing.description || '',
+    fotos: listing.images ? (Array.isArray(listing.images) ? listing.images.map((img: { url?: string } | string) => typeof img === 'string' ? img : img.url).filter(Boolean) : []) : (listing.main_image_url ? [listing.main_image_url] : []),
+    url: listing.url || '',
+    kenmerken: {
+      zwembad: listing.has_swimming_pool,
+      terras: listing.has_terrace,
+      parking: listing.has_parking,
+      tuin: listing.has_garden,
+      airco: listing.has_air_conditioning,
+      lift: listing.has_lift,
+    },
+    ontwikkelaar: listing.agency_name || '',
+    gemeente: listing.municipality || '',
+    nearby_amenities: listing.nearby_amenities || null,
+  }
+
+  // Units data snapshot
+  const unitsData = units.map((u: Record<string, unknown>) => ({
+    typology: u.typology || u.sub_typology || 'Onbekend',
+    rooms: u.rooms,
+    size_m2: u.size_m2,
+    price: u.price,
+    floor: u.floor,
+    is_exterior: u.is_exterior,
+    has_terrace: u.has_terrace,
+  }))
+
+  // 3. Pitch mode: genereer AI analyse
+  let analyse = null
+  let pitchContent = null
+
+  if (mode === 'pitch') {
+    try {
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: PITCH_SYSTEM,
+        messages: [{
+          role: 'user',
+          content: `Analyseer dit nieuwbouwproject:\n\n${JSON.stringify(propertyData, null, 2)}\n\nBeschikbare units (${units.length}):\n${JSON.stringify(unitsData.slice(0, 20), null, 2)}\n\nGenereer als JSON:\n{\n  "samenvatting": "2-3 zinnen",\n  "prijsanalyse": "2-3 zinnen over prijsniveau en waarde",\n  "voordelen": ["punt 1", "punt 2", "punt 3"],\n  "nadelen": ["punt 1", "punt 2"],\n  "buurtcontext": "150-250 woorden buurtanalyse",\n  "investering": "investeringspotentieel met concrete unit-prijzen",\n  "advies": "1 alinea Costa Select advies",\n  "juridische_risicos": ["risico 1"],\n  "verhuurpotentieel": "kort oordeel"\n}\n\nGeef ALLEEN de JSON terug.`,
+        }],
+      })
+
+      const text = message.content[0].type === 'text' ? message.content[0].text : ''
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        analyse = {
+          samenvatting: parsed.samenvatting || '',
+          prijsanalyse: parsed.prijsanalyse || '',
+          sterke_punten: parsed.voordelen || [],
+          aandachtspunten: parsed.nadelen || [],
+          juridische_risicos: parsed.juridische_risicos || [],
+          verhuurpotentieel: parsed.verhuurpotentieel || '',
+          advies_consultant: parsed.advies || '',
+        }
+        pitchContent = {
+          voordelen: parsed.voordelen || [],
+          nadelen: parsed.nadelen || [],
+          buurtcontext: parsed.buurtcontext || '',
+          investering: parsed.investering || '',
+          advies: parsed.advies || '',
+        }
+      }
+    } catch (err) {
+      console.error('Pitch generation failed:', err)
+    }
+  }
+
+  const dossierResult = {
+    property: propertyData,
+    regioInfo: '',
+    brochure_type: mode || 'presentatie',
+    ...(analyse ? { analyse } : {}),
+    ...(pitchContent ? { pitch_content: pitchContent } : {}),
+    generatedAt: new Date().toISOString(),
+  }
+
+  // 4. Sla op in Dashboard Supabase
+  const { data: dossier, error } = await dashboard.from('dossier_history').insert({
+    adres: propertyData.adres,
+    regio: propertyData.regio,
+    type: propertyData.type,
+    vraagprijs: propertyData.vraagprijs,
+    url: propertyData.url,
+    dossier_data: dossierResult,
+    brochure_type: mode || 'presentatie',
+    source: 'idealista_newbuild',
+    bots_listing_id: listing_id,
+    units_data: unitsData,
+    ...(pitchContent ? { pitch_content: pitchContent, pitch_generated_at: new Date().toISOString() } : {}),
+  }).select('id').single()
+
+  if (error) {
+    console.error('Save dossier failed:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ id: dossier.id, dossier_data: dossierResult, units_data: unitsData })
+}
