@@ -33,6 +33,8 @@ interface FullListing extends Listing {
   has_terrace: boolean
   has_parking: boolean
   units: Unit[]
+  nearby_amenities: Record<string, { distance_km: number; distance_min: number } | null> | null
+  amenities_fetched_at: string | null
 }
 
 interface Unit {
@@ -362,6 +364,8 @@ export default function NieuwbouwkaartPage() {
                     <p className="text-sm text-slate-600 leading-relaxed">{selected.description.substring(0, 500)}{selected.description.length > 500 ? '...' : ''}</p>
                   </div>
                 )}
+                {/* Omgeving */}
+                <AmenitiesSection amenities={selected.nearby_amenities} fetched={!!selected.amenities_fetched_at} />
               </div>
             </div>
 
@@ -382,4 +386,60 @@ export default function NieuwbouwkaartPage() {
 
 function Tag({ label }: { label: string }) {
   return <span className="text-[10px] bg-[#004B46]/10 text-[#004B46] px-2 py-0.5 rounded-full font-medium">{label}</span>
+}
+
+const AMENITY_ICONS: Record<string, string> = {
+  strand: '🏖️', supermarkt: '🛒', restaurant: '🍽️', bar: '🍺',
+  luchthaven: '✈️', treinstation: '🚆', ziekenhuis: '🏥',
+  school: '🏫', apotheek: '💊', golfbaan: '⛳',
+}
+
+const AMENITY_LABELS: Record<string, string> = {
+  strand: 'Strand', supermarkt: 'Supermarkt', restaurant: 'Restaurant', bar: 'Bar / café',
+  luchthaven: 'Luchthaven', treinstation: 'Treinstation', ziekenhuis: 'Ziekenhuis',
+  school: 'School', apotheek: 'Apotheek', golfbaan: 'Golfbaan',
+}
+
+function distanceColor(km: number) {
+  if (km < 1) return 'text-emerald-600'
+  if (km < 5) return 'text-slate-700'
+  if (km < 20) return 'text-slate-500'
+  return 'text-slate-400'
+}
+
+function AmenitiesSection({ amenities, fetched }: { amenities: Record<string, { distance_km: number; distance_min: number } | null> | null; fetched: boolean }) {
+  if (!fetched) {
+    return (
+      <div>
+        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">📍 Omgeving</div>
+        <p className="text-xs text-slate-400 italic">Omgevingsdata wordt binnenkort toegevoegd</p>
+      </div>
+    )
+  }
+
+  if (!amenities) return null
+
+  const entries = Object.entries(amenities)
+    .filter(([, v]) => v !== null)
+    .sort(([, a], [, b]) => (a!.distance_km) - (b!.distance_km))
+
+  if (entries.length === 0) return null
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">📍 Omgeving</div>
+      <div className="space-y-1">
+        {entries.map(([key, val]) => (
+          <div key={key} className="flex items-center justify-between py-0.5">
+            <span className="text-xs text-slate-600">
+              {AMENITY_ICONS[key] || '📍'} {AMENITY_LABELS[key] || key}
+            </span>
+            <span className={`text-xs tabular-nums font-medium ${distanceColor(val!.distance_km)}`}>
+              {val!.distance_km} km{val!.distance_km < 100 ? ` · ${val!.distance_min} min` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
