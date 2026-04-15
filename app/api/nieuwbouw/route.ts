@@ -1,10 +1,10 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase'
+import { createBotsClient } from '@/lib/supabase-bots'
 
-// GET: lichte data voor kaart + tabel
+// GET: data uit het Bots Supabase project
 export async function GET(request: Request) {
-  const supabase = createServiceClient()
+  const supabase = createBotsClient()
   const { searchParams } = new URL(request.url)
   const full = searchParams.get('id')
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json(data)
   }
 
-  // Lichte data voor kaart
+  // Lichte data voor kaart — projecten met coördinaten
   const { data, error } = await supabase
     .from('listings')
     .select('id, title, latitude, longitude, price, status, property_type, municipality, province, rooms, bathrooms, size_m2, is_new_development, main_image_url, is_active')
