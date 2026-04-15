@@ -309,6 +309,7 @@ export default function DossierPage() {
         ...dossier,
         ...(editAnalyse ? { analyse: editAnalyse } : {}),
         ...(editPitch ? { pitch_content: editPitch } : {}),
+        ...(unitsData.length > 0 ? { units_data: unitsData } : {}),
       }
       const res = await fetch('/api/dossier/pdf', {
         method: 'POST',
