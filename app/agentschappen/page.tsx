@@ -8,7 +8,7 @@ import {
   Building2, Pencil, Check,
 } from 'lucide-react'
 
-const REGIOS = ['Costa Brava', 'Costa Dorada', 'Valencia', 'Costa Blanca Noord', 'Costa del Sol']
+const REGIOS = ['Costa Brava', 'Costa Dorada', 'Valencia', 'Costa Blanca Noord', 'Costa Blanca Zuid', 'Alicante', 'Costa del Sol']
 const PROPERTY_TYPES = ['Appartement', "Villa", 'Penthouse', 'Townhouse', 'Nieuwbouw', 'Commercieel', 'Grond/kavel']
 
 interface Agency {
@@ -156,8 +156,11 @@ export default function AgentschappenPage() {
         <select value={filterScore} onChange={e => setFilterScore(Number(e.target.value))}
           className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#004B46]">
           <option value={0}>Alle scores</option>
-          <option value={4}>4+ sterren</option>
+          <option value={1}>1+ ster</option>
+          <option value={2}>2+ sterren</option>
           <option value={3}>3+ sterren</option>
+          <option value={4}>4+ sterren</option>
+          <option value={5}>5 sterren</option>
         </select>
         <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer">
           <input type="checkbox" checked={filterActive} onChange={e => setFilterActive(e.target.checked)} className="rounded border-gray-300" />
