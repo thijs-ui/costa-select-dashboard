@@ -194,9 +194,11 @@ export default function DossierPage() {
       const res = await fetch(`/api/dossier/history/${id}`)
       if (!res.ok) throw new Error('Kon dossier niet ophalen')
       const responseData = await res.json()
-      const dossier_data = responseData.dossier_data
-      // Voeg units_data toe aan dossier_data voor de PDF
+      const dossier_data = { ...responseData.dossier_data }
+      // Voeg units_data toe voor de PDF
       if (responseData.units_data) dossier_data.units_data = responseData.units_data
+      // Limiteer foto's tot 8 voor PDF performance (voorkomt timeout)
+      if (dossier_data.property?.fotos?.length > 8) dossier_data.property.fotos = dossier_data.property.fotos.slice(0, 8)
 
       const pdfRes = await fetch('/api/dossier/pdf', {
         method: 'POST',
@@ -225,10 +227,13 @@ export default function DossierPage() {
       if (!res.ok) return
       const data = await res.json()
       if (data.dossier_data) {
-        setDossier(data.dossier_data)
+        const units = data.units_data ?? []
+        // Merge units_data in dossier zodat het ook in de PDF terechtkomt
+        const dossierWithUnits = { ...data.dossier_data, units_data: units }
+        setDossier(dossierWithUnits)
         if (data.dossier_data.analyse) setEditAnalyse({ ...data.dossier_data.analyse })
         if (data.dossier_data.pitch_content) setEditPitch({ ...data.dossier_data.pitch_content })
-        setUnitsData(data.units_data ?? [])
+        setUnitsData(units)
         setTab('generate')
       }
     } catch { /* ignore */ }
@@ -310,6 +315,11 @@ export default function DossierPage() {
         ...(editAnalyse ? { analyse: editAnalyse } : {}),
         ...(editPitch ? { pitch_content: editPitch } : {}),
         ...(unitsData.length > 0 ? { units_data: unitsData } : {}),
+        property: {
+          ...dossier.property,
+          // Limiteer foto's tot 8 voor PDF performance
+          fotos: (dossier.property.fotos || []).slice(0, 8),
+        },
       }
       const res = await fetch('/api/dossier/pdf', {
         method: 'POST',
