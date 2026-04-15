@@ -1,3 +1,4 @@
+import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'

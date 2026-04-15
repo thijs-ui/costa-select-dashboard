@@ -1,22 +1,19 @@
 import { createServiceClient } from '@/lib/supabase'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 
-async function getAuthUser() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll() { return cookieStore.getAll() } } }
-  )
-  const { data: { user } } = await supabase.auth.getUser()
+async function requireAdmin() {
+  const user = await getServerUser()
+  if (!user) return null
+  const service = createServiceClient()
+  const { data } = await service.from('user_roles').select('role').eq('user_id', user.id).single()
+  if (data?.role !== 'admin') return null
   return user
 }
 
 // GET: lijst alle gebruikers met hun rollen en namen
 export async function GET() {
-  const user = await getAuthUser()
+  const user = await getServerUser()
   if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
 
   const service = createServiceClient()
@@ -46,10 +43,10 @@ export async function GET() {
   return NextResponse.json({ users })
 }
 
-// POST: nieuwe gebruiker uitnodigen
+// POST: nieuwe gebruiker uitnodigen (admin-only)
 export async function POST(request: Request) {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const user = await requireAdmin()
+  if (!user) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
 
   const { email, naam, role } = await request.json()
   if (!email) return NextResponse.json({ error: 'Email is verplicht' }, { status: 400 })
@@ -78,10 +75,10 @@ export async function POST(request: Request) {
   return NextResponse.json({ success: true, user_id: newUser.user?.id })
 }
 
-// PUT: gebruiker bijwerken (naam, rol)
+// PUT: gebruiker bijwerken (admin-only)
 export async function PUT(request: Request) {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const user = await requireAdmin()
+  if (!user) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
 
   const { user_id, naam, role } = await request.json()
   if (!user_id) return NextResponse.json({ error: 'user_id is verplicht' }, { status: 400 })
@@ -112,10 +109,10 @@ export async function PUT(request: Request) {
   return NextResponse.json({ success: true })
 }
 
-// DELETE: gebruiker verwijderen
+// DELETE: gebruiker verwijderen (admin-only)
 export async function DELETE(request: Request) {
-  const user = await getAuthUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const user = await requireAdmin()
+  if (!user) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
 
   const { user_id } = await request.json()
   if (!user_id) return NextResponse.json({ error: 'user_id is verplicht' }, { status: 400 })

@@ -1,3 +1,4 @@
+import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 120

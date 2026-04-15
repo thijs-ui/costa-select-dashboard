@@ -1,3 +1,4 @@
+import { getServerUser } from '@/lib/server-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import JSZip from 'jszip'
