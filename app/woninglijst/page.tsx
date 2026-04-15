@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { PageLayout } from '@/components/page-layout'
 import {
   Users, Plus, ArrowLeft, Trash2, ExternalLink, Loader2,
-  Bed, Bath, Maximize2, PenLine, Link2, X, Star,
+  Bed, Bath, Maximize2, PenLine, Link2, X, Star, Download,
 } from 'lucide-react'
 
 interface ShortlistSummary {
@@ -66,6 +66,29 @@ export default function WoninglijstPage() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteText, setEditingNoteText] = useState('')
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  async function downloadPdf() {
+    if (!detail) return
+    setPdfLoading(true)
+    try {
+      const items = showFavoritesOnly ? detail.shortlist_items.filter(i => i.is_favorite) : detail.shortlist_items
+      const res = await fetch('/api/woninglijst/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ klant_naam: detail.klant_naam, items }),
+      })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `woningoverzicht-${detail.klant_naam.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* ignore */ }
+    setPdfLoading(false)
+  }
 
   async function toggleFavorite(itemId: string, current: boolean) {
     if (!detail || !selectedId) return
@@ -309,15 +332,20 @@ export default function WoninglijstPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Favorieten filter */}
-          {detail.shortlist_items.some(i => i.is_favorite) && (
-            <div className="flex items-center gap-2 mb-2">
+          {/* Filters + Download */}
+          <div className="flex items-center gap-3 mb-2">
+            {detail.shortlist_items.some(i => i.is_favorite) && (
               <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                 <input type="checkbox" checked={showFavoritesOnly} onChange={e => setShowFavoritesOnly(e.target.checked)} className="rounded border-gray-300" />
                 Alleen favorieten
               </label>
-            </div>
-          )}
+            )}
+            <button onClick={downloadPdf} disabled={pdfLoading}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-[#004B46] text-[#FFFAEF] text-xs font-medium rounded-lg hover:bg-[#0A6B63] transition-colors cursor-pointer disabled:opacity-50">
+              {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              Download overzicht
+            </button>
+          </div>
           {[...detail.shortlist_items]
             .sort((a, b) => (a.is_favorite === b.is_favorite ? 0 : a.is_favorite ? -1 : 1))
             .filter(item => !showFavoritesOnly || item.is_favorite)

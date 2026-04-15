@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PageLayout } from '@/components/page-layout'
+import FinancialOverview from '@/components/dossier/FinancialOverview'
+import { supabase } from '@/lib/supabase'
 import {
   FileText, Link2, PenLine, Loader2, Download, Check,
   AlertTriangle, ChevronDown, Plus, X, Clock, ExternalLink, Pencil,
@@ -80,6 +82,34 @@ export default function DossierPage() {
   const [editPitch, setEditPitch] = useState<PitchContent | null>(null)
   const [error, setError] = useState('')
   const [regenerating, setRegenerating] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [regions, setRegions] = useState<any[]>([])
+  const [renoDefaults, setRenoDefaults] = useState({ cosmetic: 300, partial: 600, full: 1000, luxury: 1500, contingency: 15, architect: 3000, terrace: 150, garden: 80, pool: 400 })
+  const [internalNotes, setInternalNotes] = useState('')
+  const [lastSavedDossierId, setLastSavedDossierId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadRegions() {
+      const res = await fetch('/api/regional-settings')
+      if (res.ok) setRegions(await res.json())
+      const { data } = await supabase.from('settings').select('key, value').in('key', [
+        'renovation_cosmetic_per_m2', 'renovation_partial_per_m2', 'renovation_full_per_m2',
+        'renovation_luxury_per_m2', 'renovation_contingency_pct', 'renovation_architect_fee',
+        'renovation_terrace_per_m2', 'renovation_garden_per_m2', 'renovation_pool_per_m2',
+      ])
+      if (data) {
+        const m: Record<string, number> = {}
+        for (const r of data as { key: string; value: number }[]) m[r.key] = Number(r.value)
+        setRenoDefaults({
+          cosmetic: m.renovation_cosmetic_per_m2 || 300, partial: m.renovation_partial_per_m2 || 600,
+          full: m.renovation_full_per_m2 || 1000, luxury: m.renovation_luxury_per_m2 || 1500,
+          contingency: m.renovation_contingency_pct || 15, architect: m.renovation_architect_fee || 3000,
+          terrace: m.renovation_terrace_per_m2 || 150, garden: m.renovation_garden_per_m2 || 80, pool: m.renovation_pool_per_m2 || 400,
+        })
+      }
+    }
+    loadRegions()
+  }, [])
 
   async function regenerateSection(section: string) {
     if (!dossier) return
@@ -775,6 +805,35 @@ export default function DossierPage() {
               <AlertTriangle size={16} /> {error}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Notitieveld */}
+      {dossier && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-6">
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Interne notities</label>
+          <textarea
+            value={internalNotes}
+            onChange={e => setInternalNotes(e.target.value)}
+            placeholder="Notities over deze woning (alleen zichtbaar voor consultants)..."
+            rows={3}
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-none"
+          />
+        </div>
+      )}
+
+      {/* Financieel overzicht */}
+      {dossier && regions.length > 0 && (
+        <div className="mt-6">
+          <FinancialOverview
+            price={dossier.property.vraagprijs || 0}
+            regio={dossier.property.regio || ''}
+            oppervlakte={dossier.property.oppervlakte || 0}
+            type={dossier.property.type || 'woning'}
+            regions={regions}
+            renovationDefaults={renoDefaults}
+            onSave={() => {}}
+          />
         </div>
       )}
       </>}
