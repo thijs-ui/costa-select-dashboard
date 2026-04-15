@@ -33,23 +33,24 @@ export async function POST(request: Request) {
   const data: DossierData = await request.json()
   const logoSrc = getLogoBase64()
 
-  // Converteer externe foto-URLs naar base64 data URIs
+  // Converteer alleen Idealista CDN URLs naar base64 (die worden server-side geblokkeerd)
+  // Costa Select en andere URLs laten we met rust — die werken al
   if (data.property.fotos?.length > 0) {
     const maxPhotos = Math.min(data.property.fotos.length, 6)
-    const photosToConvert = data.property.fotos.slice(0, maxPhotos)
-    const base64Photos: string[] = []
+    const convertedPhotos: string[] = []
 
-    for (const url of photosToConvert) {
-      // Skip als het al een data URI is
+    for (const url of data.property.fotos.slice(0, maxPhotos)) {
       if (url.startsWith('data:')) {
-        base64Photos.push(url)
-        continue
+        convertedPhotos.push(url)
+      } else if (url.includes('idealista.com')) {
+        const base64 = await fetchImageAsBase64(url)
+        if (base64) convertedPhotos.push(base64)
+      } else {
+        convertedPhotos.push(url)
       }
-      const base64 = await fetchImageAsBase64(url)
-      if (base64) base64Photos.push(base64)
     }
 
-    data.property.fotos = base64Photos
+    data.property.fotos = convertedPhotos
   }
 
   try {
