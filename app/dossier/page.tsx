@@ -216,6 +216,21 @@ export default function DossierPage() {
     }
   }
 
+  async function handleViewDossier(id: string) {
+    try {
+      const res = await fetch(`/api/dossier/history/${id}`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.dossier_data) {
+        setDossier(data.dossier_data)
+        if (data.dossier_data.analyse) setEditAnalyse({ ...data.dossier_data.analyse })
+        if (data.dossier_data.pitch_content) setEditPitch({ ...data.dossier_data.pitch_content })
+        setUnitsData(data.units_data ?? [])
+        setTab('generate')
+      }
+    } catch { /* ignore */ }
+  }
+
   // URL mode
   const [url, setUrl] = useState('')
 
@@ -404,6 +419,12 @@ export default function DossierPage() {
                         <ExternalLink size={15} />
                       </a>
                     )}
+                    <button
+                      onClick={() => handleViewDossier(item.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <Eye size={12} /> Bekijk
+                    </button>
                     <button
                       onClick={() => handleHistoryDownload(item.id)}
                       disabled={historyPdfLoading === item.id}
