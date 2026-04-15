@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { PageLayout } from '@/components/page-layout'
 import {
   Users, Plus, ArrowLeft, Trash2, ExternalLink, Loader2,
-  Bed, Bath, Maximize2, PenLine, Link2, X,
+  Bed, Bath, Maximize2, PenLine, Link2, X, Star,
 } from 'lucide-react'
 
 interface ShortlistSummary {
@@ -28,6 +28,7 @@ interface ShortlistItem {
   thumbnail: string | null
   source: string
   notities: string
+  is_favorite: boolean
   created_at: string
 }
 
@@ -64,6 +65,23 @@ export default function WoninglijstPage() {
   // Edit note
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteText, setEditingNoteText] = useState('')
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+
+  async function toggleFavorite(itemId: string, current: boolean) {
+    if (!detail || !selectedId) return
+    // Optimistic update
+    setDetail(prev => prev ? {
+      ...prev,
+      shortlist_items: prev.shortlist_items.map(item =>
+        item.id === itemId ? { ...item, is_favorite: !current } : item
+      ),
+    } : null)
+    await fetch(`/api/woninglijst/${selectedId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, is_favorite: !current }),
+    })
+  }
 
   const fetchShortlists = useCallback(async () => {
     try {
@@ -291,7 +309,19 @@ export default function WoninglijstPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {detail.shortlist_items.map(item => (
+          {/* Favorieten filter */}
+          {detail.shortlist_items.some(i => i.is_favorite) && (
+            <div className="flex items-center gap-2 mb-2">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <input type="checkbox" checked={showFavoritesOnly} onChange={e => setShowFavoritesOnly(e.target.checked)} className="rounded border-gray-300" />
+                Alleen favorieten
+              </label>
+            </div>
+          )}
+          {[...detail.shortlist_items]
+            .sort((a, b) => (a.is_favorite === b.is_favorite ? 0 : a.is_favorite ? -1 : 1))
+            .filter(item => !showFavoritesOnly || item.is_favorite)
+            .map(item => (
             <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex group">
               {item.thumbnail && (
                 <div className="w-32 h-24 shrink-0">
@@ -304,13 +334,25 @@ export default function WoninglijstPage() {
                     <p className="text-sm font-medium text-[#004B46] truncate">{item.title || item.url}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
                       {item.location && <span>{item.location}</span>}
-                      {item.price && <span className="text-[#0EAE96] font-medium">{formatPrice(item.price)}</span>}
+                      {item.price && (
+                        <>
+                          <span className="text-[#0EAE96] font-medium">{formatPrice(item.price)}</span>
+                          <span className="text-gray-300">·</span>
+                          <span className="text-gray-400">k.k. ~{Math.round(item.price * 0.1).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
+                        </>
+                      )}
                       {item.bedrooms && <span className="flex items-center gap-0.5"><Bed size={10} /> {item.bedrooms}</span>}
                       {item.bathrooms && <span className="flex items-center gap-0.5"><Bath size={10} /> {item.bathrooms}</span>}
                       {item.size_m2 && <span className="flex items-center gap-0.5"><Maximize2 size={10} /> {item.size_m2}m2</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => toggleFavorite(item.id, item.is_favorite)}
+                      className={`p-1 cursor-pointer transition-colors ${item.is_favorite ? 'text-[#F5AF40]' : 'text-gray-300 hover:text-[#F5AF40]'}`}
+                    >
+                      <Star size={13} fill={item.is_favorite ? 'currentColor' : 'none'} />
+                    </button>
                     {item.url && (
                       <a href={item.url} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-300 hover:text-[#004B46]">
                         <ExternalLink size={13} />

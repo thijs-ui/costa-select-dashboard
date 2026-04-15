@@ -29,6 +29,18 @@ export async function PATCH(
   const body = await request.json()
   const supabase = createServiceClient()
 
+  // Toggle favorite
+  if (body.item_id && body.is_favorite !== undefined) {
+    const { error } = await supabase
+      .from('shortlist_items')
+      .update({ is_favorite: body.is_favorite })
+      .eq('id', body.item_id)
+      .eq('shortlist_id', id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
   // Update item note
   if (body.item_id && body.item_notities !== undefined) {
     const { error } = await supabase
