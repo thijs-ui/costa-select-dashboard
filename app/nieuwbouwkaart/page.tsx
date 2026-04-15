@@ -115,6 +115,19 @@ export default function NieuwbouwkaartPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showTable, setShowTable] = useState(false)
 
+  // Admin: amenities
+  const [fetchingAmenities, setFetchingAmenities] = useState(false)
+  const [amenitiesResult, setAmenitiesResult] = useState<{ processed: number; remaining: number } | null>(null)
+
+  async function fetchAmenities() {
+    setFetchingAmenities(true)
+    try {
+      const res = await fetch('/api/nieuwbouw/amenities', { method: 'POST' })
+      if (res.ok) setAmenitiesResult(await res.json())
+    } catch { /* ignore */ }
+    setFetchingAmenities(false)
+  }
+
   // Filters
   const [search, setSearch] = useState('')
   const [filterProvince, setFilterProvince] = useState('')
@@ -179,6 +192,19 @@ export default function NieuwbouwkaartPage() {
 
   return (
     <PageLayout title="Nieuwbouwkaart" subtitle={`${filtered.length}${hasFilters ? ` van ${listings.length}` : ''} projecten`}>
+      {/* Admin: amenities ophalen */}
+      <div className="flex items-center gap-3 mb-3">
+        <button onClick={fetchAmenities} disabled={fetchingAmenities}
+          className="text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer">
+          {fetchingAmenities ? 'Ophalen...' : '📍 Voorzieningen ophalen'}
+        </button>
+        {amenitiesResult && (
+          <span className="text-xs text-slate-500">
+            {amenitiesResult.processed} verwerkt{amenitiesResult.remaining > 0 ? ` · ${amenitiesResult.remaining} resterend` : ' · Klaar!'}
+          </span>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative flex-1 min-w-[180px]">
