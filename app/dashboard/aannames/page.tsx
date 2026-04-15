@@ -114,12 +114,19 @@ export default function AannamensPage() {
 
   useEffect(() => {
     async function load() {
-      const [settingsRes, makelaarsRes, catRes, postRes] = await Promise.all([
-        supabase.from('settings').select('key, value'),
-        supabase.from('makelaars').select('id, naam, actief, rol, area_manager_id').order('naam'),
-        supabase.from('kosten_categorieen').select('id, naam, volgorde, actief').order('volgorde'),
-        supabase.from('kosten_posten').select('id, categorie_id, naam, volgorde, actief').order('volgorde'),
-      ])
+      let settingsRes, makelaarsRes, catRes, postRes
+      try {
+        ;[settingsRes, makelaarsRes, catRes, postRes] = await Promise.all([
+          supabase.from('settings').select('key, value'),
+          supabase.from('makelaars').select('id, naam, actief, rol, area_manager_id').order('naam'),
+          supabase.from('kosten_categorieen').select('id, naam, volgorde, actief').order('volgorde'),
+          supabase.from('kosten_posten').select('id, categorie_id, naam, volgorde, actief').order('volgorde'),
+        ])
+      } catch (err) {
+        console.error('Aannames laden mislukt:', err)
+        setLoading(false)
+        return
+      }
 
       if (settingsRes.data && settingsRes.data.length > 0) {
         const map: Record<string, unknown> = {}
