@@ -24,6 +24,7 @@ import {
   CheckSquare,
   Route,
   Calculator,
+  Layers,
   LogOut,
   X,
   ChevronDown,
@@ -58,6 +59,7 @@ const dashboardItems = [
   { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
   { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
   { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
+  { href: '/projecten', label: 'Projecten', icon: Layers },
   { href: '/dashboard/todos', label: 'To-do', icon: CheckSquare },
 ]
 
