@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar from './sidebar'
 import { AuthProvider } from '@/lib/auth-context'
+import { ErrorBoundary } from './error-boundary'
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -30,7 +31,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <main className="ml-0 md:ml-56 min-h-screen bg-marble">
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
     </AuthProvider>
