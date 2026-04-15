@@ -162,90 +162,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <div className="space-y-4">
         {project.phases.map(phase => {
           const phaseTodos = project.todos.filter(t => t.phase_id === phase.id)
-          const phaseDone = phaseTodos.filter(t => t.status === 'afgerond').length
-          const phaseTotal = phaseTodos.length
-          const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0
-          const isComplete = phaseTotal > 0 && phaseDone === phaseTotal
-          const [expanded, setExpanded] = useState(!isComplete)
-
           return (
-            <div key={phase.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <button onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors cursor-pointer">
-                <div className="flex items-center gap-3">
-                  {expanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
-                  <span className={`text-sm font-semibold ${isComplete ? 'text-slate-400' : 'text-slate-700'}`}>{phase.name}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {isComplete ? (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Afgerond</span>
-                  ) : (
-                    <>
-                      <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${phasePct}%`, backgroundColor: project.color }} />
-                      </div>
-                      <span className="text-xs text-slate-500 tabular-nums">{phasePct}%</span>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              {expanded && (
-                <div className="px-5 pb-4 border-t border-slate-50">
-                  <div className="space-y-1 mt-3">
-                    {phaseTodos.map(todo => {
-                      const done = todo.status === 'afgerond'
-                      const overdue = todo.deadline && !done && new Date(todo.deadline) < new Date()
-                      return (
-                        <div key={todo.id} className="flex items-center gap-2 py-1.5 group">
-                          <button onClick={() => toggleTodo(todo)}
-                            className={`cursor-pointer shrink-0 ${done ? 'text-emerald-500' : 'text-slate-300 hover:text-slate-500'}`}>
-                            {done ? <CheckCircle2 size={16} strokeWidth={2} /> : <Circle size={16} strokeWidth={1.5} />}
-                          </button>
-                          <span className={`flex-1 text-sm ${done ? 'line-through text-slate-400' : 'text-slate-700'}`}>{todo.description}</span>
-                          {todo.is_week_focus && <Pin size={12} className="text-amber-500 shrink-0" />}
-                          {todo.deadline && (
-                            <span className={`text-[10px] shrink-0 ${overdue ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
-                              {new Date(todo.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
-                            </span>
-                          )}
-                          {getUserName(todo.assigned_to) && (
-                            <span className="text-[10px] text-slate-400 shrink-0">{getUserName(todo.assigned_to)}</span>
-                          )}
-                          <button onClick={() => toggleWeekFocus(todo)}
-                            className={`opacity-0 group-hover:opacity-100 cursor-pointer shrink-0 ${todo.is_week_focus ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`}
-                            title="Weekfocus toggle">
-                            <Pin size={12} />
-                          </button>
-                          <button onClick={() => deleteTodo(todo.id)}
-                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 cursor-pointer shrink-0">
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Nieuwe todo toevoegen */}
-                  {newTodoPhase === phase.id ? (
-                    <div className="flex gap-2 mt-3">
-                      <input autoFocus value={newTodoDesc} onChange={e => setNewTodoDesc(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') addTodo(phase.id); if (e.key === 'Escape') setNewTodoPhase('') }}
-                        placeholder="Nieuwe taak..." className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#004B46]" />
-                      <button onClick={() => addTodo(phase.id)}
-                        className="text-sm text-[#004B46] font-medium cursor-pointer">Toevoegen</button>
-                      <button onClick={() => setNewTodoPhase('')}
-                        className="text-sm text-slate-400 cursor-pointer">Annuleer</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setNewTodoPhase(phase.id)}
-                      className="flex items-center gap-1 text-sm text-slate-400 hover:text-[#004B46] mt-2 cursor-pointer">
-                      <Plus size={14} /> Taak toevoegen
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <PhaseCard
+              key={phase.id}
+              phase={phase}
+              todos={phaseTodos}
+              projectColor={project.color}
+              getUserName={getUserName}
+              onToggleTodo={toggleTodo}
+              onToggleWeekFocus={toggleWeekFocus}
+              onDeleteTodo={deleteTodo}
+              onAddTodo={addTodo}
+              newTodoPhase={newTodoPhase}
+              newTodoDesc={newTodoDesc}
+              setNewTodoPhase={setNewTodoPhase}
+              setNewTodoDesc={setNewTodoDesc}
+            />
           )
         })}
 
@@ -269,4 +201,93 @@ function getMonday() {
   const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   return new Date(d.setDate(diff)).toISOString().split('T')[0]
+}
+
+function PhaseCard({ phase, todos, projectColor, getUserName, onToggleTodo, onToggleWeekFocus, onDeleteTodo, onAddTodo, newTodoPhase, newTodoDesc, setNewTodoPhase, setNewTodoDesc }: {
+  phase: Phase; todos: Todo[]; projectColor: string
+  getUserName: (id: string | null) => string
+  onToggleTodo: (t: Todo) => void; onToggleWeekFocus: (t: Todo) => void; onDeleteTodo: (id: string) => void; onAddTodo: (phaseId: string) => void
+  newTodoPhase: string; newTodoDesc: string; setNewTodoPhase: (s: string) => void; setNewTodoDesc: (s: string) => void
+}) {
+  const phaseDone = todos.filter(t => t.status === 'afgerond').length
+  const phaseTotal = todos.length
+  const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0
+  const isComplete = phaseTotal > 0 && phaseDone === phaseTotal
+  const [expanded, setExpanded] = useState(!isComplete)
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors cursor-pointer">
+        <div className="flex items-center gap-3">
+          {expanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+          <span className={`text-sm font-semibold ${isComplete ? 'text-slate-400' : 'text-slate-700'}`}>{phase.name}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {isComplete ? (
+            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Afgerond</span>
+          ) : (
+            <>
+              <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${phasePct}%`, backgroundColor: projectColor }} />
+              </div>
+              <span className="text-xs text-slate-500 tabular-nums">{phasePct}%</span>
+            </>
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-4 border-t border-slate-50">
+          <div className="space-y-1 mt-3">
+            {todos.map(todo => {
+              const done = todo.status === 'afgerond'
+              const overdue = todo.deadline && !done && new Date(todo.deadline) < new Date()
+              return (
+                <div key={todo.id} className="flex items-center gap-2 py-1.5 group">
+                  <button onClick={() => onToggleTodo(todo)}
+                    className={`cursor-pointer shrink-0 ${done ? 'text-emerald-500' : 'text-slate-300 hover:text-slate-500'}`}>
+                    {done ? <CheckCircle2 size={16} strokeWidth={2} /> : <Circle size={16} strokeWidth={1.5} />}
+                  </button>
+                  <span className={`flex-1 text-sm ${done ? 'line-through text-slate-400' : 'text-slate-700'}`}>{todo.description}</span>
+                  {todo.is_week_focus && <Pin size={12} className="text-amber-500 shrink-0" />}
+                  {todo.deadline && (
+                    <span className={`text-[10px] shrink-0 ${overdue ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
+                      {new Date(todo.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                    </span>
+                  )}
+                  {getUserName(todo.assigned_to) && (
+                    <span className="text-[10px] text-slate-400 shrink-0">{getUserName(todo.assigned_to)}</span>
+                  )}
+                  <button onClick={() => onToggleWeekFocus(todo)}
+                    className={`opacity-0 group-hover:opacity-100 cursor-pointer shrink-0 ${todo.is_week_focus ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`}>
+                    <Pin size={12} />
+                  </button>
+                  <button onClick={() => onDeleteTodo(todo.id)}
+                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 cursor-pointer shrink-0">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          {newTodoPhase === phase.id ? (
+            <div className="flex gap-2 mt-3">
+              <input autoFocus value={newTodoDesc} onChange={e => setNewTodoDesc(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') onAddTodo(phase.id); if (e.key === 'Escape') setNewTodoPhase('') }}
+                placeholder="Nieuwe taak..." className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#004B46]" />
+              <button onClick={() => onAddTodo(phase.id)} className="text-sm text-[#004B46] font-medium cursor-pointer">Toevoegen</button>
+              <button onClick={() => setNewTodoPhase('')} className="text-sm text-slate-400 cursor-pointer">Annuleer</button>
+            </div>
+          ) : (
+            <button onClick={() => setNewTodoPhase(phase.id)}
+              className="flex items-center gap-1 text-sm text-slate-400 hover:text-[#004B46] mt-2 cursor-pointer">
+              <Plus size={14} /> Taak toevoegen
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
