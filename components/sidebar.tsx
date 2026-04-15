@@ -73,6 +73,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { role, loading: authLoading, signOut, user, naam } = useAuth()
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
+  const [marketingOpen, setMarketingOpen] = useState(pathname.startsWith('/marketing'))
   const [todoCount, setTodoCount] = useState(0)
 
   useEffect(() => {
@@ -166,6 +167,34 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {dashboardOpen && (
               <nav className="space-y-0.5">
                 {dashboardItems.map(renderNavItem)}
+              </nav>
+            )}
+          </>
+        )}
+
+        {/* Marketing section — admin only */}
+        {showDashboard && (
+          <>
+            <div className="px-4 pt-6 pb-1">
+              <button
+                onClick={() => setMarketingOpen(!marketingOpen)}
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+              >
+                <span>Marketing</span>
+                {marketingOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </button>
+            </div>
+            {marketingOpen && (
+              <nav className="space-y-0.5">
+                {[
+                  { href: '/marketing/social-media', label: 'Social Media', icon: MessageSquare },
+                  { href: '/marketing/advertenties', label: 'Advertenties', icon: Zap },
+                  { href: '/marketing/website-blog', label: 'Website & Blog', icon: FileText },
+                  { href: '/marketing/email', label: 'Email', icon: Receipt },
+                  { href: '/marketing/video', label: 'Video', icon: GraduationCap },
+                  { href: '/marketing/brochures', label: 'Brochures', icon: BookOpen },
+                  { href: '/marketing/bibliotheek', label: 'Bibliotheek', icon: ClipboardList },
+                ].map(renderNavItem)}
               </nav>
             )}
           </>
