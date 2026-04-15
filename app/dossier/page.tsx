@@ -193,7 +193,10 @@ export default function DossierPage() {
     try {
       const res = await fetch(`/api/dossier/history/${id}`)
       if (!res.ok) throw new Error('Kon dossier niet ophalen')
-      const { dossier_data } = await res.json()
+      const responseData = await res.json()
+      const dossier_data = responseData.dossier_data
+      // Voeg units_data toe aan dossier_data voor de PDF
+      if (responseData.units_data) dossier_data.units_data = responseData.units_data
 
       const pdfRes = await fetch('/api/dossier/pdf', {
         method: 'POST',

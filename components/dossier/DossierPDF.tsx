@@ -61,6 +61,12 @@ export interface DossierData {
     investering: string
     advies: string
   }
+  units_data?: Array<{
+    typology: string
+    rooms: number | null
+    size_m2: number | null
+    price: number | null
+  }>
   financial_data?: {
     kosten_koper?: { type: string; totaal: number }
     renovatie?: { totaal: number }
@@ -399,6 +405,39 @@ export function DossierPDF({ data, logoSrc }: { data: DossierData; logoSrc?: str
               </View>
             )}
           </View>
+        </Page>
+      )}
+
+      {/* ─── UNITS PAGE (nieuwbouw) ──────────────────────────── */}
+      {data.units_data && data.units_data.length > 0 && (
+        <Page size="A4" orientation="landscape" style={s.contentPage} wrap>
+          <PageHeader logoSrc={logoSrc} label="Beschikbare units" />
+          <View style={s.contentBody}>
+            <SectionBlock label="Aanbod" title={`${data.units_data.length} beschikbare units`} />
+            {/* Tabel header */}
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 6, marginBottom: 4 }}>
+              <Text style={{ flex: 2, fontSize: 8, fontWeight: 600, color: GRAY_MID }}>Type</Text>
+              <Text style={{ flex: 1, fontSize: 8, fontWeight: 600, color: GRAY_MID }}>Kamers</Text>
+              <Text style={{ flex: 1, fontSize: 8, fontWeight: 600, color: GRAY_MID }}>m²</Text>
+              <Text style={{ flex: 1, fontSize: 8, fontWeight: 600, color: GRAY_MID, textAlign: 'right' }}>Prijs</Text>
+            </View>
+            {/* Rijen */}
+            {data.units_data.map((u, i) => (
+              <View key={i} style={{ flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: '#F3F4F6' }}>
+                <Text style={{ flex: 2, fontSize: 9, color: GRAY }}>{u.typology || '—'}</Text>
+                <Text style={{ flex: 1, fontSize: 9, color: GRAY }}>{u.rooms ? `${u.rooms} slk` : '—'}</Text>
+                <Text style={{ flex: 1, fontSize: 9, color: GRAY }}>{u.size_m2 ? `${u.size_m2} m²` : '—'}</Text>
+                <Text style={{ flex: 1, fontSize: 9, color: SEA, fontWeight: 600, textAlign: 'right' }}>{u.price ? fmtEuro(u.price) : '—'}</Text>
+              </View>
+            ))}
+            {/* Samenvatting */}
+            <View style={{ marginTop: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+              <Text style={{ fontSize: 9, color: GRAY_MID }}>
+                {data.units_data.length} units · Vanaf {fmtEuro(Math.min(...data.units_data.filter(u => u.price).map(u => u.price!)))}
+              </Text>
+            </View>
+          </View>
+          <PageFooterBar pageNum={++pageCounter} />
         </Page>
       )}
 
