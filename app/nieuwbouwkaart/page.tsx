@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { PageLayout } from '@/components/page-layout'
 import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api'
 import { Search, X, ExternalLink, Bed, Bath, Maximize2, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
@@ -50,11 +50,17 @@ const MAP_STYLES = [
   { elementType: 'labels.text.fill', stylers: [{ color: '#666666' }] },
 ]
 
-const STATUS_COLORS: Record<string, string> = {
-  'sale': '#0EAE96',
-  'newdevelopment': '#0EAE96',
-  'default': '#0EAE96',
+const MAP_OPTIONS: google.maps.MapOptions = {
+  styles: MAP_STYLES,
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: true,
 }
+
+const DEFAULT_CENTER = { lat: 38.5, lng: -1.5 }
+const DEFAULT_ZOOM = 7
 
 export default function NieuwbouwkaartPage() {
   const [listings, setListings] = useState<Listing[]>([])
@@ -69,8 +75,8 @@ export default function NieuwbouwkaartPage() {
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
 
-  // Map state
-  const [map, setMap] = useState<google.maps.Map | null>(null)
+  // Map ref — voorkomt re-renders
+  const mapRef = useRef<google.maps.Map | null>(null)
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '',
@@ -110,11 +116,15 @@ export default function NieuwbouwkaartPage() {
   }
 
   function goToRegion(lat: number, lng: number, zoom: number) {
-    if (map) {
-      map.panTo({ lat, lng })
-      map.setZoom(zoom)
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat, lng })
+      mapRef.current.setZoom(zoom)
     }
   }
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map
+  }, [])
 
   const hasFilters = search || filterProvince || priceMin || priceMax
   function resetFilters() { setSearch(''); setFilterProvince(''); setPriceMin(''); setPriceMax('') }
@@ -142,8 +152,6 @@ export default function NieuwbouwkaartPage() {
         {hasFilters && (
           <button onClick={resetFilters} className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer">Reset</button>
         )}
-
-        {/* Regio snelknoppen */}
         <div className="flex gap-1 ml-auto">
           {REGIOS.map(r => (
             <button key={r.label} onClick={() => goToRegion(r.lat, r.lng, r.zoom)}
@@ -159,10 +167,10 @@ export default function NieuwbouwkaartPage() {
         {isLoaded ? (
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
-            center={{ lat: 38.5, lng: -1.5 }}
-            zoom={7}
-            options={{ styles: MAP_STYLES, disableDefaultUI: false, zoomControl: true, mapTypeControl: false, streetViewControl: false, fullscreenControl: true }}
-            onLoad={setMap}
+            center={DEFAULT_CENTER}
+            zoom={DEFAULT_ZOOM}
+            options={MAP_OPTIONS}
+            onLoad={onMapLoad}
           >
             {filtered.map(l => (
               <MarkerF
@@ -171,9 +179,9 @@ export default function NieuwbouwkaartPage() {
                 onClick={() => selectListing(l.id)}
                 title={`${l.title || 'Project'} — ${l.price ? `€${l.price.toLocaleString('nl-NL')}` : ''}`}
                 icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
+                  path: 0, // google.maps.SymbolPath.CIRCLE
                   scale: selectedId === l.id ? 9 : 7,
-                  fillColor: selectedId === l.id ? '#004B46' : (STATUS_COLORS[l.status ?? ''] || STATUS_COLORS.default),
+                  fillColor: selectedId === l.id ? '#004B46' : '#0EAE96',
                   fillOpacity: 1,
                   strokeColor: '#fff',
                   strokeWeight: selectedId === l.id ? 3 : 2,
@@ -195,7 +203,6 @@ export default function NieuwbouwkaartPage() {
         {showTable ? 'Lijst verbergen' : `Lijst tonen (${filtered.length})`}
       </button>
 
-      {/* Tabel */}
       {showTable && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mt-3">
           <div className="overflow-x-auto">
@@ -209,7 +216,7 @@ export default function NieuwbouwkaartPage() {
               </thead>
               <tbody>
                 {filtered.slice(0, 50).map(l => (
-                  <tr key={l.id} onClick={() => { selectListing(l.id); if (map) map.panTo({ lat: l.latitude, lng: l.longitude }) }}
+                  <tr key={l.id} onClick={() => { selectListing(l.id); if (mapRef.current) { mapRef.current.panTo({ lat: l.latitude, lng: l.longitude }); mapRef.current.setZoom(14) } }}
                     className={`border-b border-slate-50 cursor-pointer transition-colors ${selectedId === l.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
                     <td className="px-4 py-2.5 font-medium text-[#004B46] truncate max-w-[200px]">{l.title || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{l.municipality || '—'}</td>
@@ -237,38 +244,23 @@ export default function NieuwbouwkaartPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {/* Foto */}
               {selected.main_image_url && (
                 <img src={selected.main_image_url} alt="" className="w-full h-48 object-cover" />
               )}
-
               <div className="px-6 py-5 space-y-4">
-                {/* Header */}
                 <div>
                   <h3 className="text-lg font-bold text-[#004B46]">{selected.title || 'Project'}</h3>
                   <p className="text-sm text-slate-500">{[selected.municipality, selected.province].filter(Boolean).join(', ')}</p>
                   {selected.address && <p className="text-xs text-slate-400 mt-0.5">{selected.address}</p>}
                 </div>
-
-                {/* Prijs */}
                 {selected.price && (
                   <div className="text-xl font-bold text-[#0EAE96]">€ {selected.price.toLocaleString('nl-NL')}</div>
                 )}
-
-                {/* Specs grid */}
                 <div className="grid grid-cols-3 gap-3">
-                  {selected.rooms && (
-                    <div className="flex items-center gap-1.5 text-sm text-slate-600"><Bed size={14} /> {selected.rooms} slk</div>
-                  )}
-                  {selected.bathrooms && (
-                    <div className="flex items-center gap-1.5 text-sm text-slate-600"><Bath size={14} /> {selected.bathrooms} bdk</div>
-                  )}
-                  {selected.size_m2 && (
-                    <div className="flex items-center gap-1.5 text-sm text-slate-600"><Maximize2 size={14} /> {selected.size_m2} m²</div>
-                  )}
+                  {selected.rooms && <div className="flex items-center gap-1.5 text-sm text-slate-600"><Bed size={14} /> {selected.rooms} slk</div>}
+                  {selected.bathrooms && <div className="flex items-center gap-1.5 text-sm text-slate-600"><Bath size={14} /> {selected.bathrooms} bdk</div>}
+                  {selected.size_m2 && <div className="flex items-center gap-1.5 text-sm text-slate-600"><Maximize2 size={14} /> {selected.size_m2} m²</div>}
                 </div>
-
-                {/* Kenmerken */}
                 <div className="flex flex-wrap gap-1.5">
                   {selected.property_type && <Tag label={selected.property_type} />}
                   {selected.is_new_development && <Tag label="Nieuwbouw" />}
@@ -276,16 +268,12 @@ export default function NieuwbouwkaartPage() {
                   {selected.has_terrace && <Tag label="Terras" />}
                   {selected.has_parking && <Tag label="Parking" />}
                 </div>
-
-                {/* Ontwikkelaar */}
                 {selected.agency_name && (
                   <div>
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Ontwikkelaar</div>
                     <p className="text-sm text-slate-700">{selected.agency_name}</p>
                   </div>
                 )}
-
-                {/* Beschrijving */}
                 {selected.description && (
                   <div>
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Beschrijving</div>
@@ -295,7 +283,6 @@ export default function NieuwbouwkaartPage() {
               </div>
             </div>
 
-            {/* Acties */}
             <div className="px-6 py-4 border-t border-slate-100 flex items-center gap-2">
               {selected.url && (
                 <a href={selected.url} target="_blank" rel="noopener noreferrer"
