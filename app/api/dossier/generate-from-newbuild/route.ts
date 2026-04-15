@@ -46,6 +46,37 @@ function extractPhotos(listing: any): string[] {
   return photos
 }
 
+async function downloadAndStorePhotos(photos: string[], dossierId: string, supabase: ReturnType<typeof createServiceClient>): Promise<string[]> {
+  const storedUrls: string[] = []
+  const maxPhotos = Math.min(photos.length, 6)
+
+  for (let i = 0; i < maxPhotos; i++) {
+    try {
+      const res = await fetch(photos[i], {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      })
+      if (!res.ok) continue
+
+      const buffer = Buffer.from(await res.arrayBuffer())
+      const contentType = res.headers.get('content-type') || 'image/jpeg'
+      const ext = contentType.includes('png') ? 'png' : 'jpg'
+      const path = `${dossierId}/${i + 1}.${ext}`
+
+      const { error } = await supabase.storage.from('dossier-fotos').upload(path, buffer, {
+        contentType,
+        upsert: true,
+      })
+
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('dossier-fotos').getPublicUrl(path)
+        storedUrls.push(urlData.publicUrl)
+      }
+    } catch { /* skip failed photo */ }
+  }
+
+  return storedUrls.length > 0 ? storedUrls : photos.slice(0, 6)
+}
+
 export async function POST(request: Request) {
   const { listing_id, mode, client_id } = await request.json()
 
@@ -154,7 +185,7 @@ export async function POST(request: Request) {
     generatedAt: new Date().toISOString(),
   }
 
-  // 4. Sla op in Dashboard Supabase
+  // 4. Sla op in Dashboard Supabase (eerst zonder storage-fotos)
   const { data: dossier, error } = await dashboard.from('dossier_history').insert({
     adres: propertyData.adres,
     regio: propertyData.regio,
@@ -172,6 +203,17 @@ export async function POST(request: Request) {
   if (error) {
     console.error('Save dossier failed:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // 5. Download foto's naar Supabase Storage (voor PDF-generatie)
+  const originalFotos = propertyData.fotos || []
+  if (originalFotos.length > 0) {
+    const storedFotos = await downloadAndStorePhotos(originalFotos, dossier.id, dashboard)
+    // Update dossier_data met storage URLs
+    dossierResult.property.fotos = storedFotos
+    await dashboard.from('dossier_history').update({
+      dossier_data: dossierResult,
+    }).eq('id', dossier.id)
   }
 
   return NextResponse.json({ id: dossier.id, dossier_data: dossierResult, units_data: unitsData })
