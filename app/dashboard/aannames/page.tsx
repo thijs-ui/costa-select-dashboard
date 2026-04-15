@@ -23,6 +23,9 @@ interface Settings {
   renovation_luxury_per_m2: number
   renovation_contingency_pct: number
   renovation_architect_fee: number
+  renovation_terrace_per_m2: number
+  renovation_garden_per_m2: number
+  renovation_pool_per_m2: number
 }
 
 interface UserRow {
@@ -75,6 +78,9 @@ const defaultSettings: Settings = {
   renovation_luxury_per_m2: 1500,
   renovation_contingency_pct: 15,
   renovation_architect_fee: 3000,
+  renovation_terrace_per_m2: 150,
+  renovation_garden_per_m2: 80,
+  renovation_pool_per_m2: 400,
 }
 
 export default function AannamensPage() {
@@ -133,6 +139,9 @@ export default function AannamensPage() {
           renovation_luxury_per_m2: Number(map.renovation_luxury_per_m2) || 1500,
           renovation_contingency_pct: Number(map.renovation_contingency_pct) || 15,
           renovation_architect_fee: Number(map.renovation_architect_fee) || 3000,
+          renovation_terrace_per_m2: Number(map.renovation_terrace_per_m2) || 150,
+          renovation_garden_per_m2: Number(map.renovation_garden_per_m2) || 80,
+          renovation_pool_per_m2: Number(map.renovation_pool_per_m2) || 400,
         })
         // Load field mapping
         if (map.pipedrive_deal_field_mapping) {
@@ -189,6 +198,9 @@ export default function AannamensPage() {
       saveSetting('renovation_luxury_per_m2', settings.renovation_luxury_per_m2),
       saveSetting('renovation_contingency_pct', settings.renovation_contingency_pct),
       saveSetting('renovation_architect_fee', settings.renovation_architect_fee),
+      saveSetting('renovation_terrace_per_m2', settings.renovation_terrace_per_m2),
+      saveSetting('renovation_garden_per_m2', settings.renovation_garden_per_m2),
+      saveSetting('renovation_pool_per_m2', settings.renovation_pool_per_m2),
     ])
     setSaving(false)
     setSaved(true)
@@ -695,6 +707,21 @@ export default function AannamensPage() {
             <Field label="Architect / vergunningen (€)">
               <input type="number" value={settings.renovation_architect_fee}
                 onChange={e => setSettings({ ...settings, renovation_architect_fee: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Terras (€/m²)">
+              <input type="number" value={settings.renovation_terrace_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_terrace_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Tuin (€/m²)">
+              <input type="number" value={settings.renovation_garden_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_garden_per_m2: Number(e.target.value) })}
+                className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
+            </Field>
+            <Field label="Zwembad (€/m²)">
+              <input type="number" value={settings.renovation_pool_per_m2}
+                onChange={e => setSettings({ ...settings, renovation_pool_per_m2: Number(e.target.value) })}
                 className="w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400" />
             </Field>
           </div>
