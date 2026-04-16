@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', u.id)
         .single()
       if (data?.role) {
-        setRole((data.role === 'consultant' ? 'makelaar' : data.role) as Role)
+        setRole(data.role as Role)
         setNaam(data.naam ?? null)
         return
       }
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { users } = await res.json()
         const me = users?.find((usr: { id: string }) => usr.id === u.id)
         if (me) {
-          setRole(((me.role === 'consultant' ? 'makelaar' : me.role) as Role) ?? 'makelaar')
+          setRole((me.role as Role) ?? 'makelaar')
           setNaam(me.naam ?? null)
           return
         }
