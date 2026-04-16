@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const adminPaths = [
     '/aannames',
     '/afspraken',
@@ -62,6 +62,6 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next()
 }
 
-export const proxyConfig = {
+export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
 }
