@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '@/lib/supabase/user-client'
-import { requireAuth } from '@/lib/auth/permissions'
+import { requireAuth } from '../../../lib/auth/permissions'
 
 // TODO security: `internal_notes` en `commission_arrangement` horen volgens de UI
 // ("alleen admins") niet zichtbaar voor makelaar/backoffice. In deze migratie

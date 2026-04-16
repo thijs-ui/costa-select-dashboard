@@ -2,7 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '@/lib/supabase/user-client'
-import { requireAuth } from '@/lib/auth/permissions'
+import { requireAuth } from '../../../lib/auth/permissions'
 
 const PROJECT_COLUMNS = 'id, name, description, owner_id, target_date, status, color, sort_order'
 
