@@ -526,7 +526,7 @@ export default function DossierPage() {
               placeholder="https://www.idealista.com/inmueble/12345678/ of https://www.costaselect.com/nl/koop/..."
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20"
             />
-            <p className="text-xs text-gray-400 mt-2">Ondersteunt CostaSelect en Idealista URLs</p>
+            <p className="text-xs text-gray-400 mt-2">Ondersteunt Costa Select en Idealista URLs</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

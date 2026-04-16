@@ -104,10 +104,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const { item_id } = await request.json()
+  const body = await request.json()
+  const ids: string[] = body.item_ids ?? (body.item_id ? [body.item_id] : [])
 
-  if (!item_id) {
-    return NextResponse.json({ error: 'item_id is verplicht' }, { status: 400 })
+  if (ids.length === 0) {
+    return NextResponse.json({ error: 'item_id of item_ids is verplicht' }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -115,7 +116,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('shortlist_items')
     .delete()
-    .eq('id', item_id)
+    .in('id', ids)
     .eq('shortlist_id', id)
 
   if (error) {

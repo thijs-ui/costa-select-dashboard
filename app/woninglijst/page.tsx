@@ -178,6 +178,39 @@ export default function WoninglijstPage() {
     fetchShortlists()
   }
 
+  // Multi-select state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+
+  function toggleSelectItem(id: string) {
+    setSelectedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAll(items: ShortlistItem[]) {
+    setSelectedItems(new Set(items.map(i => i.id)))
+  }
+
+  function clearSelection() {
+    setSelectedItems(new Set())
+  }
+
+  async function bulkDelete() {
+    if (!selectedId || selectedItems.size === 0) return
+    if (!confirm(`Weet je zeker dat je ${selectedItems.size} woningen wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return
+    await fetch(`/api/woninglijst/${selectedId}/items`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_ids: Array.from(selectedItems) }),
+    })
+    clearSelection()
+    fetchDetail(selectedId)
+    fetchShortlists()
+  }
+
   async function handleDeleteItem(itemId: string) {
     if (!selectedId) return
     await fetch(`/api/woninglijst/${selectedId}/items`, {
@@ -307,7 +340,7 @@ export default function WoninglijstPage() {
             autoFocus
             value={addUrl}
             onChange={e => setAddUrl(e.target.value)}
-            placeholder="URL van de woning (Idealista, CostaSelect, ...)"
+            placeholder="URL van de woning (Idealista, Costa Select, ...)"
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
           />
           <input
@@ -341,20 +374,38 @@ export default function WoninglijstPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Favorieten filter */}
-          {detail.shortlist_items.some(i => i.is_favorite) && (
-            <div className="flex items-center gap-2 mb-2">
+          {/* Filters + multi-select action bar */}
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+              <input type="checkbox"
+                checked={selectedItems.size === detail.shortlist_items.length && detail.shortlist_items.length > 0}
+                onChange={e => e.target.checked ? selectAll(detail.shortlist_items) : clearSelection()}
+                className="rounded border-gray-300" />
+              Alles selecteren
+            </label>
+            {detail.shortlist_items.some(i => i.is_favorite) && (
               <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
                 <input type="checkbox" checked={showFavoritesOnly} onChange={e => setShowFavoritesOnly(e.target.checked)} className="rounded border-gray-300" />
                 Alleen favorieten
               </label>
-            </div>
-          )}
+            )}
+            {selectedItems.size > 0 && (
+              <div className="ml-auto flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-red-700 font-medium">{selectedItems.size} geselecteerd</span>
+                <button onClick={bulkDelete} className="text-xs bg-red-500 text-white px-2 py-1 rounded cursor-pointer hover:bg-red-600">Verwijderen</button>
+                <button onClick={clearSelection} className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">Wissen</button>
+              </div>
+            )}
+          </div>
           {[...detail.shortlist_items]
             .sort((a, b) => (a.is_favorite === b.is_favorite ? 0 : a.is_favorite ? -1 : 1))
             .filter(item => !showFavoritesOnly || item.is_favorite)
             .map(item => (
-            <div key={item.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex group">
+            <div key={item.id} className={`bg-white rounded-xl border overflow-hidden flex group ${selectedItems.has(item.id) ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}>
+              <div className="flex items-center pl-3">
+                <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleSelectItem(item.id)}
+                  className="rounded border-gray-300 cursor-pointer" />
+              </div>
               {item.thumbnail && (
                 <div className="w-32 h-24 shrink-0">
                   <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
