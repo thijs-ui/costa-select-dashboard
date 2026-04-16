@@ -157,9 +157,17 @@ export default function NieuwbouwkaartPage() {
 
   async function fetchAmenities() {
     setFetchingAmenities(true)
+    setAmenitiesResult(null)
+    let totalProcessed = 0
     try {
-      const res = await fetch('/api/nieuwbouw/amenities', { method: 'POST' })
-      if (res.ok) setAmenitiesResult(await res.json())
+      while (true) {
+        const res = await fetch('/api/nieuwbouw/amenities', { method: 'POST' })
+        if (!res.ok) break
+        const data = await res.json()
+        totalProcessed += data.processed
+        setAmenitiesResult({ processed: totalProcessed, remaining: data.remaining })
+        if (data.remaining === 0 || data.processed === 0) break
+      }
     } catch { /* ignore */ }
     setFetchingAmenities(false)
   }

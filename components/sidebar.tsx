@@ -38,7 +38,7 @@ const platformItems = [
   { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
   { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
   { href: '/calculators', label: 'Calculators', icon: Calculator },
-  { href: '/agentschappen', label: 'Agentschappen', icon: Building2 },
+  { href: '/samenwerkingen', label: 'Samenwerkingen', icon: Building2 },
   { href: '/nieuwbouwkaart', label: 'Nieuwbouwkaart', icon: MapPin },
   { href: '/dossier', label: 'Dossier', icon: FileText },
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
