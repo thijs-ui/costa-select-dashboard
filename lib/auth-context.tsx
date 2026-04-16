@@ -3,8 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase-browser'
 import type { User } from '@supabase/supabase-js'
-
-type Role = 'admin' | 'consultant'
+import type { Role } from '../auth/roles'
 
 interface AuthContextType {
   user: User | null
@@ -28,8 +27,6 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  type Role = 'admin' | 'consultant' | 'makelaar' | 'backoffice'
-
   const [role, setRole] = useState<Role | null>(null)
   const [naam, setNaam] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -44,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', u.id)
         .single()
       if (data?.role) {
-        setRole(data.role as Role)
+        setRole((data.role === 'consultant' ? 'makelaar' : data.role) as Role)
         setNaam(data.naam ?? null)
         return
       }
@@ -57,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { users } = await res.json()
         const me = users?.find((usr: { id: string }) => usr.id === u.id)
         if (me) {
-          setRole((me.role as Role) ?? 'consultant')
+          setRole(((me.role === 'consultant' ? 'makelaar' : me.role) as Role) ?? 'makelaar')
           setNaam(me.naam ?? null)
           return
         }
@@ -65,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
 
     // Fallback
-    setRole('consultant')
+    setRole('makelaar')
     setNaam(null)
   }
 
