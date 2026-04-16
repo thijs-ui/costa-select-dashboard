@@ -1,13 +1,18 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAuth } from '../../../lib/auth/permissions'
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
 
   const { data, error } = await supabase
     .from('shortlists')
     .select('id, klant_naam, notities, created_at, updated_at, shortlist_items(count)')
+    .eq('created_by', auth.id)
     .order('updated_at', { ascending: false })
 
   if (error) {

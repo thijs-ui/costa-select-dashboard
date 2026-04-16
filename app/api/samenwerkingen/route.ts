@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '../../../lib/supabase/user-client'
-import { requireAuth } from '../../../lib/auth/permissions'
+import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 
 // TODO security: `internal_notes` en `commission_arrangement` horen volgens de UI
 // ("alleen admins") niet zichtbaar voor makelaar/backoffice. In deze migratie
@@ -21,6 +21,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { data, error } = await supabase.from('partners').insert({

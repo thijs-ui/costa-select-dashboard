@@ -15,6 +15,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push('/login')
       return
     }
+    if (!role) return
+
     if (role !== 'admin') {
       router.push('/')
       return
