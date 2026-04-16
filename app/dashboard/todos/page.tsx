@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 import { useAuth } from '@/lib/auth-context'
 import { Trash2, CheckCircle2, Circle, ClipboardList, X, Tag } from 'lucide-react'
 
@@ -61,7 +61,7 @@ interface Phase {
 export default function TodosPage() {
   const { user, role } = useAuth()
   const isAdmin = role === 'admin'
-  const supabase = useMemo(() => createClient(), [])
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   const [todos, setTodos] = useState<Todo[]>([])
   const [users, setUsers] = useState<UserInfo[]>([])

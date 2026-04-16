@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { Loader2, Copy, RefreshCw, Star, Check } from 'lucide-react'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 
 interface PlatformOption {
   key: string
@@ -22,7 +22,7 @@ interface Props {
 
 export default function ContentGenerator({ category, platforms, placeholder, extraFields, showLengthSelector }: Props) {
   const { user } = useAuth()
-  const supabase = createClient()
+  const supabase = createBrowserClient()
 
   const [platform, setPlatform] = useState(platforms[0]?.key ?? '')
   const [language, setLanguage] = useState<'nl' | 'en' | 'es'>('nl')

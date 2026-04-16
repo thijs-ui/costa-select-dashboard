@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 import type { User } from '@supabase/supabase-js'
 
 type Role = 'admin' | 'consultant'
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role | null>(null)
   const [naam, setNaam] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
+  const supabase = createBrowserClient()
 
   async function loadUserRole(u: User) {
     // Methode 1: browser client (snel, maar kan falen door RLS)

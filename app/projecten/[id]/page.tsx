@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import { PageLayout } from '@/components/page-layout'
 import { useAuth } from '@/lib/auth-context'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 import {
   ArrowLeft, Plus, Trash2, ChevronDown, ChevronRight, Circle, CheckCircle2,
   Pin, Loader2,
@@ -27,7 +27,7 @@ const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ou
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { user } = useAuth()
-  const supabase = createClient()
+  const supabase = createBrowserClient()
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<Array<{ id: string; naam: string | null; email: string }>>([])

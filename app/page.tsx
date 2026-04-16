@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { PageLayout } from '@/components/page-layout'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 import Link from 'next/link'
 import { useEffect, useState, useMemo } from 'react'
 import {
@@ -33,7 +33,7 @@ function getGreeting() {
 
 export default function HomePage() {
   const { user, role, naam, loading } = useAuth()
-  const supabase = useMemo(() => createClient(), [])
+  const supabase = useMemo(() => createBrowserClient(), [])
   const [data, setData] = useState<DashboardData | null>(null)
 
   useEffect(() => {

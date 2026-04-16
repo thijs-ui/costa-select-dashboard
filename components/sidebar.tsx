@@ -31,7 +31,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@/lib/supabase-browser'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
@@ -82,7 +82,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   useEffect(() => {
     if (!user) return
-    const supabase = createClient()
+    const supabase = createBrowserClient()
     async function fetchTodoCount() {
       const { count } = await supabase
         .from('todos')
