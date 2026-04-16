@@ -3,6 +3,7 @@ export interface KennisbankDoc {
   code: string
   title: string
   category: string
+  tags?: string[]
 }
 
 export const categories = [
@@ -13,6 +14,7 @@ export const categories = [
   'Investeren',
   'Emigreren & Wonen',
   'Intern & Tools',
+  'Marketing',
 ] as const
 
 export type Category = typeof categories[number]
@@ -83,6 +85,13 @@ export const docs: KennisbankDoc[] = [
   { slug: 'CS-048-opvolgsysteem', code: 'CS-048', title: 'Opvolgsysteem', category: 'Intern & Tools' },
   { slug: 'CS-050-pipedrive-handleiding', code: 'CS-050', title: 'Pipedrive handleiding', category: 'Intern & Tools' },
   { slug: 'CS-051-slack-handleiding', code: 'CS-051', title: 'Slack handleiding', category: 'Intern & Tools' },
+  { slug: 'CS-044-box3-spaanse-vastgoedbelasting', code: 'CS-044', title: 'Box 3 en Spaanse vastgoedbelasting', category: 'Juridisch & Fiscaal' },
+  { slug: 'CS-MKT-001-email-voorbeelden', code: 'CS-MKT-001', title: 'Email voorbeelden', category: 'Marketing', tags: ['mkt-email', 'mkt-nieuwsbrief', 'mkt-followup'] },
+  { slug: 'CS-MKT-002-linkedin-posts', code: 'CS-MKT-002', title: 'LinkedIn organic posts', category: 'Marketing', tags: ['mkt-linkedin'] },
+  { slug: 'CS-MKT-003-instagram-captions', code: 'CS-MKT-003', title: 'Instagram captions', category: 'Marketing', tags: ['mkt-instagram'] },
+  { slug: 'CS-MKT-004-facebook-ads-nieuwbouw', code: 'CS-MKT-004', title: 'Facebook Ads nieuwbouw', category: 'Marketing', tags: ['mkt-meta-ads', 'mkt-facebook-ads'] },
+  { slug: 'CS-MKT-005-linkedin-ads', code: 'CS-MKT-005', title: 'LinkedIn Ads investeerders', category: 'Marketing', tags: ['mkt-linkedin-ads'] },
+  { slug: 'CS-MKT-006-whitepaper-longform', code: 'CS-MKT-006', title: 'Whitepaper / longform', category: 'Marketing', tags: ['mkt-blog', 'mkt-longform'] },
 ]
 
 export function getDocsByCategory(): Record<string, KennisbankDoc[]> {

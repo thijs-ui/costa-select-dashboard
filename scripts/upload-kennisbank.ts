@@ -31,11 +31,12 @@ interface Chunk {
   chunk_index: number
   heading: string | null
   content: string
+  tags: string[] | null
 }
 
 function chunkDocument(
   content: string,
-  doc: { slug: string; code: string; title: string; category: string }
+  doc: { slug: string; code: string; title: string; category: string; tags?: string[] }
 ): Chunk[] {
   // Clean up mammoth artifacts
   const clean = content
@@ -80,6 +81,7 @@ function chunkDocument(
         doc_code: doc.code,
         doc_title: doc.title,
         doc_category: doc.category,
+        tags: doc.tags ?? null,
         chunk_index: chunkIndex++,
         heading: section.heading,
         content: section.content,
@@ -96,6 +98,7 @@ function chunkDocument(
             doc_code: doc.code,
             doc_title: doc.title,
             doc_category: doc.category,
+            tags: doc.tags ?? null,
             chunk_index: chunkIndex++,
             heading: section.heading,
             content: buffer.trim(),
@@ -111,6 +114,7 @@ function chunkDocument(
           doc_code: doc.code,
           doc_title: doc.title,
           doc_category: doc.category,
+          tags: doc.tags ?? null,
           chunk_index: chunkIndex++,
           heading: section.heading,
           content: buffer.trim(),
