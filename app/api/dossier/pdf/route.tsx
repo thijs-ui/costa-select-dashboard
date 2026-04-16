@@ -18,13 +18,27 @@ function getLogoBase64(): string | undefined {
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.idealista.com/',
+      },
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.log(`[PDF] Image fetch failed: ${res.status} for ${url.substring(0, 80)}`)
+      return null
+    }
     const buffer = Buffer.from(await res.arrayBuffer())
+    if (buffer.byteLength < 1000) {
+      console.log(`[PDF] Image too small (${buffer.byteLength} bytes), skipping: ${url.substring(0, 80)}`)
+      return null
+    }
     const contentType = res.headers.get('content-type') || 'image/jpeg'
+    console.log(`[PDF] Image OK: ${buffer.byteLength} bytes, ${contentType}`)
     return `data:${contentType};base64,${buffer.toString('base64')}`
-  } catch {
+  } catch (err) {
+    console.log(`[PDF] Image error:`, err)
     return null
   }
 }
