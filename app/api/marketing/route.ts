@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
-import { rateLimit } from '@/lib/rate-limit'
 
-export const maxDuration = 60
+export const maxDuration = 90
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -14,8 +13,6 @@ Costa Select combineert twee archetypes:
 - Ruler: helder, gestructureerd, doelgericht. Niet beloven maar onderbouwen. Niet overtuigen maar begeleiden naar inzicht.
 - Caregiver: persoonlijk, betrokken, begrip voor wat een aankoop werkelijk betekent.
 
-Resultaat: een stem die richting geeft zonder te pushen, helder is zonder afstandelijk te worden, en vertrouwen biedt zonder te overdrijven.
-
 WOORDGEBRUIK:
 Gebruik: kwaliteit, rust, vertrouwen, overzicht, selectie, zorgvuldig, doordacht, lange termijn, waarde, begeleiden, persoonlijk, ervaring, kennis, vrijheid, regie, helder, premium, perspectief, keuze, structuur, slim, bewust, genieten, thuis.
 
@@ -23,7 +20,7 @@ Vermijd ALTIJD: goedkoop, snel scoren, nu of nooit, mega, knaller, once in a lif
 
 SCHRIJFREGELS:
 - Geen lange inleidingen. Begin direct met de inhoud.
-- Eén gedachte per zin. Geen bijzinnen bij bijzinnen.
+- Eén gedachte per zin.
 - Vermijd passieve constructies.
 - Gebruik concrete cijfers waar mogelijk.
 - Schrijf als een vertrouwde adviseur, niet als een verkoper.`
@@ -34,14 +31,88 @@ const LANG_MAP: Record<string, string> = {
   es: 'het Spaans',
 }
 
+// Tag mapping per categorie/subcategorie
+const TAG_MAP: Record<string, string[]> = {
+  'social_media:linkedin': ['mkt-linkedin'],
+  'social_media:instagram': ['mkt-instagram'],
+  'social_media:facebook': ['mkt-facebook'],
+  'advertenties:meta_ads': ['mkt-meta-ads', 'mkt-facebook-ads'],
+  'advertenties:google_ads': ['mkt-google-ads'],
+  'advertenties:linkedin_ads': ['mkt-linkedin-ads'],
+  'website_blog:blogartikel': ['mkt-blog', 'mkt-longform'],
+  'website_blog:landingspagina': ['mkt-landing'],
+  'email:nieuwsbrief': ['mkt-email', 'mkt-nieuwsbrief'],
+  'email:followup': ['mkt-email', 'mkt-followup'],
+  'video:youtube': ['mkt-video', 'mkt-youtube'],
+  'video:short': ['mkt-video', 'mkt-shorts'],
+  'brochures:nieuwbouw': ['mkt-brochure', 'mkt-nieuwbouw'],
+}
+
+async function getKennisbankExamples(category: string, subcategory: string): Promise<string[]> {
+  const key = `${category}:${subcategory}`
+  const tags = TAG_MAP[key]
+  if (!tags || tags.length === 0) return []
+
+  try {
+    const supabase = createServiceClient()
+    // Zoek kb_chunks met matching tags (overlap)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('kb_chunks') as any)
+      .select('content')
+      .overlaps('tags', tags)
+      .limit(3)
+
+    return (data ?? []).map((d: { content: string }) => d.content).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+async function getFavoriteExamples(category: string, subcategory: string): Promise<string[]> {
+  try {
+    const supabase = createServiceClient()
+    let query = supabase
+      .from('marketing_content')
+      .select('content')
+      .eq('is_favorite', true)
+      .eq('category', category)
+      .order('created_at', { ascending: false })
+      .limit(3)
+    if (subcategory) query = query.eq('subcategory', subcategory)
+
+    const { data } = await query
+    return (data ?? []).map((d: { content: string }) => d.content).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 // POST: genereer content
 export async function POST(request: Request) {
   const body = await request.json()
-  const { category, subcategory, language, prompt, extra_context, content_type_instructions } = body
+  const { category, subcategory, language, prompt, extra_context, content_type_instructions, length } = body
 
   if (!prompt) return NextResponse.json({ error: 'Prompt is verplicht' }, { status: 400 })
 
-  const systemPrompt = `${BASE_SYSTEM_PROMPT}\n\nTAAL: Schrijf in ${LANG_MAP[language] || 'het Nederlands'}. Als de taal Engels of Spaans is, behoud dezelfde tone of voice.\n\n${content_type_instructions || ''}`
+  // Haal voorbeelden op
+  const [kbExamples, favExamples] = await Promise.all([
+    getKennisbankExamples(category, subcategory),
+    getFavoriteExamples(category, subcategory),
+  ])
+
+  let systemPrompt = `${BASE_SYSTEM_PROMPT}\n\nTAAL: Schrijf in ${LANG_MAP[language] || 'het Nederlands'}.\n\n${content_type_instructions || ''}`
+
+  if (length) {
+    systemPrompt += `\n\nLENGTE: ${length}`
+  }
+
+  if (kbExamples.length > 0) {
+    systemPrompt += `\n\nVOORBEELDEN UIT KENNISBANK (algemene referenties):\n${kbExamples.map((e, i) => `--- Voorbeeld ${i + 1} ---\n${e.substring(0, 2000)}`).join('\n\n')}\n\nGebruik deze als referentie voor stijl, structuur en toon. Kopieer ze niet letterlijk.`
+  }
+
+  if (favExamples.length > 0) {
+    systemPrompt += `\n\nJOUW EERDERE TOPCONTENT (specifieke favorieten):\n${favExamples.map((e, i) => `--- Favoriet ${i + 1} ---\n${e.substring(0, 2000)}`).join('\n\n')}\n\nDeze zijn door Costa Select gemarkeerd als zeer succesvol. Match die kwaliteit.`
+  }
 
   const userPrompt = `${prompt}${extra_context ? `\n\nExtra context: ${extra_context}` : ''}`
 
@@ -68,11 +139,13 @@ export async function GET(request: Request) {
   const category = searchParams.get('category')
   const language = searchParams.get('language')
   const favorite = searchParams.get('favorite')
+  const status = searchParams.get('status')
 
-  let query = supabase.from('marketing_content').select('*').order('created_at', { ascending: false }).limit(50)
+  let query = supabase.from('marketing_content').select('*').order('created_at', { ascending: false }).limit(100)
   if (category) query = query.eq('category', category)
   if (language) query = query.eq('language', language)
   if (favorite === 'true') query = query.eq('is_favorite', true)
+  if (status) query = query.eq('publish_status', status)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -17,14 +17,16 @@ interface Props {
   platforms: PlatformOption[]
   placeholder?: string
   extraFields?: React.ReactNode
+  showLengthSelector?: boolean
 }
 
-export default function ContentGenerator({ category, platforms, placeholder, extraFields }: Props) {
+export default function ContentGenerator({ category, platforms, placeholder, extraFields, showLengthSelector }: Props) {
   const { user } = useAuth()
   const supabase = createClient()
 
   const [platform, setPlatform] = useState(platforms[0]?.key ?? '')
   const [language, setLanguage] = useState<'nl' | 'en' | 'es'>('nl')
+  const [lengthOpt, setLengthOpt] = useState<'kort' | 'middel' | 'lang'>('middel')
   const [prompt, setPrompt] = useState('')
   const [extraContext, setExtraContext] = useState('')
   const [generating, setGenerating] = useState(false)
@@ -50,6 +52,7 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
           prompt: prompt.trim(),
           extra_context: extraContext.trim() || undefined,
           content_type_instructions: selectedPlatform?.instructions || '',
+          ...(showLengthSelector ? { length: lengthOpt } : {}),
         }),
       })
       if (res.ok) {
@@ -78,28 +81,32 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const [saveError, setSaveError] = useState('')
+
   async function saveToLibrary(favorite = false) {
-    const title = prompt.trim().substring(0, 80)
-    await fetch('/api/marketing', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // Using PUT for save - need a POST to marketing_content
-      }),
-    })
-    // Direct insert via supabase
-    await supabase.from('marketing_content').insert({
-      category,
-      subcategory: platform,
-      language,
-      title,
-      prompt_used: prompt,
-      content: editContent,
-      is_favorite: favorite,
-      created_by: user?.id,
-    })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaveError('')
+    const title = prompt.trim().substring(0, 80) || 'Zonder titel'
+    try {
+      const res = await fetch('/api/marketing/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category,
+          subcategory: platform,
+          language,
+          title,
+          prompt_used: prompt,
+          content: editContent,
+          is_favorite: favorite,
+        }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Opslaan mislukt') }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Opslaan mislukt')
+      setTimeout(() => setSaveError(''), 4000)
+    }
   }
 
   const charCount = editContent.length
@@ -120,16 +127,37 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
         ))}
       </div>
 
-      {/* Taal selector */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {(['nl', 'en', 'es'] as const).map(l => (
-          <button key={l} onClick={() => setLanguage(l)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
-              language === l ? 'bg-white text-[#004B46] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            {l.toUpperCase()}
-          </button>
-        ))}
+      {/* Taal + Lengte selector */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Taal</div>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+            {(['nl', 'en', 'es'] as const).map(l => (
+              <button key={l} onClick={() => setLanguage(l)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
+                  language === l ? 'bg-white text-[#004B46] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showLengthSelector && platform !== 'google_ads' && (
+          <div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Lengte</div>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+              {(['kort', 'middel', 'lang'] as const).map(l => (
+                <button key={l} onClick={() => setLengthOpt(l)}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer capitalize ${
+                    lengthOpt === l ? 'bg-white text-[#004B46] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {extraFields}
@@ -199,6 +227,7 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
               className="flex items-center gap-1.5 px-3 py-2 text-[#F5AF40] hover:text-[#E09B20] cursor-pointer">
               <Star size={16} fill="currentColor" />
             </button>
+            {saveError && <span className="text-xs text-red-500 ml-2">{saveError}</span>}
           </div>
         </div>
       )}
