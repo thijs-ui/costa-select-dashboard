@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { PageLayout } from '@/components/page-layout'
-import { supabase } from '@/lib/supabase'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Home, Wallet, Building2, BarChart3, Hammer, TrendingUp, AlertTriangle } from 'lucide-react'
 
+type Mode = 'eigen' | 'verhuur' | 'sl' | 'vergelijk' | 'flip'
+
+interface Bracket { threshold: number | null; rate: number }
 interface RegionalSettings {
   id: string
   region: string
   itp_percentage: number
-  itp_progressive: Array<{ threshold: number | null; rate: number }> | null
+  itp_progressive: Bracket[] | null
   ajd_percentage: number
   iva_percentage: number
   notary_min: number
@@ -22,460 +24,591 @@ interface RegionalSettings {
   lawyer_minimum: number
   property_tax_percentage: number
   community_fees_avg_monthly: number
-  average_rental_yield: number | null
-}
-
-interface RenovationDefaults {
-  cosmetic: number; partial: number; full: number; luxury: number; contingency: number; architect: number
 }
 
 const fmt = (n: number) => n > 0 ? `€ ${Math.round(n).toLocaleString('nl-NL')}` : '—'
 const pct = (n: number) => `${n.toFixed(1)}%`
 
-type Tab = 'kosten' | 'rendement' | 'hypotheek' | 'renovatie'
+function calcITP(price: number, brackets: Bracket[] | null, flatRate: number): number {
+  if (!brackets || brackets.length === 0) return price * (flatRate / 100)
+  let tax = 0
+  let remaining = price
+  let prevThreshold = 0
+  for (const band of brackets) {
+    const limit = band.threshold ?? Infinity
+    const band_size = limit - prevThreshold
+    const taxable = Math.min(remaining, band_size)
+    if (taxable <= 0) break
+    tax += taxable * (band.rate / 100)
+    remaining -= taxable
+    prevThreshold = limit
+    if (remaining <= 0) break
+  }
+  return tax
+}
+
+function annuity(principal: number, annualRate: number, years: number): number {
+  if (principal <= 0 || years <= 0) return 0
+  const n = years * 12
+  const r = annualRate / 100 / 12
+  if (r === 0) return principal / n
+  return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
+}
+
+const MODES: { key: Mode; label: string; icon: typeof Home; desc: string }[] = [
+  { key: 'eigen', label: 'Eigen gebruik', icon: Home, desc: 'Tweede woning voor persoonlijk gebruik' },
+  { key: 'verhuur', label: 'Verhuur (privé)', icon: Wallet, desc: 'Privé-investering met verhuur' },
+  { key: 'sl', label: 'Investering SL', icon: Building2, desc: 'Via Sociedad Limitada' },
+  { key: 'vergelijk', label: 'NL vs Spanje', icon: BarChart3, desc: 'Side-by-side vergelijking' },
+  { key: 'flip', label: 'Renovatie / Flip', icon: Hammer, desc: 'Aankoop + renovatie + verkoop' },
+]
 
 export default function CalculatorsPage() {
+  const [mode, setMode] = useState<Mode>('eigen')
   const [regions, setRegions] = useState<RegionalSettings[]>([])
-  const [reno, setReno] = useState<RenovationDefaults>({ cosmetic: 300, partial: 600, full: 1000, luxury: 1500, contingency: 15, architect: 3000 })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<Tab>('kosten')
+
+  // Basis velden
+  const [price, setPrice] = useState(350000)
+  const [regionId, setRegionId] = useState('')
+  const [propType, setPropType] = useState<'bestaand' | 'nieuwbouw'>('bestaand')
+  const [isResident, setIsResident] = useState(false)
+
+  // Eigen gebruik / Verhuur / SL
+  const [downPayment, setDownPayment] = useState(105000)
+  const [rate, setRate] = useState(4.0)
+  const [years, setYears] = useState(25)
+
+  // Maandlasten
+  const [ibiMonthly, setIbiMonthly] = useState(146)
+  const [vveMonthly, setVveMonthly] = useState(150)
+  const [insuranceMonthly, setInsuranceMonthly] = useState(40)
+
+  // Verhuur
+  const [monthlyRent, setMonthlyRent] = useState(1800)
+  const [managementPct, setManagementPct] = useState(8)
+  const [maintenancePct, setMaintenancePct] = useState(5)
+
+  // SL
+  const [slAge, setSlAge] = useState<'new' | 'old'>('old')
+  const [slAdmin, setSlAdmin] = useState(2500)
+
+  // Flip
+  const [renoBudget, setRenoBudget] = useState(80000)
+  const [sellPrice, setSellPrice] = useState(500000)
+  const [renoMonths, setRenoMonths] = useState(6)
+  const [saleMonths, setSaleMonths] = useState(4)
+  const [agentPct, setAgentPct] = useState(4)
+
+  // NL vs ES
+  const [rateNL, setRateNL] = useState(5.5)
+  const [rentNL, setRentNL] = useState(1200)
+  const [rentES, setRentES] = useState(1800)
+
+  // Meerjaren projectie
+  const [showProjection, setShowProjection] = useState(false)
+  const [rentIndex, setRentIndex] = useState(2.5)
 
   useEffect(() => {
     async function load() {
-      const [regRes, setRes] = await Promise.all([
-        fetch('/api/regional-settings'),
-        supabase.from('settings').select('key, value').in('key', [
-          'renovation_cosmetic_per_m2', 'renovation_partial_per_m2', 'renovation_full_per_m2',
-          'renovation_luxury_per_m2', 'renovation_contingency_pct', 'renovation_architect_fee',
-        ]),
-      ])
-      if (regRes.ok) setRegions(await regRes.json())
-      if (setRes.data) {
-        const m: Record<string, number> = {}
-        for (const r of setRes.data as { key: string; value: number }[]) m[r.key] = Number(r.value)
-        setReno({
-          cosmetic: m.renovation_cosmetic_per_m2 || 300,
-          partial: m.renovation_partial_per_m2 || 600,
-          full: m.renovation_full_per_m2 || 1000,
-          luxury: m.renovation_luxury_per_m2 || 1500,
-          contingency: m.renovation_contingency_pct || 15,
-          architect: m.renovation_architect_fee || 3000,
-        })
+      const res = await fetch('/api/regional-settings')
+      if (res.ok) {
+        const data = await res.json()
+        setRegions(data)
+        const defaultRegion = data.find((r: RegionalSettings) => r.region === 'Costa del Sol') || data[0]
+        if (defaultRegion) setRegionId(defaultRegion.id)
       }
       setLoading(false)
     }
     load()
   }, [])
 
-  if (loading) return <PageLayout title="Calculators"><div className="text-slate-400 text-sm">Laden...</div></PageLayout>
+  // Auto-update rate when resident changes
+  useEffect(() => { setRate(isResident ? 3.2 : 4.0) }, [isResident])
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'kosten', label: 'Kosten koper' },
-    { key: 'rendement', label: 'Netto rendement' },
-    { key: 'hypotheek', label: 'Hypotheeklasten' },
-    { key: 'renovatie', label: 'Renovatiebudget' },
-  ]
+  const region = useMemo(() => regions.find(r => r.id === regionId), [regions, regionId])
+  const maxLTV = isResident ? 80 : 70
+
+  // ===== KOSTEN KOPER =====
+  const kkCalc = useMemo(() => {
+    if (!region) return null
+    const itp = propType === 'bestaand' ? calcITP(price, region.itp_progressive, region.itp_percentage) : 0
+    const iva = propType === 'nieuwbouw' ? price * (region.iva_percentage / 100) : 0
+    const ajd = propType === 'nieuwbouw' ? price * (region.ajd_percentage / 100) : 0
+    const notary = Math.min(Math.max(price * (region.notary_percentage / 100), region.notary_min), region.notary_max)
+    const registro = Math.min(Math.max(price * (region.registro_percentage / 100), region.registro_min), region.registro_max)
+    const lawyer = Math.max(price * (region.lawyer_percentage / 100), region.lawyer_minimum)
+    const bankCosts = downPayment < price ? 1000 : 0
+    const total = itp + iva + ajd + notary + registro + lawyer + bankCosts
+    return { itp, iva, ajd, notary, registro, lawyer, bankCosts, total }
+  }, [region, propType, price, downPayment])
+
+  // ===== FINANCIERING =====
+  const mortgage = price - downPayment
+  const ltv = price > 0 ? (mortgage / price) * 100 : 0
+  const ltvWarning = ltv > maxLTV
+  const monthlyMortgage = annuity(mortgage, rate, years)
+
+  // ===== MAANDLASTEN =====
+  const totalMonthly = monthlyMortgage + ibiMonthly + vveMonthly + insuranceMonthly
+
+  // ===== TOTAAL INVESTERING =====
+  const totalInvestment = price + (kkCalc?.total ?? 0)
+  const ownMoneyNeeded = downPayment + (kkCalc?.total ?? 0)
+
+  // ===== VERHUUR =====
+  const rentCalc = useMemo(() => {
+    const yearlyRent = monthlyRent * 12
+    const mgmt = yearlyRent * (managementPct / 100)
+    const maint = yearlyRent * (maintenancePct / 100)
+    const mortgageInterest = monthlyMortgage * 12 * (rate / 100) / (rate / 100 + 0.0001) * 0.6 // benadering: 60% rente in jaar 1
+    const ibiYearly = ibiMonthly * 12
+    const vveYearly = vveMonthly * 12
+    const insYearly = insuranceMonthly * 12
+    const totalCosts = mgmt + maint + mortgageInterest + ibiYearly + vveYearly + insYearly
+    const netBeforeTax = yearlyRent - totalCosts
+    const irnr = Math.max(netBeforeTax, 0) * 0.19
+    const netAfterTax = netBeforeTax - irnr
+    const yieldOnPrice = price > 0 ? (netAfterTax / price) * 100 : 0
+    const yieldOnEquity = ownMoneyNeeded > 0 ? (netAfterTax / ownMoneyNeeded) * 100 : 0
+    return { yearlyRent, mgmt, maint, mortgageInterest, ibiYearly, vveYearly, insYearly, totalCosts, netBeforeTax, irnr, netAfterTax, yieldOnPrice, yieldOnEquity }
+  }, [monthlyRent, managementPct, maintenancePct, monthlyMortgage, rate, ibiMonthly, vveMonthly, insuranceMonthly, price, ownMoneyNeeded])
+
+  // ===== SL =====
+  const slCalc = useMemo(() => {
+    const vpbRate = slAge === 'new' ? 15 : 25
+    const grossRent = monthlyRent * 12
+    const depreciation = price * 0.7 * 0.03 // 3% over gebouwwaarde (70% van aankoop)
+    const mortgageInt = rentCalc.mortgageInterest
+    const deductibles = rentCalc.mgmt + rentCalc.maint + mortgageInt + rentCalc.ibiYearly + rentCalc.vveYearly + rentCalc.insYearly + depreciation + slAdmin
+    const taxableProfit = Math.max(grossRent - deductibles, 0)
+    const vpb = taxableProfit * (vpbRate / 100)
+    const netInSL = grossRent - deductibles - vpb
+    return { grossRent, depreciation, deductibles, taxableProfit, vpbRate, vpb, netInSL }
+  }, [slAge, slAdmin, monthlyRent, price, rentCalc])
+
+  // ===== FLIP =====
+  const flipCalc = useMemo(() => {
+    const buildingSupervision = renoBudget * 0.05
+    const unforeseen = renoBudget * 0.10
+    const totalInv = price + (kkCalc?.total ?? 0) + renoBudget + buildingSupervision + unforeseen
+    const agentFee = sellPrice * (agentPct / 100)
+    const plusvalia = sellPrice * 0.005 // schatting
+    const capitalGain = sellPrice - totalInv - agentFee - plusvalia
+    const capitalGainsTax = Math.max(capitalGain, 0) * 0.19
+    const netProfit = capitalGain - capitalGainsTax
+    const roi = totalInv > 0 ? (netProfit / totalInv) * 100 : 0
+    const durationYears = (renoMonths + saleMonths) / 12
+    const roiYearly = durationYears > 0 ? roi / durationYears : 0
+    return { totalInv, buildingSupervision, unforeseen, agentFee, plusvalia, capitalGain, capitalGainsTax, netProfit, roi, roiYearly }
+  }, [price, kkCalc, renoBudget, sellPrice, agentPct, renoMonths, saleMonths])
+
+  // ===== NL vs ES =====
+  const vergelijkCalc = useMemo(() => {
+    const kkES = kkCalc?.total ?? 0
+    const kkNL = price * 0.09 // NL kosten koper ~9%
+    const eqES = downPayment + kkES
+    const eqNL = downPayment + kkNL
+    const mortES = price - downPayment
+    const mortNL = mortES
+
+    // ES
+    const yearlyRentES = rentES * 12
+    const esInterest = mortES * (rate / 100) * 0.8
+    const esCosts = yearlyRentES * 0.13 + ibiMonthly * 12 + vveMonthly * 12 + insuranceMonthly * 12
+    const esOperational = yearlyRentES - esInterest - esCosts
+    const esIrnr = Math.max(esOperational, 0) * 0.19
+    const esNet = esOperational - esIrnr
+
+    // NL Box 3
+    const yearlyRentNL = rentNL * 12
+    const nlInterest = mortNL * (rateNL / 100) * 0.8
+    const nlCosts = yearlyRentNL * 0.10 + 2000 + 1500 // beheer + gemeentebelastingen
+    const nlOperational = yearlyRentNL - nlInterest - nlCosts
+    // Box 3
+    const fictiefBez = price * 0.0604
+    const fictiefSch = mortNL * 0.0247
+    const box3Base = Math.max(fictiefBez - fictiefSch - 57684, 0)
+    const box3Tax = box3Base * 0.3697
+    const nlNet = nlOperational - box3Tax
+
+    const esYield = eqES > 0 ? (esNet / eqES) * 100 : 0
+    const nlYield = eqNL > 0 ? (nlNet / eqNL) * 100 : 0
+
+    return { kkES, kkNL, eqES, eqNL, yearlyRentES, yearlyRentNL, esInterest, nlInterest, esCosts, nlCosts, esOperational, nlOperational, esIrnr, box3Tax, esNet, nlNet, esYield, nlYield, diff: esYield - nlYield }
+  }, [kkCalc, price, downPayment, rentES, rentNL, rate, rateNL, ibiMonthly, vveMonthly, insuranceMonthly])
+
+  // ===== MEERJAREN PROJECTIE =====
+  const projection = useMemo(() => {
+    const rows = []
+    let cumCashflow = 0
+    let remainingMortgage = mortgage
+    for (let y = 1; y <= 10; y++) {
+      const yearRent = monthlyRent * 12 * Math.pow(1 + rentIndex / 100, y - 1)
+      const yearPayment = monthlyMortgage * 12
+      const interestPaid = remainingMortgage * (rate / 100)
+      const principalPaid = yearPayment - interestPaid
+      remainingMortgage = Math.max(remainingMortgage - principalPaid, 0)
+      const yearCosts = yearRent * ((managementPct + maintenancePct) / 100) + (ibiMonthly + vveMonthly + insuranceMonthly) * 12 * Math.pow(1.02, y - 1)
+      const netBeforeTax = yearRent - yearCosts - interestPaid
+      const tax = Math.max(netBeforeTax, 0) * 0.19
+      const cashflow = netBeforeTax - tax - principalPaid
+      cumCashflow += cashflow
+      rows.push({ year: y, mortgage: yearPayment, rent: yearRent, cashflow, cumCashflow, remainingMortgage })
+    }
+    return rows
+  }, [mortgage, monthlyRent, rentIndex, monthlyMortgage, rate, managementPct, maintenancePct, ibiMonthly, vveMonthly, insuranceMonthly])
+
+  if (loading) return <PageLayout title="Calculator"><div className="text-slate-400 text-sm">Laden...</div></PageLayout>
 
   return (
-    <PageLayout title="Calculators" subtitle="Rekenmachines voor klantgesprekken">
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${
-              activeTab === t.key ? 'bg-[#004B46] text-[#FFFAEF]' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
-            }`}>
-            {t.label}
-          </button>
-        ))}
+    <PageLayout title="Calculator" subtitle="Modulaire scenario-calculator voor Spaans vastgoed">
+      {/* Modus keuze */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
+        {MODES.map(m => {
+          const Icon = m.icon
+          return (
+            <button key={m.key} onClick={() => setMode(m.key)}
+              className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                mode === m.key ? 'border-[#0EAE96] bg-[#0EAE96]/5' : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}>
+              <Icon size={16} className={mode === m.key ? 'text-[#0EAE96]' : 'text-gray-400'} />
+              <div className={`text-sm font-semibold mt-1 ${mode === m.key ? 'text-[#004B46]' : 'text-gray-700'}`}>{m.label}</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{m.desc}</div>
+            </button>
+          )
+        })}
       </div>
 
-      {activeTab === 'kosten' && <KostenKoper regions={regions} />}
-      {activeTab === 'rendement' && <NettoRendement regions={regions} />}
-      {activeTab === 'hypotheek' && <Hypotheeklasten />}
-      {activeTab === 'renovatie' && <Renovatiebudget defaults={reno} regions={regions} />}
+      {/* Basis velden */}
+      <Card title="Basisgegevens">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Field label="Aankoopprijs (€)"><input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className={inp} /></Field>
+          <Field label="Regio">
+            <select value={regionId} onChange={e => setRegionId(e.target.value)} className={inp}>
+              {regions.map(r => <option key={r.id} value={r.id}>{r.region}</option>)}
+            </select>
+          </Field>
+          <Field label="Type woning">
+            <select value={propType} onChange={e => setPropType(e.target.value as 'bestaand' | 'nieuwbouw')} className={inp}>
+              <option value="bestaand">Bestaande bouw</option>
+              <option value="nieuwbouw">Nieuwbouw</option>
+            </select>
+          </Field>
+          <Field label="Resident in Spanje?">
+            <label className="flex items-center gap-2 h-[34px] text-sm">
+              <input type="checkbox" checked={isResident} onChange={e => setIsResident(e.target.checked)} className="rounded border-gray-300" />
+              {isResident ? 'Ja' : 'Nee'}
+            </label>
+          </Field>
+        </div>
+      </Card>
+
+      {/* Kosten koper — altijd zichtbaar */}
+      {kkCalc && (
+        <Card title="Kosten koper">
+          <table className="w-full text-sm">
+            <tbody>
+              {propType === 'bestaand' ? (
+                <Row label={`ITP${region?.itp_progressive ? ' (progressief)' : ` (${pct(region?.itp_percentage ?? 0)})`}`} value={kkCalc.itp} />
+              ) : (
+                <>
+                  <Row label={`IVA (${pct(region?.iva_percentage ?? 0)})`} value={kkCalc.iva} />
+                  <Row label={`AJD (${pct(region?.ajd_percentage ?? 0)})`} value={kkCalc.ajd} />
+                </>
+              )}
+              <Row label="Notariskosten" value={kkCalc.notary} />
+              <Row label="Kadaster / Registro" value={kkCalc.registro} />
+              <Row label="Juridisch (advocaat)" value={kkCalc.lawyer} />
+              {kkCalc.bankCosts > 0 && <Row label="Bankkosten + taxatie" value={kkCalc.bankCosts} />}
+              <tr className="border-t-2 border-slate-200">
+                <td className="py-2 font-bold text-slate-800">Totaal kosten koper</td>
+                <td className="py-2 text-right font-bold text-slate-800">{fmt(kkCalc.total)} <span className="text-xs text-slate-400 ml-1">({((kkCalc.total / price) * 100).toFixed(1)}%)</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Financiering — voor alle modi behalve vergelijk/flip */}
+      {mode !== 'vergelijk' && mode !== 'flip' && (
+        <>
+          <Card title="Financiering">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <Field label="Eigen geld (€)"><input type="number" value={downPayment} onChange={e => setDownPayment(Number(e.target.value))} className={inp} /></Field>
+              <Field label="Looptijd (jaar)"><input type="number" value={years} min={5} max={30} onChange={e => setYears(Number(e.target.value))} className={inp} /></Field>
+              <Field label={`Rente: ${rate.toFixed(1)}%`}>
+                <input type="range" min={0} max={10} step={0.1} value={rate} onChange={e => setRate(Number(e.target.value))} className="w-full accent-[#004B46]" />
+              </Field>
+              <Field label="Aflossing"><select className={inp} disabled><option>Annuïtair</option></select></Field>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-sm pt-3 border-t border-slate-100">
+              <div><span className="text-slate-500">Hypotheek</span><div className="font-bold text-slate-800">{fmt(mortgage)}</div></div>
+              <div><span className="text-slate-500">LTV</span><div className={`font-bold ${ltvWarning ? 'text-red-500' : 'text-slate-800'}`}>{ltv.toFixed(1)}% {ltvWarning && <span className="text-xs">(max {maxLTV}%)</span>}</div></div>
+              <div><span className="text-slate-500">Maandlast hypotheek</span><div className="font-bold text-[#0EAE96]">{fmt(Math.round(monthlyMortgage))}</div></div>
+            </div>
+            {ltvWarning && <div className="mt-3 flex items-center gap-2 text-xs text-red-600"><AlertTriangle size={14} /> LTV overschrijdt maximum voor {isResident ? 'resident' : 'niet-resident'} ({maxLTV}%). Spaanse banken financieren max {maxLTV}%.</div>}
+          </Card>
+
+          <Card title="Maandlasten">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label="IBI/mnd"><input type="number" value={ibiMonthly} onChange={e => setIbiMonthly(Number(e.target.value))} className={inp} /></Field>
+              <Field label="VvE/mnd"><input type="number" value={vveMonthly} onChange={e => setVveMonthly(Number(e.target.value))} className={inp} /></Field>
+              <Field label="Verzekering/mnd"><input type="number" value={insuranceMonthly} onChange={e => setInsuranceMonthly(Number(e.target.value))} className={inp} /></Field>
+            </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between">
+              <span className="text-sm font-semibold text-slate-700">Totaal per maand</span>
+              <span className="font-bold text-[#0EAE96]">{fmt(Math.round(totalMonthly))}</span>
+            </div>
+          </Card>
+
+          <Card title="Totale investering">
+            <table className="w-full text-sm">
+              <tbody>
+                <Row label="Aankoopprijs" value={price} />
+                <Row label="Kosten koper" value={kkCalc?.total ?? 0} />
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 font-semibold text-slate-700">Totale investering</td>
+                  <td className="py-2 text-right font-bold text-slate-800">{fmt(totalInvestment)}</td>
+                </tr>
+                <tr><td className="py-2 text-slate-500">Eigen geld nodig</td><td className="py-2 text-right text-slate-700">{fmt(ownMoneyNeeded)}</td></tr>
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
+
+      {/* VERHUUR */}
+      {(mode === 'verhuur' || mode === 'sl') && (
+        <Card title="Verhuur">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <Field label="Maandhuur (€)"><input type="number" value={monthlyRent} onChange={e => setMonthlyRent(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Beheer %"><input type="number" value={managementPct} step={0.5} onChange={e => setManagementPct(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Onderhoud %"><input type="number" value={maintenancePct} step={0.5} onChange={e => setMaintenancePct(Number(e.target.value))} className={inp} /></Field>
+          </div>
+          {monthlyRent > 0 && (
+            <table className="w-full text-sm border-t border-slate-100 pt-3">
+              <tbody>
+                <Row label="Bruto jaarhuur" value={rentCalc.yearlyRent} bold />
+                <Row label="− Beheer" value={-rentCalc.mgmt} />
+                <Row label="− Onderhoud" value={-rentCalc.maint} />
+                <Row label="− Hypotheekrente" value={-rentCalc.mortgageInterest} />
+                <Row label="− IBI + VvE + verzekering" value={-(rentCalc.ibiYearly + rentCalc.vveYearly + rentCalc.insYearly)} />
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 font-semibold">Netto winst vóór belasting</td>
+                  <td className="py-2 text-right font-semibold">{fmt(rentCalc.netBeforeTax)}</td>
+                </tr>
+                <Row label="− IRNR 19%" value={-rentCalc.irnr} />
+                <tr className="border-t-2 border-[#0EAE96]">
+                  <td className="py-2 font-bold text-[#0EAE96]">Netto winst na belasting</td>
+                  <td className="py-2 text-right font-bold text-[#0EAE96]">{fmt(rentCalc.netAfterTax)}</td>
+                </tr>
+                <tr><td className="py-2 text-slate-500">Rendement op aankoopprijs</td><td className="py-2 text-right">{rentCalc.yieldOnPrice.toFixed(1)}%</td></tr>
+                <tr><td className="py-2 text-slate-500">Rendement op eigen geld</td><td className="py-2 text-right font-semibold">{rentCalc.yieldOnEquity.toFixed(1)}%</td></tr>
+              </tbody>
+            </table>
+          )}
+
+          {mode === 'verhuur' && (
+            <label className="flex items-center gap-2 mt-4 text-sm text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={showProjection} onChange={e => setShowProjection(e.target.checked)} className="rounded border-gray-300" />
+              Toon meerjaren projectie (10 jaar)
+            </label>
+          )}
+        </Card>
+      )}
+
+      {/* SL */}
+      {mode === 'sl' && (
+        <Card title="SL (Sociedad Limitada)">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <Field label="SL leeftijd">
+              <select value={slAge} onChange={e => setSlAge(e.target.value as 'new' | 'old')} className={inp}>
+                <option value="new">&lt; 2 jaar (15% VPB)</option>
+                <option value="old">2+ jaar (25% VPB)</option>
+              </select>
+            </Field>
+            <Field label="SL administratie/jaar"><input type="number" value={slAdmin} onChange={e => setSlAdmin(Number(e.target.value))} className={inp} /></Field>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              <Row label="Bruto jaarhuur" value={slCalc.grossRent} />
+              <Row label="− Alle aftrekbare kosten" value={-slCalc.deductibles} />
+              <tr className="border-t border-slate-200"><td className="py-2 font-semibold">Belastbare winst SL</td><td className="py-2 text-right font-semibold">{fmt(slCalc.taxableProfit)}</td></tr>
+              <Row label={`− VPB (${slCalc.vpbRate}%)`} value={-slCalc.vpb} />
+              <tr className="border-t-2 border-[#0EAE96]">
+                <td className="py-2 font-bold text-[#0EAE96]">Netto winst in SL</td>
+                <td className="py-2 text-right font-bold text-[#0EAE96]">{fmt(slCalc.netInSL)}</td>
+              </tr>
+              <tr><td colSpan={2} className="pt-3 text-xs text-slate-400 italic">Dividenduitkering is een aparte gespreksvraag voor de fiscalist (NL Box 2-impact).</td></tr>
+            </tbody>
+          </table>
+
+          <div className="mt-5 pt-5 border-t border-slate-100">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Privé vs SL</div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-slate-400">
+                  <th></th><th className="font-normal py-1">Privé (IRNR)</th><th className="font-normal py-1">Via SL (VPB)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td className="py-1 text-slate-600">Spaanse belasting</td><td>19% netto</td><td>{slCalc.vpbRate}% winst</td></tr>
+                <tr><td className="py-1 text-slate-600">Aftrekbare kosten</td><td>Beperkt</td><td>Volledig + afschrijving</td></tr>
+                <tr className="border-t border-slate-100"><td className="py-2 font-semibold">Netto na belasting</td><td className="font-semibold">{fmt(rentCalc.netAfterTax)}</td><td className="font-semibold">{fmt(slCalc.netInSL)}</td></tr>
+              </tbody>
+            </table>
+            <p className="text-xs text-slate-500 italic mt-3">SL is fiscaal voordelig vanaf 2-3 panden of bij herinvestering. Privé is eenvoudiger en goedkoper bij 1 pand.</p>
+          </div>
+        </Card>
+      )}
+
+      {/* NL vs ES */}
+      {mode === 'vergelijk' && (
+        <Card title="Nederland vs Spanje">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <Field label="Hypotheekrente NL %"><input type="number" value={rateNL} step={0.1} onChange={e => setRateNL(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Hypotheekrente ES %"><input type="number" value={rate} step={0.1} onChange={e => setRate(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Huur NL/maand"><input type="number" value={rentNL} onChange={e => setRentNL(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Huur ES/maand"><input type="number" value={rentES} onChange={e => setRentES(Number(e.target.value))} className={inp} /></Field>
+          </div>
+          <table className="w-full text-sm">
+            <thead><tr className="text-left border-b border-slate-100"><th className="py-2"></th><th className="py-2 font-semibold text-center">Nederland</th><th className="py-2 font-semibold text-center">Spanje</th></tr></thead>
+            <tbody>
+              <CompareRow label="Aankoopprijs" nl={price} es={price} />
+              <CompareRow label="Kosten koper" nl={vergelijkCalc.kkNL} es={vergelijkCalc.kkES} />
+              <CompareRow label="Eigen geld nodig" nl={vergelijkCalc.eqNL} es={vergelijkCalc.eqES} />
+              <CompareRow label="Bruto jaarhuur" nl={vergelijkCalc.yearlyRentNL} es={vergelijkCalc.yearlyRentES} />
+              <CompareRow label="− Hypotheekrente" nl={-vergelijkCalc.nlInterest} es={-vergelijkCalc.esInterest} />
+              <CompareRow label="− Beheer + kosten" nl={-vergelijkCalc.nlCosts} es={-vergelijkCalc.esCosts} />
+              <CompareRow label="Operationele cashflow" nl={vergelijkCalc.nlOperational} es={vergelijkCalc.esOperational} />
+              <CompareRow label="− Box 3 heffing" nl={-vergelijkCalc.box3Tax} es={0} />
+              <CompareRow label="− IRNR" nl={0} es={-vergelijkCalc.esIrnr} />
+              <tr className="border-t-2 border-[#0EAE96]">
+                <td className="py-2 font-bold">Netto cashflow</td>
+                <td className="py-2 text-center font-bold">{fmt(vergelijkCalc.nlNet)}</td>
+                <td className="py-2 text-center font-bold text-[#0EAE96]">{fmt(vergelijkCalc.esNet)}</td>
+              </tr>
+              <tr>
+                <td className="py-2 font-semibold">Rendement op eigen geld</td>
+                <td className="py-2 text-center font-semibold">{vergelijkCalc.nlYield.toFixed(1)}%</td>
+                <td className="py-2 text-center font-semibold text-[#0EAE96]">{vergelijkCalc.esYield.toFixed(1)}%</td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="mt-5 text-center p-4 bg-[#0EAE96]/5 rounded-xl border border-[#0EAE96]/20">
+            <div className="text-xs text-slate-500 mb-1">Rendementsverschil</div>
+            <div className={`text-3xl font-bold ${vergelijkCalc.diff > 0 ? 'text-[#0EAE96]' : 'text-red-500'}`}>
+              {vergelijkCalc.diff > 0 ? '+' : ''}{vergelijkCalc.diff.toFixed(1)} procentpunt
+            </div>
+            <div className="text-xs text-slate-500 mt-1">{vergelijkCalc.diff > 0 ? 'voordeel in Spanje' : 'voordeel in Nederland'}</div>
+          </div>
+        </Card>
+      )}
+
+      {/* FLIP */}
+      {mode === 'flip' && (
+        <Card title="Renovatie / Flip">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <Field label="Renovatiebudget (€)"><input type="number" value={renoBudget} onChange={e => setRenoBudget(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Verwachte verkoop (€)"><input type="number" value={sellPrice} onChange={e => setSellPrice(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Renovatie (mnd)"><input type="number" value={renoMonths} onChange={e => setRenoMonths(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Verkoop (mnd)"><input type="number" value={saleMonths} onChange={e => setSaleMonths(Number(e.target.value))} className={inp} /></Field>
+            <Field label="Makelaarscourtage %"><input type="number" value={agentPct} step={0.5} onChange={e => setAgentPct(Number(e.target.value))} className={inp} /></Field>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              <Row label="Aankoopprijs" value={price} />
+              <Row label="Kosten koper" value={kkCalc?.total ?? 0} />
+              <Row label="Renovatiebudget" value={renoBudget} />
+              <Row label="Bouwbegeleiding (5%)" value={flipCalc.buildingSupervision} />
+              <Row label="Onvoorzien (10%)" value={flipCalc.unforeseen} />
+              <tr className="border-t border-slate-200"><td className="py-2 font-semibold">Totale investering</td><td className="py-2 text-right font-semibold">{fmt(flipCalc.totalInv)}</td></tr>
+              <tr><td colSpan={2} className="pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verkoopfase</td></tr>
+              <Row label="Verkoopprijs" value={sellPrice} />
+              <Row label={`− Makelaar (${agentPct}%)`} value={-flipCalc.agentFee} />
+              <Row label="− Plusvalía municipal" value={-flipCalc.plusvalia} />
+              <tr className="border-t border-slate-200"><td className="py-2 font-semibold">Bruto winst</td><td className={`py-2 text-right font-semibold ${flipCalc.capitalGain > 0 ? '' : 'text-red-500'}`}>{fmt(flipCalc.capitalGain)}</td></tr>
+              <Row label="− Vermogenswinstbelasting 19%" value={-flipCalc.capitalGainsTax} />
+              <tr className="border-t-2 border-[#0EAE96]">
+                <td className="py-2 font-bold text-[#0EAE96]">Netto winst</td>
+                <td className={`py-2 text-right font-bold ${flipCalc.netProfit > 0 ? 'text-[#0EAE96]' : 'text-red-500'}`}>{fmt(flipCalc.netProfit)}</td>
+              </tr>
+              <tr><td className="py-2 text-slate-500">ROI</td><td className="py-2 text-right">{flipCalc.roi.toFixed(1)}%</td></tr>
+              <tr><td className="py-2 text-slate-500">ROI per jaar ({renoMonths + saleMonths} mnd)</td><td className="py-2 text-right font-semibold">{flipCalc.roiYearly.toFixed(1)}%</td></tr>
+            </tbody>
+          </table>
+          {flipCalc.netProfit < 0 && <div className="mt-3 flex items-center gap-2 text-xs text-red-600"><AlertTriangle size={14} /> Negatieve marge — verlies op deze flip</div>}
+        </Card>
+      )}
+
+      {/* MEERJAREN PROJECTIE */}
+      {(mode === 'verhuur' || mode === 'sl') && showProjection && (
+        <Card title="Meerjaren projectie">
+          <div className="mb-3">
+            <Field label="Huurindexatie %"><input type="number" value={rentIndex} step={0.1} onChange={e => setRentIndex(Number(e.target.value))} className={inp} /></Field>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-100 text-left">
+                {['Jaar', 'Hypotheek', 'Huur', 'Cashflow', 'Cumulatief', 'Restschuld'].map(h => <th key={h} className="py-2 text-xs text-slate-400 font-medium">{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {projection.map(row => (
+                  <tr key={row.year} className="border-b border-slate-50">
+                    <td className="py-2 font-medium">{row.year}</td>
+                    <td className="py-2 text-slate-600">{fmt(row.mortgage)}</td>
+                    <td className="py-2 text-slate-600">{fmt(row.rent)}</td>
+                    <td className={`py-2 font-medium ${row.cashflow > 0 ? 'text-[#0EAE96]' : 'text-red-500'}`}>{fmt(row.cashflow)}</td>
+                    <td className="py-2 font-semibold">{fmt(row.cumCashflow)}</td>
+                    <td className="py-2 text-slate-500">{fmt(row.remainingMortgage)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </PageLayout>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// CALCULATOR 1: KOSTEN KOPER
-// ═══════════════════════════════════════════════════════════════════════
-
-function KostenKoper({ regions }: { regions: RegionalSettings[] }) {
-  const [regionId, setRegionId] = useState('')
-  const [price, setPrice] = useState(350000)
-  const [type, setType] = useState<'bestaand' | 'nieuwbouw'>('bestaand')
-
-  const region = regions.find(r => r.id === regionId)
-
-  function calcITP(price: number, region: RegionalSettings) {
-    if (region.itp_progressive && region.itp_progressive.length > 0) {
-      let tax = 0; let remaining = price
-      for (const band of region.itp_progressive) {
-        const limit = band.threshold ? band.threshold : Infinity
-        const taxable = Math.min(remaining, limit - (price - remaining))
-        if (taxable <= 0) continue
-        tax += taxable * (band.rate / 100)
-        remaining -= taxable
-        if (remaining <= 0) break
-      }
-      return tax > 0 ? tax : price * (region.itp_percentage / 100)
-    }
-    return price * (region.itp_percentage / 100)
-  }
-
-  const notary = region ? Math.min(Math.max(price * (region.notary_percentage / 100), region.notary_min), region.notary_max) : 0
-  const registro = region ? Math.min(Math.max(price * (region.registro_percentage / 100), region.registro_min), region.registro_max) : 0
-  const lawyer = region ? Math.max(price * (region.lawyer_percentage / 100), region.lawyer_minimum) : 0
-
-  const itp = region && type === 'bestaand' ? calcITP(price, region) : 0
-  const iva = region && type === 'nieuwbouw' ? price * (region.iva_percentage / 100) : 0
-  const ajd = region && type === 'nieuwbouw' ? price * (region.ajd_percentage / 100) : 0
-
-  const totalExtra = (type === 'bestaand' ? itp : iva + ajd) + notary + registro + lawyer
-  const totalAll = price + totalExtra
-  const extraPct = price > 0 ? (totalExtra / price) * 100 : 0
-
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Card>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Regio</label>
-          <select value={regionId} onChange={e => setRegionId(e.target.value)} className={inp}>
-            <option value="">Selecteer regio...</option>
-            {regions.map(r => <option key={r.id} value={r.id}>{r.region}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Aankoopprijs (€)</label>
-          <input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Type</label>
-          <select value={type} onChange={e => setType(e.target.value as 'bestaand' | 'nieuwbouw')} className={inp}>
-            <option value="bestaand">Bestaande bouw</option>
-            <option value="nieuwbouw">Nieuwbouw</option>
-          </select>
-        </div>
-      </div>
-
-      {region && price > 0 && (
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <Row label="Aankoopprijs" value={fmt(price)} bold />
-          <div className="border-t border-slate-200" />
-          {type === 'bestaand' ? (
-            <Row label={`ITP (${pct(region.itp_percentage)})`} value={fmt(itp)} sub={region.itp_progressive ? 'Progressief tarief' : undefined} />
-          ) : (
-            <>
-              <Row label={`IVA / BTW (${pct(region.iva_percentage)})`} value={fmt(iva)} />
-              <Row label={`AJD (${pct(region.ajd_percentage)})`} value={fmt(ajd)} />
-            </>
-          )}
-          <Row label={`Notaris (~${pct(region.notary_percentage)})`} value={fmt(notary)} />
-          <Row label={`Registro (~${pct(region.registro_percentage)})`} value={fmt(registro)} />
-          <Row label={`Advocaat (${pct(region.lawyer_percentage)}, min ${fmt(region.lawyer_minimum)})`} value={fmt(lawyer)} />
-          <div className="border-t border-slate-200" />
-          <Row label={`Totaal bijkomende kosten`} value={`${fmt(totalExtra)} (${extraPct.toFixed(1)}%)`} bold />
-          <div className="border-t-2 border-[#004B46]" />
-          <Row label="TOTAAL INCLUSIEF KOSTEN" value={fmt(totalAll)} bold highlight />
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// CALCULATOR 2: NETTO RENDEMENT
-// ═══════════════════════════════════════════════════════════════════════
-
-function NettoRendement({ regions }: { regions: RegionalSettings[] }) {
-  const [regionId, setRegionId] = useState('')
-  const [price, setPrice] = useState(300000)
-  const [monthlyRent, setMonthlyRent] = useState(1500)
-  const [ibi, setIbi] = useState(0)
-  const [vve, setVve] = useState(0)
-  const [basura, setBasura] = useState(200)
-  const [insurance, setInsurance] = useState(400)
-  const [maintenancePct, setMaintenancePct] = useState(1)
-  const [managementPct, setManagementPct] = useState(0)
-  const [taxRate, setTaxRate] = useState(19)
-
-  const region = regions.find(r => r.id === regionId)
-
-  useEffect(() => {
-    if (region) {
-      setIbi(Math.round(price * (region.property_tax_percentage / 100)))
-      setVve(Math.round(region.community_fees_avg_monthly * 12))
-    }
-  }, [region, price])
-
-  const yearlyRent = monthlyRent * 12
-  const maintenance = Math.round(price * (maintenancePct / 100))
-  const management = Math.round(yearlyRent * (managementPct / 100))
-  const costsBeforeTax = ibi + vve + basura + insurance + maintenance + management
-  const netBeforeTax = yearlyRent - costsBeforeTax
-  const irnr = Math.round(Math.max(netBeforeTax, 0) * (taxRate / 100))
-  const totalCosts = costsBeforeTax + irnr
-  const netIncome = yearlyRent - totalCosts
-  const grossYield = price > 0 ? (yearlyRent / price) * 100 : 0
-  const netYield = price > 0 ? (netIncome / price) * 100 : 0
-
-  return (
-    <Card>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Regio</label>
-          <select value={regionId} onChange={e => setRegionId(e.target.value)} className={inp}>
-            <option value="">Selecteer...</option>
-            {regions.map(r => <option key={r.id} value={r.id}>{r.region}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Aankoopprijs (€)</label>
-          <input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Maandhuur (€)</label>
-          <input type="number" value={monthlyRent} onChange={e => setMonthlyRent(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">IRNR tarief (%)</label>
-          <select value={taxRate} onChange={e => setTaxRate(Number(e.target.value))} className={inp}>
-            <option value={19}>19% (EU-ingezetene)</option>
-            <option value={24}>24% (niet-EU)</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6">
-        <CostInput label="IBI" value={ibi} onChange={setIbi} />
-        <CostInput label="VvE/jaar" value={vve} onChange={setVve} />
-        <CostInput label="Basura" value={basura} onChange={setBasura} />
-        <CostInput label="Verzekering" value={insurance} onChange={setInsurance} />
-        <CostInput label="Onderhoud %" value={maintenancePct} onChange={setMaintenancePct} isPercent />
-        <CostInput label="Beheer %" value={managementPct} onChange={setManagementPct} isPercent />
-      </div>
-
-      {price > 0 && monthlyRent > 0 && (
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <Row label="Bruto jaarhuur" value={fmt(yearlyRent)} bold />
-          <div className="border-t border-slate-200" />
-          <Row label="IBI" value={fmt(ibi)} />
-          <Row label="VvE" value={fmt(vve)} />
-          <Row label="Basura" value={fmt(basura)} />
-          <Row label="Verzekering" value={fmt(insurance)} />
-          <Row label={`Onderhoud (${maintenancePct}%)`} value={fmt(maintenance)} />
-          {management > 0 && <Row label={`Beheer (${managementPct}%)`} value={fmt(management)} />}
-          <Row label={`IRNR (${taxRate}% over netto)`} value={fmt(irnr)} />
-          <div className="border-t border-slate-200" />
-          <Row label="Totale jaarkosten" value={fmt(totalCosts)} bold />
-          <Row label="Netto huurinkomsten" value={fmt(netIncome)} bold highlight={netIncome > 0} />
-          <div className="border-t-2 border-[#004B46]" />
-          <Row label="Bruto rendement" value={`${grossYield.toFixed(1)}%`} bold />
-          <Row label="Netto rendement" value={`${netYield.toFixed(1)}%`} bold highlight={netYield > 0} />
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// CALCULATOR 3: HYPOTHEEKLASTEN
-// ═══════════════════════════════════════════════════════════════════════
-
-function Hypotheeklasten() {
-  const [price, setPrice] = useState(400000)
-  const [downPct, setDownPct] = useState(30)
-  const [rate, setRate] = useState(3.5)
-  const [years, setYears] = useState(25)
-
-  const downPayment = Math.round(price * (downPct / 100))
-  const mortgage = price - downPayment
-  const monthlyRate = rate / 100 / 12
-  const totalMonths = years * 12
-
-  let monthly = 0
-  if (mortgage > 0 && monthlyRate > 0 && totalMonths > 0) {
-    monthly = mortgage * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1)
-  }
-
-  const totalPaid = monthly * totalMonths
-  const totalInterest = totalPaid - mortgage
-
-  return (
-    <Card>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Aankoopprijs (€)</label>
-          <input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Eigen inbreng (%)</label>
-          <input type="number" value={downPct} onChange={e => setDownPct(Number(e.target.value))} min={0} max={100} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Looptijd (jaren)</label>
-          <input type="number" value={years} onChange={e => setYears(Number(e.target.value))} min={5} max={30} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Rente (%)</label>
-          <input type="number" value={rate} step={0.1} onChange={e => setRate(Number(e.target.value))} className={inp} />
-        </div>
-      </div>
-
-      {/* Rente slider */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-          <span>2%</span>
-          <span className="font-semibold text-[#004B46]">{rate.toFixed(1)}% → {fmt(Math.round(monthly))}/mnd</span>
-          <span>6%</span>
-        </div>
-        <input type="range" min={2} max={6} step={0.1} value={rate} onChange={e => setRate(Number(e.target.value))}
-          className="w-full accent-[#004B46]" />
-      </div>
-
-      {price > 0 && mortgage > 0 && (
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <Row label="Aankoopprijs" value={fmt(price)} />
-          <Row label={`Eigen inbreng (${downPct}%)`} value={fmt(downPayment)} />
-          <Row label="Hypotheekbedrag" value={fmt(mortgage)} bold />
-          <div className="border-t border-slate-200" />
-          <Row label="Rente" value={pct(rate)} />
-          <Row label="Looptijd" value={`${years} jaar`} />
-          <div className="border-t-2 border-[#004B46]" />
-          <Row label="Maandlast" value={fmt(Math.round(monthly))} bold highlight />
-          <Row label="Totaal over looptijd" value={fmt(Math.round(totalPaid))} />
-          <Row label="Waarvan rente" value={fmt(Math.round(totalInterest))} />
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// CALCULATOR 4: RENOVATIEBUDGET
-// ═══════════════════════════════════════════════════════════════════════
-
-function Renovatiebudget({ defaults, regions }: { defaults: RenovationDefaults; regions: RegionalSettings[] }) {
-  const [m2, setM2] = useState(100)
-  const [renoType, setRenoType] = useState<'cosmetic' | 'partial' | 'full' | 'luxury'>('partial')
-  const [costPerM2, setCostPerM2] = useState(defaults.partial)
-  const [architect, setArchitect] = useState(defaults.architect)
-  const [contingencyPct, setContingencyPct] = useState(defaults.contingency)
-  // Optioneel: koppel aan aankoop
-  const [price, setPrice] = useState(0)
-  const [regionId, setRegionId] = useState('')
-
-  useEffect(() => {
-    const typeDefaults = { cosmetic: defaults.cosmetic, partial: defaults.partial, full: defaults.full, luxury: defaults.luxury }
-    setCostPerM2(typeDefaults[renoType])
-  }, [renoType, defaults])
-
-  const renoCost = m2 * costPerM2
-  const contingency = Math.round(renoCost * (contingencyPct / 100))
-  const totalReno = renoCost + architect + contingency
-
-  return (
-    <Card>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Oppervlakte (m²)</label>
-          <input type="number" value={m2} onChange={e => setM2(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Type renovatie</label>
-          <select value={renoType} onChange={e => setRenoType(e.target.value as typeof renoType)} className={inp}>
-            <option value="cosmetic">Cosmetisch</option>
-            <option value="partial">Gedeeltelijk</option>
-            <option value="full">Volledig</option>
-            <option value="luxury">Luxe</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Kosten per m² (€)</label>
-          <input type="number" value={costPerM2} onChange={e => setCostPerM2(Number(e.target.value))} className={inp} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Architect (€)</label>
-          <input type="number" value={architect} onChange={e => setArchitect(Number(e.target.value))} className={inp} />
-        </div>
-      </div>
-
-      {m2 > 0 && (
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <Row label={`Oppervlakte`} value={`${m2} m²`} />
-          <Row label={`Kosten per m²`} value={fmt(costPerM2)} />
-          <div className="border-t border-slate-200" />
-          <Row label="Renovatiekosten" value={fmt(renoCost)} />
-          <Row label="Architect / vergunningen" value={fmt(architect)} />
-          <Row label={`Onvoorzien (${contingencyPct}%)`} value={fmt(contingency)} />
-          <div className="border-t-2 border-[#004B46]" />
-          <Row label="TOTAAL RENOVATIEBUDGET" value={fmt(totalReno)} bold highlight />
-        </div>
-      )}
-
-      {/* Optioneel: all-in met aankoopprijs */}
-      <div className="mt-6 pt-4 border-t border-slate-100">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Optioneel: all-in berekening</div>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Aankoopprijs (€)</label>
-            <input type="number" value={price || ''} onChange={e => setPrice(Number(e.target.value))} placeholder="Optioneel" className={inp} />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Regio (voor kosten koper)</label>
-            <select value={regionId} onChange={e => setRegionId(e.target.value)} className={inp}>
-              <option value="">Geen</option>
-              {regions.map(r => <option key={r.id} value={r.id}>{r.region}</option>)}
-            </select>
-          </div>
-        </div>
-        {price > 0 && (() => {
-          const region = regions.find(r => r.id === regionId)
-          const kostenKoper = region ? Math.round(price * ((region.itp_percentage + region.notary_percentage + region.registro_percentage + region.lawyer_percentage) / 100)) : 0
-          const allIn = price + kostenKoper + totalReno
-          return (
-            <div className="bg-[#004B46]/5 border border-[#004B46]/15 rounded-xl p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Aankoop + kosten koper + renovatie</span>
-                <span className="font-bold text-[#004B46] text-lg">{fmt(allIn)}</span>
-              </div>
-            </div>
-          )
-        })()}
-      </div>
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// SHARED COMPONENTS
-// ═══════════════════════════════════════════════════════════════════════
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">{children}</div>
-}
-
-function Row({ label, value, bold, highlight, sub }: { label: string; value: string; bold?: boolean; highlight?: boolean; sub?: string }) {
-  return (
-    <div className={`flex items-center justify-between px-4 py-2.5 ${bold ? 'bg-slate-50' : ''}`}>
-      <div>
-        <span className={`text-sm ${bold ? 'font-semibold text-slate-800' : 'text-slate-600'}`}>{label}</span>
-        {sub && <span className="text-[10px] text-slate-400 ml-2">{sub}</span>}
-      </div>
-      <span className={`text-sm tabular-nums ${bold ? 'font-bold' : 'font-medium'} ${highlight ? 'text-[#004B46]' : 'text-slate-800'}`}>{value}</span>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4">
+      <h3 className="text-sm font-semibold text-slate-700 mb-4">{title}</h3>
+      {children}
     </div>
   )
 }
 
-function CostInput({ label, value, onChange, isPercent }: { label: string; value: number; onChange: (n: number) => void; isPercent?: boolean }) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[10px] text-slate-400 mb-0.5">{label}</label>
-      <input type="number" value={value} onChange={e => onChange(Number(e.target.value))} step={isPercent ? 0.5 : 50}
-        className="w-full border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-slate-400 tabular-nums" />
+      <label className="block text-xs text-slate-500 mb-1">{label}</label>
+      {children}
     </div>
   )
 }
 
-const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20'
+function Row({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+  const neg = value < 0
+  return (
+    <tr className={bold ? 'font-semibold' : ''}>
+      <td className="py-1.5 text-slate-600">{label}</td>
+      <td className={`py-1.5 text-right tabular-nums ${neg ? 'text-red-500' : ''}`}>{fmt(Math.abs(value))}</td>
+    </tr>
+  )
+}
+
+function CompareRow({ label, nl, es }: { label: string; nl: number; es: number }) {
+  return (
+    <tr className="border-b border-slate-50">
+      <td className="py-1.5 text-slate-600">{label}</td>
+      <td className={`py-1.5 text-center tabular-nums ${nl < 0 ? 'text-red-500' : ''}`}>{nl === 0 ? '—' : fmt(Math.abs(nl))}</td>
+      <td className={`py-1.5 text-center tabular-nums ${es < 0 ? 'text-red-500' : ''}`}>{es === 0 ? '—' : fmt(Math.abs(es))}</td>
+    </tr>
+  )
+}
+
+const inp = 'w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 bg-white'
