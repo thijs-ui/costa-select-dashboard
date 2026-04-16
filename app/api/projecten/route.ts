@@ -1,24 +1,31 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { createUserClient } from '@/lib/supabase/user-client'
+import { requireAuth } from '@/lib/auth/permissions'
+
+const PROJECT_COLUMNS = 'id, name, description, owner_id, target_date, status, color, sort_order'
 
 export async function GET(request: Request) {
-  const supabase = createServiceClient()
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
+  const supabase = await createUserClient()
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
 
   if (id) {
     const [projectRes, phasesRes, todosRes] = await Promise.all([
-      supabase.from('projects').select('*').eq('id', id).single(),
-      supabase.from('project_phases').select('*').eq('project_id', id).order('sort_order'),
-      supabase.from('todos').select('*').eq('project_id', id).order('created_at'),
+      supabase.from('projects').select(PROJECT_COLUMNS).eq('id', id).single(),
+      supabase.from('project_phases').select('id, project_id, name, sort_order').eq('project_id', id).order('sort_order'),
+      supabase.from('todos').select('id, project_id, phase_id, title, status, completed_at, is_week_focus, assigned_to, due_date, created_at').eq('project_id', id).order('created_at'),
     ])
     if (projectRes.error) return NextResponse.json({ error: projectRes.error.message }, { status: 500 })
     return NextResponse.json({ ...projectRes.data, phases: phasesRes.data ?? [], todos: todosRes.data ?? [] })
   }
 
   // Overzicht: projecten + todos count
-  const { data: projects, error } = await supabase.from('projects').select('*').order('sort_order')
+  const { data: projects, error } = await supabase.from('projects').select(PROJECT_COLUMNS).order('sort_order')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Haal todos counts per project

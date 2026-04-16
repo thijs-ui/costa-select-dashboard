@@ -1,15 +1,30 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { createUserClient } from '@/lib/supabase/user-client'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
-// GET: alle trips ophalen
+const TRIP_COLUMNS = 'id, client_name, client_email, client_phone, trip_date, start_time, start_address, lunch_time, lunch_duration_minutes, notes, created_by, created_at'
+
+// GET: alle trips ophalen (admin ziet alles, anders alleen eigen trips)
 export async function GET() {
-  const supabase = createServiceClient()
-  const { data, error } = await supabase
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
+  const role = await getUserRole(auth.id)
+  const supabase = await createUserClient()
+
+  let query = supabase
     .from('viewing_trips')
-    .select('*, viewing_stops(id)')
+    .select(`${TRIP_COLUMNS}, viewing_stops(id)`)
     .order('trip_date', { ascending: true })
 
+  if (role !== 'admin') {
+    query = query.eq('created_by', auth.id)
+  }
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const trips = (data ?? []).map(t => ({

@@ -1,9 +1,14 @@
-import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { createUserClient } from '@/lib/supabase/user-client'
+import { requireAuth, requireAdmin } from '@/lib/auth/permissions'
 
 export async function GET() {
-  const supabase = createServiceClient()
+  // Lezen mag iedere ingelogde user. User-client + RLS doet de rest.
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
+  const supabase = await createUserClient()
   const { data, error } = await supabase
     .from('regional_settings')
     .select('*')
@@ -14,6 +19,12 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  // Muteren = admin-only. Voor nu nog service-client, zodat dit werkt
+  // ongeacht of er al een INSERT/UPDATE RLS-policy voor admins staat.
+  // Kan later overgaan naar user-client zodra RLS 'admin-write' toelaat.
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { id, ...updates } = body
@@ -28,6 +39,9 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
 

@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { createUserClient } from '@/lib/supabase/user-client'
+import { requireAuth } from '@/lib/auth/permissions'
 
+// TODO security: `internal_notes` en `commission_arrangement` horen volgens de UI
+// ("alleen admins") niet zichtbaar voor makelaar/backoffice. In deze migratie
+// behouden we huidige gedrag (iedere ingelogde user ziet ze) — afschermen
+// vergt ook een wijziging in de edit-modal en valt buiten deze scope.
 export async function GET() {
-  const supabase = createServiceClient()
-  const { data, error } = await supabase.from('partners').select('*').order('name')
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
+  const supabase = await createUserClient()
+  const { data, error } = await supabase
+    .from('partners')
+    .select('id, name, type, region, contact_name, contact_phone, contact_email, website, specialism, internal_notes, commission_arrangement')
+    .order('name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
 }
