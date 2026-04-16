@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { createUserClient } from '@/lib/supabase/user-client'
+import { createUserClient } from '../../../lib/supabase/user-client'
 import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 
 export async function GET() {

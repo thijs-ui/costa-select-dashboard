@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { getServerUser } from '@/lib/server-auth'
-import { getUserRole, type Role } from '@/lib/auth/roles'
+import { getUserRole, type Role } from '../auth/roles'
 
 /**
  * Permission-helpers voor API-routes.
