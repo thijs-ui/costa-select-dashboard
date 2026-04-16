@@ -459,20 +459,20 @@ export default function NieuwbouwkaartPage() {
         <>
           <div className="fixed inset-0 bg-black/40 z-[60]" onClick={closeDossierModal} />
           <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-8" onClick={e => e.stopPropagation()}>
               {dossierResult ? (
                 /* Succes */
-                <div className="text-center py-4">
-                  <Check size={40} className="mx-auto mb-3 text-emerald-500" />
-                  <h3 className="text-lg font-bold text-[#004B46] mb-1">Dossier aangemaakt!</h3>
+                <div className="text-center py-6">
+                  <Check size={52} className="mx-auto mb-4 text-emerald-500" />
+                  <h3 className="text-xl font-bold text-[#004B46] mb-2">Dossier aangemaakt!</h3>
                   <p className="text-sm text-slate-500 mb-6">{selected.title}</p>
                   <div className="flex justify-center gap-3">
                     <button onClick={() => router.push(`/dossier`)}
-                      className="bg-[#004B46] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
+                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
                       Bekijk dossier
                     </button>
                     <button onClick={closeDossierModal}
-                      className="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
+                      className="bg-white border border-gray-200 text-gray-700 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
                       Blijf op kaart
                     </button>
                   </div>
@@ -480,33 +480,33 @@ export default function NieuwbouwkaartPage() {
               ) : (
                 /* Keuze */
                 <>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Dossier genereren</h3>
-                    <button onClick={closeDossierModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-base font-semibold text-slate-900">Dossier genereren</h3>
+                    <button onClick={closeDossierModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
                   </div>
-                  <p className="text-xs text-slate-500 mb-4">{selected.title}</p>
+                  <p className="text-sm text-slate-500 mb-5">{selected.title}</p>
 
-                  <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="grid grid-cols-2 gap-4 mb-5">
                     <button onClick={() => setDossierMode('presentatie')}
-                      className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'presentatie' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Eye size={18} className={dossierMode === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
-                      <div className="text-sm font-semibold mt-1">Presenteren</div>
-                      <div className="text-[10px] text-gray-500">Feitelijk + units</div>
+                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'presentatie' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Eye size={20} className={dossierMode === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-base font-semibold mt-2">Presenteren</div>
+                      <div className="text-xs text-gray-500 mt-1">Feitelijk + units</div>
                     </button>
                     <button onClick={() => setDossierMode('pitch')}
-                      className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'pitch' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Megaphone size={18} className={dossierMode === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
-                      <div className="text-sm font-semibold mt-1">Pitchen</div>
-                      <div className="text-[10px] text-gray-500">Met AI-analyse + units</div>
+                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'pitch' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Megaphone size={20} className={dossierMode === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-base font-semibold mt-2">Pitchen</div>
+                      <div className="text-xs text-gray-500 mt-1">Met AI-analyse + units</div>
                     </button>
                   </div>
 
-                  {dossierError && <p className="text-xs text-red-500 mb-3">{dossierError}</p>}
+                  {dossierError && <p className="text-sm text-red-500 mb-3">{dossierError}</p>}
 
                   <div className="flex justify-end gap-2">
-                    <button onClick={closeDossierModal} className="text-sm text-slate-500 hover:text-slate-700 px-3 py-2 cursor-pointer">Annuleren</button>
+                    <button onClick={closeDossierModal} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5 cursor-pointer">Annuleren</button>
                     <button onClick={generateDossier} disabled={!dossierMode || dossierGenerating}
-                      className="bg-[#004B46] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#0A6B63] disabled:opacity-50 cursor-pointer flex items-center gap-2">
+                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] disabled:opacity-50 cursor-pointer flex items-center gap-2">
                       {dossierGenerating ? <><Loader2 size={14} className="animate-spin" /> Genereren...</> : 'Genereer'}
                     </button>
                   </div>

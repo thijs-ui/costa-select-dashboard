@@ -35,6 +35,9 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [autoTitle, setAutoTitle] = useState('')
+  const [rewriting, setRewriting] = useState(false)
+  const [rewriteTarget, setRewriteTarget] = useState('')
 
   const selectedPlatform = platforms.find(p => p.key === platform)
 
@@ -56,7 +59,8 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
         }),
       })
       if (res.ok) {
-        const { content } = await res.json()
+        const { content, title: genTitle } = await res.json()
+        if (genTitle) setAutoTitle(genTitle)
         if (versions.length === 0) {
           setVersions([content])
           setEditContent(content)
@@ -83,9 +87,35 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
 
   const [saveError, setSaveError] = useState('')
 
+  async function rewriteForPlatform(target: string) {
+    if (!editContent || !target) return
+    setRewriting(true)
+    try {
+      const res = await fetch('/api/marketing/rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editContent, sourcePlatform: platform, targetPlatform: target }),
+      })
+      if (res.ok) {
+        const { content } = await res.json()
+        if (versions.length < 3) {
+          setVersions([...versions, content])
+          setEditContent(content)
+          setEditIndex(versions.length)
+        } else {
+          setVersions([...versions.slice(1), content])
+          setEditContent(content)
+          setEditIndex(2)
+        }
+      }
+    } catch { /* ignore */ }
+    setRewriting(false)
+    setRewriteTarget('')
+  }
+
   async function saveToLibrary(favorite = false) {
     setSaveError('')
-    const title = prompt.trim().substring(0, 80) || 'Zonder titel'
+    const title = autoTitle || prompt.trim().substring(0, 80) || 'Zonder titel'
     try {
       const res = await fetch('/api/marketing/save', {
         method: 'POST',
@@ -227,6 +257,19 @@ export default function ContentGenerator({ category, platforms, placeholder, ext
               className="flex items-center gap-1.5 px-3 py-2 text-[#F5AF40] hover:text-[#E09B20] cursor-pointer">
               <Star size={16} fill="currentColor" />
             </button>
+            <select value={rewriteTarget} onChange={e => { setRewriteTarget(e.target.value); if (e.target.value) rewriteForPlatform(e.target.value) }}
+              disabled={rewriting}
+              className="ml-auto text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#004B46] cursor-pointer disabled:opacity-50">
+              <option value="">{rewriting ? 'Herschrijven...' : 'Herschrijf voor...'}</option>
+              <option value="linkedin">LinkedIn post</option>
+              <option value="instagram">Instagram caption</option>
+              <option value="facebook">Facebook post</option>
+              <option value="meta_ads">Meta Ads</option>
+              <option value="linkedin_ads">LinkedIn Ads</option>
+              <option value="email">Email / nieuwsbrief</option>
+              <option value="blog">Blogartikel</option>
+              <option value="brochure">Brochure</option>
+            </select>
             {saveError && <span className="text-xs text-red-500 ml-2">{saveError}</span>}
           </div>
         </div>

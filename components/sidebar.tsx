@@ -102,7 +102,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   function renderNavItem(item: { href: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> }) {
     const { href, label, icon: Icon } = item
-    const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
+    // Exact match, of starts-with + volgend teken is '/' (om /dashboard te matchen tegen /dashboard/x maar niet /dashboard tegen /dashboard/deals als Overzicht ook /dashboard is)
+    const isActive = pathname === href || (href !== '/' && href !== '/dashboard' && pathname.startsWith(href + '/'))
     return (
       <Link
         key={href}

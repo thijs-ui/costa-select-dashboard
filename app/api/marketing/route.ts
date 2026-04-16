@@ -125,7 +125,22 @@ export async function POST(request: Request) {
     })
 
     const content = message.content[0].type === 'text' ? message.content[0].text : ''
-    return NextResponse.json({ content })
+
+    // Genereer een korte titel (max 60 tekens) op basis van de content
+    let title = ''
+    try {
+      const titleMsg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: `Geef een korte, beschrijvende titel (max 60 tekens, in het Nederlands) voor deze marketing content. Gebruik de naam/onderwerp dat erin voorkomt. Geen inleiding, alleen de titel zelf, zonder aanhalingstekens.\n\nContent:\n${content.substring(0, 1000)}`,
+        }],
+      })
+      title = (titleMsg.content[0].type === 'text' ? titleMsg.content[0].text : '').trim().replace(/^["']|["']$/g, '').substring(0, 80)
+    } catch { /* fallback: lege titel */ }
+
+    return NextResponse.json({ content, title })
   } catch (err) {
     console.error('Marketing generate failed:', err)
     return NextResponse.json({ error: 'Content genereren mislukt' }, { status: 500 })

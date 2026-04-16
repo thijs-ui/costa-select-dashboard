@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { PageLayout } from '@/components/page-layout'
-import { Home, Wallet, Building2, BarChart3, Hammer, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Home, Wallet, Building2, Hammer, AlertTriangle } from 'lucide-react'
 
-type Mode = 'eigen' | 'verhuur' | 'sl' | 'vergelijk' | 'flip'
+type Mode = 'eigen' | 'verhuur' | 'sl' | 'flip'
 
 interface Bracket { threshold: number | null; rate: number }
 interface RegionalSettings {
@@ -59,7 +59,6 @@ const MODES: { key: Mode; label: string; icon: typeof Home; desc: string }[] = [
   { key: 'eigen', label: 'Eigen gebruik', icon: Home, desc: 'Tweede woning voor persoonlijk gebruik' },
   { key: 'verhuur', label: 'Verhuur (privé)', icon: Wallet, desc: 'Privé-investering met verhuur' },
   { key: 'sl', label: 'Investering SL', icon: Building2, desc: 'Via Sociedad Limitada' },
-  { key: 'vergelijk', label: 'NL vs Spanje', icon: BarChart3, desc: 'Side-by-side vergelijking' },
   { key: 'flip', label: 'Renovatie / Flip', icon: Hammer, desc: 'Aankoop + renovatie + verkoop' },
 ]
 
@@ -99,11 +98,6 @@ export default function CalculatorsPage() {
   const [renoMonths, setRenoMonths] = useState(6)
   const [saleMonths, setSaleMonths] = useState(4)
   const [agentPct, setAgentPct] = useState(4)
-
-  // NL vs ES
-  const [rateNL, setRateNL] = useState(5.5)
-  const [rentNL, setRentNL] = useState(1200)
-  const [rentES, setRentES] = useState(1800)
 
   // Meerjaren projectie
   const [showProjection, setShowProjection] = useState(false)
@@ -203,40 +197,6 @@ export default function CalculatorsPage() {
     return { totalInv, buildingSupervision, unforeseen, agentFee, plusvalia, capitalGain, capitalGainsTax, netProfit, roi, roiYearly }
   }, [price, kkCalc, renoBudget, sellPrice, agentPct, renoMonths, saleMonths])
 
-  // ===== NL vs ES =====
-  const vergelijkCalc = useMemo(() => {
-    const kkES = kkCalc?.total ?? 0
-    const kkNL = price * 0.09 // NL kosten koper ~9%
-    const eqES = downPayment + kkES
-    const eqNL = downPayment + kkNL
-    const mortES = price - downPayment
-    const mortNL = mortES
-
-    // ES
-    const yearlyRentES = rentES * 12
-    const esInterest = mortES * (rate / 100) * 0.8
-    const esCosts = yearlyRentES * 0.13 + ibiMonthly * 12 + vveMonthly * 12 + insuranceMonthly * 12
-    const esOperational = yearlyRentES - esInterest - esCosts
-    const esIrnr = Math.max(esOperational, 0) * 0.19
-    const esNet = esOperational - esIrnr
-
-    // NL Box 3
-    const yearlyRentNL = rentNL * 12
-    const nlInterest = mortNL * (rateNL / 100) * 0.8
-    const nlCosts = yearlyRentNL * 0.10 + 2000 + 1500 // beheer + gemeentebelastingen
-    const nlOperational = yearlyRentNL - nlInterest - nlCosts
-    // Box 3
-    const fictiefBez = price * 0.0604
-    const fictiefSch = mortNL * 0.0247
-    const box3Base = Math.max(fictiefBez - fictiefSch - 57684, 0)
-    const box3Tax = box3Base * 0.3697
-    const nlNet = nlOperational - box3Tax
-
-    const esYield = eqES > 0 ? (esNet / eqES) * 100 : 0
-    const nlYield = eqNL > 0 ? (nlNet / eqNL) * 100 : 0
-
-    return { kkES, kkNL, eqES, eqNL, yearlyRentES, yearlyRentNL, esInterest, nlInterest, esCosts, nlCosts, esOperational, nlOperational, esIrnr, box3Tax, esNet, nlNet, esYield, nlYield, diff: esYield - nlYield }
-  }, [kkCalc, price, downPayment, rentES, rentNL, rate, rateNL, ibiMonthly, vveMonthly, insuranceMonthly])
 
   // ===== MEERJAREN PROJECTIE =====
   const projection = useMemo(() => {
@@ -296,10 +256,16 @@ export default function CalculatorsPage() {
             </select>
           </Field>
           <Field label="Resident in Spanje?">
-            <label className="flex items-center gap-2 h-[34px] text-sm">
-              <input type="checkbox" checked={isResident} onChange={e => setIsResident(e.target.checked)} className="rounded border-gray-300" />
-              {isResident ? 'Ja' : 'Nee'}
-            </label>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+              <button onClick={() => setIsResident(true)}
+                className={`px-4 py-1 rounded-md text-sm font-medium transition-all cursor-pointer ${isResident ? 'bg-[#0EAE96] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                Ja
+              </button>
+              <button onClick={() => setIsResident(false)}
+                className={`px-4 py-1 rounded-md text-sm font-medium transition-all cursor-pointer ${!isResident ? 'bg-[#0EAE96] text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                Nee
+              </button>
+            </div>
           </Field>
         </div>
       </Card>
@@ -330,8 +296,8 @@ export default function CalculatorsPage() {
         </Card>
       )}
 
-      {/* Financiering — voor alle modi behalve vergelijk/flip */}
-      {mode !== 'vergelijk' && mode !== 'flip' && (
+      {/* Financiering + Totale investering + Maandlasten — in juiste volgorde */}
+      {mode !== 'flip' && (
         <>
           <Card title="Financiering">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -340,7 +306,13 @@ export default function CalculatorsPage() {
               <Field label={`Rente: ${rate.toFixed(1)}%`}>
                 <input type="range" min={0} max={10} step={0.1} value={rate} onChange={e => setRate(Number(e.target.value))} className="w-full accent-[#004B46]" />
               </Field>
-              <Field label="Aflossing"><select className={inp} disabled><option>Annuïtair</option></select></Field>
+              <Field label="Aflossing">
+                <select className={inp} defaultValue="annuitair">
+                  <option value="annuitair">Annuïtair</option>
+                  <option value="lineair">Lineair</option>
+                  <option value="aflossingsvrij">Aflossingsvrij</option>
+                </select>
+              </Field>
             </div>
             <div className="grid grid-cols-3 gap-3 text-sm pt-3 border-t border-slate-100">
               <div><span className="text-slate-500">Hypotheek</span><div className="font-bold text-slate-800">{fmt(mortgage)}</div></div>
@@ -348,18 +320,6 @@ export default function CalculatorsPage() {
               <div><span className="text-slate-500">Maandlast hypotheek</span><div className="font-bold text-[#0EAE96]">{fmt(Math.round(monthlyMortgage))}</div></div>
             </div>
             {ltvWarning && <div className="mt-3 flex items-center gap-2 text-xs text-red-600"><AlertTriangle size={14} /> LTV overschrijdt maximum voor {isResident ? 'resident' : 'niet-resident'} ({maxLTV}%). Spaanse banken financieren max {maxLTV}%.</div>}
-          </Card>
-
-          <Card title="Maandlasten">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field label="IBI/mnd"><input type="number" value={ibiMonthly} onChange={e => setIbiMonthly(Number(e.target.value))} className={inp} /></Field>
-              <Field label="VvE/mnd"><input type="number" value={vveMonthly} onChange={e => setVveMonthly(Number(e.target.value))} className={inp} /></Field>
-              <Field label="Verzekering/mnd"><input type="number" value={insuranceMonthly} onChange={e => setInsuranceMonthly(Number(e.target.value))} className={inp} /></Field>
-            </div>
-            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between">
-              <span className="text-sm font-semibold text-slate-700">Totaal per maand</span>
-              <span className="font-bold text-[#0EAE96]">{fmt(Math.round(totalMonthly))}</span>
-            </div>
           </Card>
 
           <Card title="Totale investering">
@@ -374,6 +334,18 @@ export default function CalculatorsPage() {
                 <tr><td className="py-2 text-slate-500">Eigen geld nodig</td><td className="py-2 text-right text-slate-700">{fmt(ownMoneyNeeded)}</td></tr>
               </tbody>
             </table>
+          </Card>
+
+          <Card title="Maandlasten">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label="IBI/mnd"><input type="number" value={ibiMonthly} onChange={e => setIbiMonthly(Number(e.target.value))} className={inp} /></Field>
+              <Field label="VvE/mnd"><input type="number" value={vveMonthly} onChange={e => setVveMonthly(Number(e.target.value))} className={inp} /></Field>
+              <Field label="Verzekering/mnd"><input type="number" value={insuranceMonthly} onChange={e => setInsuranceMonthly(Number(e.target.value))} className={inp} /></Field>
+            </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between">
+              <span className="text-sm font-semibold text-slate-700">Totaal per maand</span>
+              <span className="font-bold text-[#0EAE96]">{fmt(Math.round(totalMonthly))}</span>
+            </div>
           </Card>
         </>
       )}
@@ -464,48 +436,6 @@ export default function CalculatorsPage() {
       )}
 
       {/* NL vs ES */}
-      {mode === 'vergelijk' && (
-        <Card title="Nederland vs Spanje">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <Field label="Hypotheekrente NL %"><input type="number" value={rateNL} step={0.1} onChange={e => setRateNL(Number(e.target.value))} className={inp} /></Field>
-            <Field label="Hypotheekrente ES %"><input type="number" value={rate} step={0.1} onChange={e => setRate(Number(e.target.value))} className={inp} /></Field>
-            <Field label="Huur NL/maand"><input type="number" value={rentNL} onChange={e => setRentNL(Number(e.target.value))} className={inp} /></Field>
-            <Field label="Huur ES/maand"><input type="number" value={rentES} onChange={e => setRentES(Number(e.target.value))} className={inp} /></Field>
-          </div>
-          <table className="w-full text-sm">
-            <thead><tr className="text-left border-b border-slate-100"><th className="py-2"></th><th className="py-2 font-semibold text-center">Nederland</th><th className="py-2 font-semibold text-center">Spanje</th></tr></thead>
-            <tbody>
-              <CompareRow label="Aankoopprijs" nl={price} es={price} />
-              <CompareRow label="Kosten koper" nl={vergelijkCalc.kkNL} es={vergelijkCalc.kkES} />
-              <CompareRow label="Eigen geld nodig" nl={vergelijkCalc.eqNL} es={vergelijkCalc.eqES} />
-              <CompareRow label="Bruto jaarhuur" nl={vergelijkCalc.yearlyRentNL} es={vergelijkCalc.yearlyRentES} />
-              <CompareRow label="− Hypotheekrente" nl={-vergelijkCalc.nlInterest} es={-vergelijkCalc.esInterest} />
-              <CompareRow label="− Beheer + kosten" nl={-vergelijkCalc.nlCosts} es={-vergelijkCalc.esCosts} />
-              <CompareRow label="Operationele cashflow" nl={vergelijkCalc.nlOperational} es={vergelijkCalc.esOperational} />
-              <CompareRow label="− Box 3 heffing" nl={-vergelijkCalc.box3Tax} es={0} />
-              <CompareRow label="− IRNR" nl={0} es={-vergelijkCalc.esIrnr} />
-              <tr className="border-t-2 border-[#0EAE96]">
-                <td className="py-2 font-bold">Netto cashflow</td>
-                <td className="py-2 text-center font-bold">{fmt(vergelijkCalc.nlNet)}</td>
-                <td className="py-2 text-center font-bold text-[#0EAE96]">{fmt(vergelijkCalc.esNet)}</td>
-              </tr>
-              <tr>
-                <td className="py-2 font-semibold">Rendement op eigen geld</td>
-                <td className="py-2 text-center font-semibold">{vergelijkCalc.nlYield.toFixed(1)}%</td>
-                <td className="py-2 text-center font-semibold text-[#0EAE96]">{vergelijkCalc.esYield.toFixed(1)}%</td>
-              </tr>
-            </tbody>
-          </table>
-          <div className="mt-5 text-center p-4 bg-[#0EAE96]/5 rounded-xl border border-[#0EAE96]/20">
-            <div className="text-xs text-slate-500 mb-1">Rendementsverschil</div>
-            <div className={`text-3xl font-bold ${vergelijkCalc.diff > 0 ? 'text-[#0EAE96]' : 'text-red-500'}`}>
-              {vergelijkCalc.diff > 0 ? '+' : ''}{vergelijkCalc.diff.toFixed(1)} procentpunt
-            </div>
-            <div className="text-xs text-slate-500 mt-1">{vergelijkCalc.diff > 0 ? 'voordeel in Spanje' : 'voordeel in Nederland'}</div>
-          </div>
-        </Card>
-      )}
-
       {/* FLIP */}
       {mode === 'flip' && (
         <Card title="Renovatie / Flip">
@@ -597,16 +527,6 @@ function Row({ label, value, bold }: { label: string; value: number; bold?: bool
     <tr className={bold ? 'font-semibold' : ''}>
       <td className="py-1.5 text-slate-600">{label}</td>
       <td className={`py-1.5 text-right tabular-nums ${neg ? 'text-red-500' : ''}`}>{fmt(Math.abs(value))}</td>
-    </tr>
-  )
-}
-
-function CompareRow({ label, nl, es }: { label: string; nl: number; es: number }) {
-  return (
-    <tr className="border-b border-slate-50">
-      <td className="py-1.5 text-slate-600">{label}</td>
-      <td className={`py-1.5 text-center tabular-nums ${nl < 0 ? 'text-red-500' : ''}`}>{nl === 0 ? '—' : fmt(Math.abs(nl))}</td>
-      <td className={`py-1.5 text-center tabular-nums ${es < 0 ? 'text-red-500' : ''}`}>{es === 0 ? '—' : fmt(Math.abs(es))}</td>
     </tr>
   )
 }

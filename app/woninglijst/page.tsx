@@ -6,7 +6,9 @@ import { PageLayout } from '@/components/page-layout'
 import {
   Users, Plus, ArrowLeft, Trash2, ExternalLink, Loader2,
   Bed, Bath, Maximize2, PenLine, Link2, X, Star, Download,
+  FileText, Eye, Megaphone, Check,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface ShortlistSummary {
   id: string
@@ -176,6 +178,48 @@ export default function WoninglijstPage() {
     setAddLoading(false)
     fetchDetail(selectedId)
     fetchShortlists()
+  }
+
+  const router = useRouter()
+
+  // Dossier modal
+  const [dossierItem, setDossierItem] = useState<ShortlistItem | null>(null)
+  const [dossierMode, setDossierMode] = useState<'presentatie' | 'pitch' | ''>('')
+  const [dossierGenerating, setDossierGenerating] = useState(false)
+  const [dossierResult, setDossierResult] = useState<{ id: string } | null>(null)
+  const [dossierError, setDossierError] = useState('')
+
+  function openDossierModal(item: ShortlistItem) {
+    setDossierItem(item)
+    setDossierMode('')
+    setDossierResult(null)
+    setDossierError('')
+  }
+
+  async function generateDossierFromUrl() {
+    if (!dossierItem || !dossierMode) return
+    setDossierGenerating(true)
+    setDossierError('')
+    try {
+      const res = await fetch('/api/dossier/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'url', url: dossierItem.url, brochure_type: dossierMode }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Mislukt') }
+      const data = await res.json()
+      setDossierResult({ id: data.id || 'created' })
+    } catch (err) {
+      setDossierError(err instanceof Error ? err.message : 'Dossier genereren mislukt')
+    }
+    setDossierGenerating(false)
+  }
+
+  function closeDossierModal() {
+    setDossierItem(null)
+    setDossierMode('')
+    setDossierResult(null)
+    setDossierError('')
   }
 
   // Multi-select state
@@ -407,29 +451,33 @@ export default function WoninglijstPage() {
                   className="rounded border-gray-300 cursor-pointer" />
               </div>
               {item.thumbnail && (
-                <div className="w-32 h-24 shrink-0">
+                <div className="w-44 h-32 shrink-0">
                   <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
                 </div>
               )}
-              <div className="flex-1 px-4 py-3 min-w-0">
+              <div className="flex-1 px-5 py-4 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#004B46] truncate">{item.title || item.url}</p>
-                    <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
+                    <p className="text-base font-semibold text-[#004B46] truncate">{item.title || item.url}</p>
+                    <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-500 flex-wrap">
                       {item.location && <span>{item.location}</span>}
                       {item.price && (
                         <>
-                          <span className="text-[#0EAE96] font-medium">{formatPrice(item.price)}</span>
+                          <span className="text-[#0EAE96] font-semibold">{formatPrice(item.price)}</span>
                           <span className="text-gray-300">·</span>
-                          <span className="text-gray-400">k.k. ~{Math.round(item.price * 0.1).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
+                          <span className="text-gray-500 text-xs">k.k. ~{Math.round(item.price * 0.1).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
                         </>
                       )}
-                      {item.bedrooms && <span className="flex items-center gap-0.5"><Bed size={10} /> {item.bedrooms}</span>}
-                      {item.bathrooms && <span className="flex items-center gap-0.5"><Bath size={10} /> {item.bathrooms}</span>}
-                      {item.size_m2 && <span className="flex items-center gap-0.5"><Maximize2 size={10} /> {item.size_m2}m2</span>}
+                      {item.bedrooms && <span className="flex items-center gap-1"><Bed size={13} /> {item.bedrooms}</span>}
+                      {item.bathrooms && <span className="flex items-center gap-1"><Bath size={13} /> {item.bathrooms}</span>}
+                      {item.size_m2 && <span className="flex items-center gap-1"><Maximize2 size={13} /> {item.size_m2} m²</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openDossierModal(item)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#004B46] text-white text-xs font-medium rounded-lg hover:bg-[#0A6B63] cursor-pointer">
+                      <FileText size={13} /> Dossier
+                    </button>
                     <button
                       onClick={() => toggleFavorite(item.id, item.is_favorite)}
                       className={`p-1 cursor-pointer transition-colors ${item.is_favorite ? 'text-[#F5AF40]' : 'text-gray-300 hover:text-[#F5AF40]'}`}
@@ -474,6 +522,67 @@ export default function WoninglijstPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Dossier modal */}
+      {dossierItem && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={closeDossierModal} />
+          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-8" onClick={e => e.stopPropagation()}>
+              {dossierResult ? (
+                <div className="text-center py-6">
+                  <Check size={52} className="mx-auto mb-4 text-emerald-500" />
+                  <h3 className="text-xl font-bold text-[#004B46] mb-2">Dossier aangemaakt!</h3>
+                  <p className="text-sm text-slate-500 mb-6">{dossierItem.title || dossierItem.url}</p>
+                  <div className="flex justify-center gap-3">
+                    <button onClick={() => router.push('/dossier')}
+                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
+                      Bekijk dossier
+                    </button>
+                    <button onClick={closeDossierModal}
+                      className="bg-white border border-gray-200 text-gray-700 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
+                      Blijf hier
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-base font-semibold text-slate-900">Dossier genereren</h3>
+                    <button onClick={closeDossierModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-5">{dossierItem.title || dossierItem.url}</p>
+
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+                    <button onClick={() => setDossierMode('presentatie')}
+                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'presentatie' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Eye size={20} className={dossierMode === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-base font-semibold mt-2">Presenteren</div>
+                      <div className="text-xs text-gray-500 mt-1">Feitelijke woningpresentatie</div>
+                    </button>
+                    <button onClick={() => setDossierMode('pitch')}
+                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'pitch' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <Megaphone size={20} className={dossierMode === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
+                      <div className="text-base font-semibold mt-2">Pitchen</div>
+                      <div className="text-xs text-gray-500 mt-1">Met voordelen, nadelen & advies</div>
+                    </button>
+                  </div>
+
+                  {dossierError && <p className="text-sm text-red-500 mb-3">{dossierError}</p>}
+
+                  <div className="flex justify-end gap-2">
+                    <button onClick={closeDossierModal} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5 cursor-pointer">Annuleren</button>
+                    <button onClick={generateDossierFromUrl} disabled={!dossierMode || dossierGenerating}
+                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] disabled:opacity-50 cursor-pointer flex items-center gap-2">
+                      {dossierGenerating ? <><Loader2 size={14} className="animate-spin" /> Genereren...</> : 'Genereer'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </PageLayout>
   )
