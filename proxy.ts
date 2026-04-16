@@ -3,7 +3,7 @@ import { updateSession } from '@/lib/supabase-middleware'
 import { createServerClient } from '@supabase/ssr'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = await updateSession(request)
 
   const adminPaths = [
@@ -63,6 +63,6 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
-export const config = {
+export const proxyConfig = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
