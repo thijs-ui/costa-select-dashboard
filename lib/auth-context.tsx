@@ -28,7 +28,9 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [role, setRole] = useState<string | null>(null)
+  type Role = 'admin' | 'consultant' | 'makelaar' | 'backoffice'
+
+  const [role, setRole] = useState<Role | null>(null)
   const [naam, setNaam] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createBrowserClient()
