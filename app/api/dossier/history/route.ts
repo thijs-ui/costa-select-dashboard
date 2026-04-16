@@ -1,6 +1,7 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { createUserClient } from '../../../../lib/supabase/user-client'
 import { requireAuth } from '../../../../lib/auth/permissions'
 
 export async function GET() {
@@ -8,7 +9,7 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth
 
   try {
-    const supabase = createServiceClient()
+    const supabase = await createUserClient()
 
     const { data, error } = await supabase
       .from('dossier_history')
