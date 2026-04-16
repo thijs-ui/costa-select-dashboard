@@ -59,8 +59,11 @@ const dashboardItems = [
   { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
   { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
   { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
-  { href: '/projecten', label: 'Projecten', icon: Layers },
+]
+
+const operationsItems = [
   { href: '/dashboard/todos', label: 'To-do', icon: CheckSquare },
+  { href: '/projecten', label: 'Projecten', icon: Layers },
 ]
 
 interface SidebarProps {
@@ -74,6 +77,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const isAdmin = role === 'admin'
   const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
   const [marketingOpen, setMarketingOpen] = useState(pathname.startsWith('/marketing'))
+  const [operationsOpen, setOperationsOpen] = useState(pathname.startsWith('/projecten') || pathname.startsWith('/dashboard/todos'))
   const [todoCount, setTodoCount] = useState(0)
 
   useEffect(() => {
@@ -195,6 +199,26 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   { href: '/marketing/brochures', label: 'Brochures', icon: BookOpen },
                   { href: '/marketing/bibliotheek', label: 'Bibliotheek', icon: ClipboardList },
                 ].map(renderNavItem)}
+              </nav>
+            )}
+          </>
+        )}
+
+        {/* Operations section — admin only */}
+        {showDashboard && (
+          <>
+            <div className="px-4 pt-6 pb-1">
+              <button
+                onClick={() => setOperationsOpen(!operationsOpen)}
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+              >
+                <span>Operations</span>
+                {operationsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </button>
+            </div>
+            {operationsOpen && (
+              <nav className="space-y-0.5">
+                {operationsItems.map(renderNavItem)}
               </nav>
             )}
           </>

@@ -36,12 +36,26 @@ interface Todo {
   deadline: string | null
   status: 'open' | 'afgerond'
   completed_at: string | null
+  project_id: string | null
+  phase_id: string | null
 }
 
 interface UserInfo {
   id: string
   email: string
   naam: string | null
+}
+
+interface Project {
+  id: string
+  name: string
+  color: string
+}
+
+interface Phase {
+  id: string
+  project_id: string
+  name: string
 }
 
 export default function TodosPage() {
@@ -54,12 +68,20 @@ export default function TodosPage() {
   const [loading, setLoading] = useState(true)
   const [showCompleted, setShowCompleted] = useState(false)
   const [adminFilter, setAdminFilter] = useState<'alle' | 'mijn'>('alle')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [phases, setPhases] = useState<Phase[]>([])
+  const [projectFilter, setProjectFilter] = useState<string>('alle')
+  const [reassignTodo, setReassignTodo] = useState<Todo | null>(null)
+  const [reassignProject, setReassignProject] = useState('')
+  const [reassignPhase, setReassignPhase] = useState('')
 
   // Form state
   const [description, setDescription] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [deadline, setDeadline] = useState('')
   const [formLabel, setFormLabel] = useState('')
+  const [formProject, setFormProject] = useState('')
+  const [formPhase, setFormPhase] = useState('')
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [labels, setLabels] = useState<string[]>([])
@@ -78,12 +100,16 @@ export default function TodosPage() {
   }, [user, role])
 
   async function loadData() {
-    const [todosRes, settingsRes] = await Promise.all([
+    const [todosRes, settingsRes, projectsRes, phasesRes] = await Promise.all([
       supabase.from('todos').select('*').order('deadline', { ascending: true, nullsFirst: false }),
       supabase.from('settings').select('key, value').eq('key', 'todo_labels'),
+      supabase.from('projects').select('id, name, color').eq('status', 'actief').order('name'),
+      supabase.from('project_phases').select('id, project_id, name').order('sort_order'),
     ])
 
     setTodos((todosRes.data ?? []) as Todo[])
+    setProjects((projectsRes.data ?? []) as Project[])
+    setPhases((phasesRes.data ?? []) as Phase[])
 
     if (settingsRes.data?.[0]?.value) {
       setLabels(settingsRes.data[0].value as string[])
@@ -167,6 +193,8 @@ export default function TodosPage() {
       created_by: user!.id,
       deadline: deadline || null,
       label: formLabel || null,
+      project_id: formProject || null,
+      phase_id: (formProject && formPhase) ? formPhase : null,
     })
 
     if (error) {
@@ -175,6 +203,8 @@ export default function TodosPage() {
       setDescription('')
       setDeadline('')
       setFormLabel('')
+      setFormProject('')
+      setFormPhase('')
       if (isAdmin) setAssignedTo('')
       await loadData()
     }
@@ -217,6 +247,25 @@ export default function TodosPage() {
     if (error) setTodos(prev)
   }
 
+  function getProjectLabel(todo: Todo) {
+    if (!todo.project_id) return null
+    const p = projects.find(p => p.id === todo.project_id)
+    if (!p) return null
+    const phase = todo.phase_id ? phases.find(ph => ph.id === todo.phase_id) : null
+    return { name: p.name, phaseName: phase?.name, color: p.color }
+  }
+
+  async function saveReassign() {
+    if (!reassignTodo) return
+    const newProject = reassignProject || null
+    const newPhase = reassignProject && reassignPhase ? reassignPhase : null
+    setTodos(prev => prev.map(t => t.id === reassignTodo.id ? { ...t, project_id: newProject, phase_id: newPhase } : t))
+    await supabase.from('todos').update({ project_id: newProject, phase_id: newPhase }).eq('id', reassignTodo.id)
+    setReassignTodo(null)
+    setReassignProject('')
+    setReassignPhase('')
+  }
+
   function isOverdue(todo: Todo) {
     if (!todo.deadline || todo.status === 'afgerond') return false
     return new Date(todo.deadline) < new Date(new Date().toDateString())
@@ -229,6 +278,13 @@ export default function TodosPage() {
   }
   if (isAdmin && adminFilter === 'mijn') {
     filtered = filtered.filter(t => t.assigned_to === user!.id || t.created_by === user!.id)
+  }
+  if (projectFilter === 'los') {
+    filtered = filtered.filter(t => !t.project_id)
+  } else if (projectFilter === 'projecten') {
+    filtered = filtered.filter(t => !!t.project_id)
+  } else if (projectFilter !== 'alle') {
+    filtered = filtered.filter(t => t.project_id === projectFilter)
   }
 
   filtered = [...filtered].sort((a, b) => {
@@ -295,6 +351,24 @@ export default function TodosPage() {
           )}
 
           <div>
+            <label className="block text-xs text-slate-500 mb-1">Project</label>
+            <select value={formProject} onChange={e => { setFormProject(e.target.value); setFormPhase('') }} className={inp}>
+              <option value="">— Geen project (los) —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          {formProject && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Fase</label>
+              <select value={formPhase} onChange={e => setFormPhase(e.target.value)} className={inp}>
+                <option value="">— Geen fase —</option>
+                {phases.filter(ph => ph.project_id === formProject).map(ph => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
             <label className="block text-xs text-slate-500 mb-1">Deadline</label>
             <div className="flex gap-2">
               <input
@@ -337,6 +411,15 @@ export default function TodosPage() {
             <option value="mijn">Mijn taken</option>
           </select>
         )}
+
+        <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
+          className="border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400 bg-white">
+          <option value="alle">Alle projecten</option>
+          <option value="projecten">Alleen projectto-do&apos;s</option>
+          <option value="los">Alleen losse to-do&apos;s</option>
+          <option disabled>──────</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
 
         <span className="text-xs text-slate-400 ml-auto">
           {filtered.length} {filtered.length === 1 ? 'taak' : 'taken'}
@@ -399,6 +482,24 @@ export default function TodosPage() {
                       {todo.notities && (
                         <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">notitie</span>
                       )}
+                      {(() => {
+                        const pl = getProjectLabel(todo)
+                        if (pl) {
+                          return (
+                            <button onClick={e => { e.stopPropagation(); setReassignTodo(todo); setReassignProject(todo.project_id || ''); setReassignPhase(todo.phase_id || '') }}
+                              className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 cursor-pointer hover:opacity-80"
+                              style={{ backgroundColor: `${pl.color}20`, color: pl.color }}>
+                              {pl.name}{pl.phaseName ? ` › ${pl.phaseName}` : ''}
+                            </button>
+                          )
+                        }
+                        return (
+                          <button onClick={e => { e.stopPropagation(); setReassignTodo(todo); setReassignProject(''); setReassignPhase('') }}
+                            className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium flex-shrink-0 cursor-pointer hover:bg-slate-200">
+                            Los
+                          </button>
+                        )
+                      })()}
                     </div>
                   </td>
                   <td className={`px-3 py-2.5 ${done ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -588,6 +689,36 @@ export default function TodosPage() {
                   <Trash2 size={15} />
                 </button>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Reassign to project modal */}
+      {reassignTodo && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setReassignTodo(null)} />
+          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">Koppel aan project</h3>
+              <p className="text-xs text-slate-500 mb-3 truncate">{reassignTodo.description}</p>
+              <div className="space-y-2 mb-4">
+                <select value={reassignProject} onChange={e => { setReassignProject(e.target.value); setReassignPhase('') }} className={inp}>
+                  <option value="">— Geen project (los) —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {reassignProject && (
+                  <select value={reassignPhase} onChange={e => setReassignPhase(e.target.value)} className={inp}>
+                    <option value="">— Geen fase —</option>
+                    {phases.filter(ph => ph.project_id === reassignProject).map(ph => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setReassignTodo(null)} className="text-sm text-slate-500 px-3 py-2 cursor-pointer">Annuleren</button>
+                <button onClick={saveReassign}
+                  className="bg-[#004B46] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">Koppelen</button>
+              </div>
             </div>
           </div>
         </>
