@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase-browser'
 import type { User } from '@supabase/supabase-js'
-import type { Role } from '../auth/roles'
+import type { Role } from '@/lib/auth/roles'
 
 interface AuthContextType {
   user: User | null
