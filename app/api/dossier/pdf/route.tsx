@@ -48,10 +48,10 @@ export async function POST(request: Request) {
   const data: DossierData = await request.json()
   const logoSrc = getLogoBase64()
 
-  // Converteer alleen Idealista CDN URLs naar base64 (die worden server-side geblokkeerd)
-  // Costa Select en andere URLs laten we met rust — die werken al
+  // Max 21 foto's: 1 cover + 5 pagina's × 4 foto's
+  // Idealista URLs via weserv.nl proxy → base64
   if (data.property.fotos?.length > 0) {
-    const maxPhotos = Math.min(data.property.fotos.length, 6)
+    const maxPhotos = Math.min(data.property.fotos.length, 21)
     const convertedPhotos: string[] = []
 
     for (const url of data.property.fotos.slice(0, maxPhotos)) {

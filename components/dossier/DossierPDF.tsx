@@ -442,9 +442,11 @@ export function DossierPDF({ data, logoSrc }: { data: DossierData; logoSrc?: str
       )}
 
       {/* ─── PHOTO PAGES ────────────────────────────────────── */}
-      {fotos.length > 0 &&
-        [0, 1].map((pageIdx) => {
-          const pagePhotos = fotos.slice(pageIdx * 4, pageIdx * 4 + 4)
+      {/* Foto-pagina's: cover gebruikt fotos[0], gallery start vanaf fotos[1] */}
+      {fotos.length > 1 &&
+        [0, 1, 2, 3, 4].map((pageIdx) => {
+          const startIdx = 1 + pageIdx * 4
+          const pagePhotos = fotos.slice(startIdx, startIdx + 4)
           if (pagePhotos.length === 0) return null
           return (
             <Page key={`photos-${pageIdx}`} size="A4" orientation="landscape" style={s.contentPage}>

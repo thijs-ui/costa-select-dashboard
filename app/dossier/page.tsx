@@ -197,8 +197,7 @@ export default function DossierPage() {
       const dossier_data = { ...responseData.dossier_data }
       // Voeg units_data toe voor de PDF
       if (responseData.units_data) dossier_data.units_data = responseData.units_data
-      // Limiteer foto's tot 8 voor PDF performance (voorkomt timeout)
-      if (dossier_data.property?.fotos?.length > 8) dossier_data.property.fotos = dossier_data.property.fotos.slice(0, 8)
+      // PDF route limiteert zelf tot max 21 foto's
 
       const pdfRes = await fetch('/api/dossier/pdf', {
         method: 'POST',
@@ -315,11 +314,7 @@ export default function DossierPage() {
         ...(editAnalyse ? { analyse: editAnalyse } : {}),
         ...(editPitch ? { pitch_content: editPitch } : {}),
         ...(unitsData.length > 0 ? { units_data: unitsData } : {}),
-        property: {
-          ...dossier.property,
-          // Limiteer foto's tot 8 voor PDF performance
-          fotos: (dossier.property.fotos || []).slice(0, 8),
-        },
+        // PDF route limiteert zelf tot max 21 foto's
       }
       const res = await fetch('/api/dossier/pdf', {
         method: 'POST',
