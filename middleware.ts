@@ -3,6 +3,8 @@ import { createServerClient } from '@supabase/ssr'
 import { createServiceClient } from '@/lib/supabase'
 
 export async function middleware(request: NextRequest) {
+  console.log('MIDDLEWARE HIT')
+
   const adminPaths = [
     '/aannames',
     '/afspraken',
