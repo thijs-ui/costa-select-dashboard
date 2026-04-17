@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createServiceClient } from '@/lib/supabase'
 
 export async function middleware(request: NextRequest) {
   const adminPaths = [
@@ -47,9 +46,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  const svc = createServiceClient()
-
-  const { data } = await svc
+  const { data } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', user.id)
