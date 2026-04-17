@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role | null>(null)
   const [naam, setNaam] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createBrowserClient()
+  const [supabase] = useState(() => createBrowserClient())
 
   async function loadUserRole(u: User) {
     // Methode 1: browser client (snel, maar kan falen door RLS)
