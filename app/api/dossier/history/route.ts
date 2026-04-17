@@ -11,10 +11,11 @@ export async function GET() {
   try {
     const supabase = await createUserClient()
 
+    // RLS owner_or_admin policy filtert automatisch: admin ziet alles,
+    // anderen alleen eigen dossiers. Geen app-level filter nodig.
     const { data, error } = await supabase
       .from('dossier_history')
       .select('id, adres, regio, type, vraagprijs, url, brochure_type, source, created_at')
-      .eq('created_by', auth.id)
       .order('created_at', { ascending: false })
       .limit(50)
 

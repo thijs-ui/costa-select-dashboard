@@ -10,10 +10,10 @@ export async function GET() {
 
   const supabase = await createUserClient()
 
+  // RLS owner_or_admin filtert automatisch: admin ziet alles, non-admin eigen data.
   const { data, error } = await supabase
     .from('shortlists')
     .select('id, klant_naam, notities, created_at, updated_at, shortlist_items(count)')
-    .eq('created_by', auth.id)
     .order('updated_at', { ascending: false })
 
   if (error) {
