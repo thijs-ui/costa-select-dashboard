@@ -29,13 +29,24 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Session response die cookies kan bijwerken tijdens auth.getUser()
+  let response = NextResponse.next({ request })
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll: () => {}
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        }
       }
     }
   )
@@ -43,7 +54,11 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const redirect = NextResponse.redirect(new URL('/login', request.url))
+    response.cookies.getAll().forEach(c =>
+      redirect.cookies.set(c.name, c.value)
+    )
+    return redirect
   }
 
   const { data } = await supabase
@@ -53,10 +68,14 @@ export async function proxy(request: NextRequest) {
     .single()
 
   if (data?.role !== 'admin') {
-    return NextResponse.redirect(new URL('/', request.url))
+    const redirect = NextResponse.redirect(new URL('/', request.url))
+    response.cookies.getAll().forEach(c =>
+      redirect.cookies.set(c.name, c.value)
+    )
+    return redirect
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const proxyConfig = {
