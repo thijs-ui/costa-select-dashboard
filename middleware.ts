@@ -1,62 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 
-export async function middleware(request: NextRequest) {
-  const adminPaths = [
-    '/aannames',
-    '/afspraken',
-    '/deals',
-    '/makelaars',
-    '/partners',
-    '/commissies',
-    '/pl',
-    '/regios',
-    '/maandkosten',
-    '/bonnen',
-    '/funnel',
-    '/dossier',
-    '/pipedrive',
-    '/agentschappen'
-  ]
-
-  const isAdminRoute = adminPaths.some(path =>
-    request.nextUrl.pathname.startsWith(path)
-  )
-
-  if (!isAdminRoute) {
-    return NextResponse.next()
-  }
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: () => {}
-      }
-    }
-  )
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  const { data } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id)
-    .single()
-
-  if (data?.role !== 'admin') {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
-  return NextResponse.next()
+export function middleware(request: NextRequest) {
+  // Diagnostic: crash-vrije redirect. Geen Supabase, geen env-vars.
+  console.log('[middleware] path:', request.nextUrl.pathname)
+  return NextResponse.redirect(new URL('/', request.url))
 }
 
 export const config = {
