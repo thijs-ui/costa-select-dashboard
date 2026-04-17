@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
 export async function GET(
   _request: Request,
@@ -26,9 +27,24 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const { id } = await params
   const body = await request.json()
   const supabase = createServiceClient()
+
+  // Ownership check op de shortlist (geldt voor items én voor de shortlist zelf)
+  const { data: shortlist } = await supabase
+    .from('shortlists')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (shortlist?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   // Toggle favorite
   if (body.item_id && body.is_favorite !== undefined) {
@@ -75,11 +91,22 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const { id } = await params
   const supabase = createServiceClient()
+
+  const { data: existing } = await supabase
+    .from('shortlists')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (existing?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { error } = await supabase
     .from('shortlists')

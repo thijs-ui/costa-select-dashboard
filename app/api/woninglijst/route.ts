@@ -2,7 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '../../../lib/supabase/user-client'
-import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
+import { requireAuth } from '../../../lib/auth/permissions'
 
 export async function GET() {
   const auth = await requireAuth()
@@ -30,10 +30,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
-  const { klant_naam, created_by } = await request.json()
+  const { klant_naam } = await request.json()
 
   if (!klant_naam?.trim()) {
     return NextResponse.json({ error: 'Klant naam is verplicht' }, { status: 400 })
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from('shortlists')
-    .insert({ klant_naam: klant_naam.trim(), created_by: created_by || null })
+    .insert({ klant_naam: klant_naam.trim(), created_by: auth.id })
     .select('id, klant_naam')
     .single()
 

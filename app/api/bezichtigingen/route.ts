@@ -38,7 +38,7 @@ export async function GET() {
 
 // POST: nieuwe trip aanmaken
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       lunch_time: body.lunch_time || '13:00',
       lunch_duration_minutes: body.lunch_duration_minutes || 60,
       notes: body.notes || null,
-      created_by: body.created_by || null,
+      created_by: auth.id,
     })
     .select('id')
     .single()
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
 // PUT: trip updaten
 export async function PUT(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
@@ -76,6 +76,17 @@ export async function PUT(request: Request) {
 
   if (!id) return NextResponse.json({ error: 'id is verplicht' }, { status: 400 })
 
+  const { data: existing } = await supabase
+    .from('viewing_trips')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (existing?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error } = await supabase.from('viewing_trips').update(updates).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
@@ -83,13 +94,24 @@ export async function PUT(request: Request) {
 
 // DELETE: trip verwijderen
 export async function DELETE(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
   const { id } = await request.json()
 
   if (!id) return NextResponse.json({ error: 'id is verplicht' }, { status: 400 })
+
+  const { data: existing } = await supabase
+    .from('viewing_trips')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (existing?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { error } = await supabase.from('viewing_trips').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

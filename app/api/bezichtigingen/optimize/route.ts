@@ -2,7 +2,8 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
 export const maxDuration = 120
 
@@ -84,7 +85,7 @@ interface StopInput {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const body = await request.json()
@@ -99,6 +100,19 @@ export async function POST(request: Request) {
 
   if (!stops || stops.length < 2) {
     return NextResponse.json({ error: 'Minimaal 2 stops nodig' }, { status: 400 })
+  }
+
+  // Ownership check op de trip
+  const ownershipClient = createServiceClient()
+  const { data: trip } = await ownershipClient
+    .from('viewing_trips')
+    .select('created_by')
+    .eq('id', trip_id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (trip?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {

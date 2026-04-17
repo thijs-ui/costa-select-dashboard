@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
 import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
 export const maxDuration = 120
 
@@ -49,11 +50,24 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const { id } = await params
   const { items } = await request.json()
+
+  // Ownership check via parent shortlist
+  const ownershipClient = createServiceClient()
+  const { data: shortlist } = await ownershipClient
+    .from('shortlists')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (shortlist?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: 'Geen woningen opgegeven' }, { status: 400 })
@@ -107,11 +121,24 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const { id } = await params
   const body = await request.json()
+
+  // Ownership check via parent shortlist
+  const ownershipClient = createServiceClient()
+  const { data: shortlist } = await ownershipClient
+    .from('shortlists')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (shortlist?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   const ids: string[] = body.item_ids ?? (body.item_id ? [body.item_id] : [])
 
   if (ids.length === 0) {

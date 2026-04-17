@@ -3,7 +3,7 @@ import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/
 import fs from 'fs'
 import path from 'path'
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
 
 Font.register({
   family: 'Bricolage Grotesque',
@@ -117,7 +117,7 @@ function getLogoBase64(): string | undefined {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const { klant_naam, items } = await request.json()

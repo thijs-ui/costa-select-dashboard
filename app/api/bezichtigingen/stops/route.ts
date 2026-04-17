@@ -1,7 +1,8 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
 // GET: stops voor een trip
 export async function GET(request: Request) {
@@ -22,11 +23,23 @@ export async function GET(request: Request) {
 
 // POST: stop toevoegen
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
   const body = await request.json()
+
+  // Ownership check via parent trip
+  const { data: trip } = await supabase
+    .from('viewing_trips')
+    .select('created_by')
+    .eq('id', body.trip_id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (trip?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   // Bepaal sort_order
   const { data: existing } = await supabase
@@ -62,7 +75,7 @@ export async function POST(request: Request) {
 
 // PUT: stop updaten
 export async function PUT(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
@@ -71,6 +84,18 @@ export async function PUT(request: Request) {
 
   if (!id) return NextResponse.json({ error: 'id is verplicht' }, { status: 400 })
 
+  // Ownership check: stop → trip → created_by
+  const { data: stop } = await supabase
+    .from('viewing_stops')
+    .select('viewing_trips(created_by)')
+    .eq('id', id)
+    .single() as { data: { viewing_trips: { created_by: string | null } | null } | null }
+
+  const role = await getUserRole(auth.id)
+  if (stop?.viewing_trips?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error } = await supabase.from('viewing_stops').update(updates).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
@@ -78,13 +103,25 @@ export async function PUT(request: Request) {
 
 // DELETE: stop verwijderen
 export async function DELETE(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
   const { id } = await request.json()
 
   if (!id) return NextResponse.json({ error: 'id is verplicht' }, { status: 400 })
+
+  // Ownership check: stop → trip → created_by
+  const { data: stop } = await supabase
+    .from('viewing_stops')
+    .select('viewing_trips(created_by)')
+    .eq('id', id)
+    .single() as { data: { viewing_trips: { created_by: string | null } | null } | null }
+
+  const role = await getUserRole(auth.id)
+  if (stop?.viewing_trips?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { error } = await supabase.from('viewing_stops').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

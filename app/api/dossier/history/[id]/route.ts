@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAuth } from '@/lib/auth/permissions'
+import { getUserRole } from '@/lib/auth/roles'
 
 export async function GET(
   _request: Request,
@@ -25,9 +27,23 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const { id } = await params
   const body = await request.json()
   const supabase = createServiceClient()
+
+  const { data: existing } = await supabase
+    .from('dossier_history')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const role = await getUserRole(auth.id)
+  if (existing?.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const updates: Record<string, unknown> = {}
   if (body.adres && typeof body.adres === 'string') updates.adres = body.adres
