@@ -23,6 +23,18 @@ const PUBLIC_PATHS = ['/login', '/api/auth']
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
+  // Next.js static assets, favicon, etc. nooit gaten dichttimmeren.
+  // De matcher-regex blijkt in Next.js 16 niet altijd goed uit te sluiten,
+  // dus checken we hier zelf expliciet.
+  if (
+    pathname.startsWith('/_next/') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/icon.svg' ||
+    pathname.startsWith('/public/')
+  ) {
+    return NextResponse.next()
+  }
+
   // Login en auth-API altijd doorlaten (anders oneindige redirect loop)
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next()
