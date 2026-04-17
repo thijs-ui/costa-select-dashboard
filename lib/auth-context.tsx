@@ -33,10 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [supabase] = useState(() => createBrowserClient())
 
   async function loadUserRole(u: User) {
-    // Browser-client query op user_roles. RLS `read_own_role` policy laat
-    // de user zijn eigen rij lezen. Als deze query faalt laten we role/naam
-    // op hun vorige waarde (of null bij eerste load) — NIET blind naar
-    // 'makelaar' zetten, want dat downgradet admins fout.
+    // Primair: direct via browser-client (leunt op `read_own_role` RLS-policy).
     try {
       const { data } = await supabase
         .from('user_roles')
@@ -46,8 +43,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.role) {
         setRole(data.role as Role)
         setNaam(data.naam ?? null)
+        return
       }
-    } catch { /* bewust geen fallback — zie comment */ }
+    } catch { /* fall through naar fallback */ }
+
+    // Fallback: /api/users gaat via service-client en bypasst RLS.
+    // Voorkomt dat een JWT-timing issue de admin-rol "verliest" op cold start.
+    try {
+      const res = await fetch('/api/users')
+      if (res.ok) {
+        const { users } = await res.json()
+        const me = users?.find((x: { id: string }) => x.id === u.id)
+        if (me?.role) {
+          setRole(me.role as Role)
+          setNaam(me.naam ?? null)
+        }
+      }
+    } catch { /* silent */ }
   }
 
   useEffect(() => {

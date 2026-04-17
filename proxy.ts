@@ -56,7 +56,7 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const redirect = NextResponse.redirect(new URL('/login', request.url))
     response.cookies.getAll().forEach(c =>
-      redirect.cookies.set(c.name, c.value)
+      redirect.cookies.set(c)
     )
     return redirect
   }
@@ -70,7 +70,7 @@ export async function proxy(request: NextRequest) {
   if (data?.role !== 'admin') {
     const redirect = NextResponse.redirect(new URL('/', request.url))
     response.cookies.getAll().forEach(c =>
-      redirect.cookies.set(c.name, c.value)
+      redirect.cookies.set(c)
     )
     return redirect
   }
