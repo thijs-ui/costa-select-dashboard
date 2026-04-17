@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 const ADMIN_PATHS = [
   '/aannames',
@@ -17,21 +18,45 @@ const ADMIN_PATHS = [
   '/agentschappen'
 ]
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   const isAdminRoute = ADMIN_PATHS.some(p =>
     pathname === p || pathname.startsWith(p + '/')
   )
 
-  console.log('[proxy]', pathname, 'admin?', isAdminRoute)
-
   if (!isAdminRoute) {
     return NextResponse.next()
   }
 
-  // Diagnostic: crash-vrije redirect, geen Supabase.
-  return NextResponse.redirect(new URL('/', request.url))
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: () => {}
+      }
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  const { data } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single()
+
+  if (data?.role !== 'admin') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  return NextResponse.next()
 }
 
 export const proxyConfig = {
