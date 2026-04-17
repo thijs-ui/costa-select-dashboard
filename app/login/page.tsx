@@ -40,7 +40,7 @@ function LoginForm() {
       <div className="w-full max-w-sm px-4">
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
-          <Logo variant="dark" size="lg" className="mb-4" />
+          <Logo variant="full-dark" size={120} className="mb-4 rounded-2xl" priority />
           <p
             className="font-body text-[11px] uppercase tracking-[0.15em] font-medium"
             style={{ color: '#F5AF40' }}
