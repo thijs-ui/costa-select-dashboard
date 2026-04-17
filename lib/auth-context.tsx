@@ -33,7 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [supabase] = useState(() => createBrowserClient())
 
   async function loadUserRole(u: User) {
-    // Methode 1: browser client (snel, maar kan falen door RLS)
+    // Browser-client query op user_roles. RLS `read_own_role` policy laat
+    // de user zijn eigen rij lezen. Als deze query faalt laten we role/naam
+    // op hun vorige waarde (of null bij eerste load) — NIET blind naar
+    // 'makelaar' zetten, want dat downgradet admins fout.
     try {
       const { data } = await supabase
         .from('user_roles')
@@ -43,27 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.role) {
         setRole(data.role as Role)
         setNaam(data.naam ?? null)
-        return
       }
-    } catch { /* fallback naar methode 2 */ }
-
-    // Methode 2: via API route (service client, altijd betrouwbaar)
-    try {
-      const res = await fetch('/api/todos/users')
-      if (res.ok) {
-        const { users } = await res.json()
-        const me = users?.find((usr: { id: string }) => usr.id === u.id)
-        if (me) {
-          setRole((me.role as Role) ?? 'makelaar')
-          setNaam(me.naam ?? null)
-          return
-        }
-      }
-    } catch { /* ignore */ }
-
-    // Fallback
-    setRole('makelaar')
-    setNaam(null)
+    } catch { /* bewust geen fallback — zie comment */ }
   }
 
   useEffect(() => {
@@ -82,15 +66,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getUser()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: any, session: any) => {
+      async (event: any, session: any) => {
         const currentUser = session?.user ?? null
-        setUser(currentUser)
 
-        if (currentUser) {
-          await loadUserRole(currentUser)
-        } else {
+        // Alleen bij echte sign-in/out het user-object én de rol updaten.
+        // TOKEN_REFRESHED en USER_UPDATED raken de rol niet en moeten geen
+        // reload van user_roles triggeren (race + flicker).
+        if (event === 'SIGNED_OUT' || !currentUser) {
+          setUser(null)
           setRole(null)
           setNaam(null)
+          return
+        }
+
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          setUser(currentUser)
+          await loadUserRole(currentUser)
         }
       }
     )
