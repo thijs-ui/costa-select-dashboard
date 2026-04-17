@@ -2,6 +2,8 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
 import fs from 'fs'
 import path from 'path'
+import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 Font.register({
   family: 'Bricolage Grotesque',
@@ -115,6 +117,9 @@ function getLogoBase64(): string | undefined {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { klant_naam, items } = await request.json()
   const logoSrc = getLogoBase64()
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 90
 
@@ -89,6 +90,9 @@ async function getFavoriteExamples(category: string, subcategory: string): Promi
 
 // POST: genereer content
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const body = await request.json()
   const { category, subcategory, language, prompt, extra_context, content_type_instructions, length } = body
 
@@ -169,6 +173,9 @@ export async function GET(request: Request) {
 
 // PUT: content updaten
 export async function PUT(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { id, ...updates } = body
@@ -181,6 +188,9 @@ export async function PUT(request: Request) {
 
 // DELETE: content verwijderen
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const { id } = await request.json()
   if (!id) return NextResponse.json({ error: 'id verplicht' }, { status: 400 })

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 60
 
@@ -17,6 +18,9 @@ const PLATFORM_INSTRUCTIONS: Record<string, string> = {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { content, sourcePlatform, targetPlatform } = await request.json()
   if (!content || !targetPlatform) return NextResponse.json({ error: 'content en targetPlatform zijn verplicht' }, { status: 400 })
 

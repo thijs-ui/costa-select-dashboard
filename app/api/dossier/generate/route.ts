@@ -7,6 +7,7 @@ import { docs } from '@/lib/kennisbank-docs'
 import { createServiceClient } from '@/lib/supabase'
 import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
 import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 // Allow longer execution for Apify + Claude calls
 export const maxDuration = 120
@@ -130,6 +131,9 @@ Schrijfstijl:
 - Schrijf in het Nederlands`
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const body = await request.json()
   const brochureType: 'presentatie' | 'pitch' = body.brochure_type || 'pitch'
 

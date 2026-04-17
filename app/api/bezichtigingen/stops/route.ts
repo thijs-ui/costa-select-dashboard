@@ -1,6 +1,7 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 // GET: stops voor een trip
 export async function GET(request: Request) {
@@ -21,6 +22,9 @@ export async function GET(request: Request) {
 
 // POST: stop toevoegen
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
 
@@ -58,6 +62,9 @@ export async function POST(request: Request) {
 
 // PUT: stop updaten
 export async function PUT(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { id, ...updates } = body
@@ -71,6 +78,9 @@ export async function PUT(request: Request) {
 
 // DELETE: stop verwijderen
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const { id } = await request.json()
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
 import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
@@ -48,6 +49,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { id } = await params
   const { items } = await request.json()
 
@@ -103,6 +107,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { id } = await params
   const body = await request.json()
   const ids: string[] = body.item_ids ?? (body.item_id ? [body.item_id] : [])

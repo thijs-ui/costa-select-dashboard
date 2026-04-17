@@ -1,6 +1,7 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 60
 
@@ -27,6 +28,9 @@ Schrijfstijl:
 - Baseer je ALLEEN op de meegeleverde data. Verzin geen feiten.`
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { section, property_data } = await request.json()
 
   if (!section || !SECTION_PROMPTS[section]) {

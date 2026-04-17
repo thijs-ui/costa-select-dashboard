@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { fetchDeals, fetchDealFields, fetchPipelines, fetchUsers, PipedriveDealField } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
 import { berekenCommissie } from '@/lib/calculations'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 async function getToken(): Promise<string | null> {
   if (process.env.PIPEDRIVE_API_TOKEN && process.env.PIPEDRIVE_API_TOKEN !== 'xxx') {
@@ -32,6 +33,9 @@ function resolveFieldValue(
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
 
   // Optional body: { force_update: true } updates mapped fields on already-synced deals

@@ -2,6 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
@@ -83,6 +84,9 @@ interface StopInput {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const body = await request.json()
   const { trip_id, start_address, start_time, lunch_time, lunch_duration_minutes, stops } = body as {
     trip_id: string

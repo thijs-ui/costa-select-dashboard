@@ -2,6 +2,8 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { DossierPDF, type DossierData } from '@/components/dossier/DossierPDF'
 import fs from 'fs'
 import path from 'path'
+import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
@@ -45,6 +47,9 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const data: DossierData = await request.json()
   const logoSrc = getLogoBase64()
 

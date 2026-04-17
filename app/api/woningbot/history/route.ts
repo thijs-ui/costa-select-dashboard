@@ -1,6 +1,7 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -24,6 +25,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { user_id, session_id, title, messages, chat_id } = await request.json()
   if (!user_id) return NextResponse.json({ error: 'user_id is verplicht' }, { status: 400 })
 
@@ -54,6 +58,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { id, user_id } = await request.json()
   if (!user_id || !id) return NextResponse.json({ error: 'Missende parameters' }, { status: 400 })
 

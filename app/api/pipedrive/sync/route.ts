@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { fetchAllActivities, fetchUsers, fetchDeals, fetchPipelines } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 const TARGET_TYPES: Record<string, string> = {
   'meeting': 'Kennismaking',
@@ -8,6 +9,9 @@ const TARGET_TYPES: Record<string, string> = {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
 
   const token = process.env.PIPEDRIVE_API_TOKEN && process.env.PIPEDRIVE_API_TOKEN !== 'xxx'

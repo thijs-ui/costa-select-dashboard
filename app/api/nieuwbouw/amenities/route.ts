@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createBotsClient } from '@/lib/supabase-bots'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
@@ -57,6 +58,9 @@ async function findNearest(lat: number, lng: number, type: string, radius: numbe
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 export async function POST() {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createBotsClient()
 
   // Haal projecten zonder amenities op

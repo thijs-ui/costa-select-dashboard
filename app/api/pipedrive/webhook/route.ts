@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchDealFields, fetchPipelines, fetchUsers, PipedriveDealField } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
 import { berekenCommissie } from '@/lib/calculations'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 async function getToken(): Promise<string | null> {
   if (process.env.PIPEDRIVE_API_TOKEN && process.env.PIPEDRIVE_API_TOKEN !== 'xxx') {
@@ -31,6 +32,9 @@ function resolveFieldValue(
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   try {
     const body = await req.json()
 

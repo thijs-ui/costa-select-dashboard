@@ -2,7 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '../../../lib/supabase/user-client'
-import { requireAuth } from '../../../lib/auth/permissions'
+import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 
 const PROJECT_COLUMNS = 'id, name, description, owner_id, target_date, status, color, sort_order'
 
@@ -75,6 +75,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
 
@@ -92,6 +95,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { id, ...updates } = body
@@ -103,6 +109,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const { id } = await request.json()
   if (!id) return NextResponse.json({ error: 'id verplicht' }, { status: 400 })

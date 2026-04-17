@@ -2,12 +2,16 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { query } = await request.json()
 
   if (!query || typeof query !== 'string' || query.trim().length === 0) {

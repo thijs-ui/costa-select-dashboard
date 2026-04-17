@@ -1,5 +1,6 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
@@ -7,6 +8,9 @@ const WONINGBOT_API_URL = process.env.WONINGBOT_API_URL || 'http://localhost:300
 const WONINGBOT_API_KEY = process.env.WONINGBOT_API_KEY || ''
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { message, sessionId } = await request.json()
 
   if (!message || typeof message !== 'string') {

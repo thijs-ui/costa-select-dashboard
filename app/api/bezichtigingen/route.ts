@@ -2,7 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { createUserClient } from '../../../lib/supabase/user-client'
-import { requireAuth } from '../../../lib/auth/permissions'
+import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 import { getUserRole } from '../../../lib/auth/roles'
 
 const TRIP_COLUMNS = 'id, client_name, client_email, client_phone, trip_date, start_time, start_address, lunch_time, lunch_duration_minutes, notes, created_by, created_at'
@@ -38,6 +38,9 @@ export async function GET() {
 
 // POST: nieuwe trip aanmaken
 export async function POST(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
 
@@ -64,6 +67,9 @@ export async function POST(request: Request) {
 
 // PUT: trip updaten
 export async function PUT(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const body = await request.json()
   const { id, ...updates } = body
@@ -77,6 +83,9 @@ export async function PUT(request: Request) {
 
 // DELETE: trip verwijderen
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createServiceClient()
   const { id } = await request.json()
 
