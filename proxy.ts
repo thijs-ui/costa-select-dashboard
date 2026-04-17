@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Diagnostic: crash-vrije redirect. Geen Supabase, geen env-vars.
-  console.log('[middleware] path:', request.nextUrl.pathname)
+  console.log('[proxy] path:', request.nextUrl.pathname)
   return NextResponse.redirect(new URL('/', request.url))
 }
 
-export const config = {
+export const proxyConfig = {
   matcher: [
     '/deals/:path*',
     '/agentschappen/:path*',
