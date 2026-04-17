@@ -1,8 +1,11 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient as createSsrBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-// Singleton — één browser-client per tab. Supabase heeft interne auth
-// state-machines en token-refresh timers die racen als er meerdere clients
-// in dezelfde tab leven. Alle component-aanroepen krijgen dezelfde instance.
+// Singleton — één browser-client per tab om racing auth state te voorkomen.
+// Gebruikt @supabase/ssr zodat de sessie óók als cookie wordt opgeslagen;
+// server-side API-routes (die uit cookies lezen via createServerClient) zien
+// daardoor dezelfde sessie. Met @supabase/supabase-js zat sessie alleen in
+// localStorage → server zag de user als anon → 401 op elke protected route.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _client: SupabaseClient<any> | null = null
 
@@ -17,6 +20,6 @@ export function createBrowserClient() {
     return null as any
   }
 
-  _client = createClient(url, key)
+  _client = createSsrBrowserClient(url, key)
   return _client
 }
