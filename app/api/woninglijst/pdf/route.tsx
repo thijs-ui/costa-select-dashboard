@@ -29,7 +29,7 @@ const WHITE = '#FFFFFF'
 const s = StyleSheet.create({
   page: { backgroundColor: MARBLE, fontFamily: 'Raleway', padding: 0 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: DEEPSEA, paddingHorizontal: 40, paddingVertical: 16 },
-  headerLogo: { width: 120, height: 30 },
+  headerLogo: { width: 271, height: 20 },
   headerTitle: { fontSize: 10, fontFamily: 'Raleway', fontWeight: 600, color: SUN, letterSpacing: 2, textTransform: 'uppercase' },
   body: { flex: 1, paddingHorizontal: 40, paddingTop: 20 },
   titleBlock: { marginBottom: 16 },
@@ -110,7 +110,7 @@ function ShortlistPDF({ klantNaam, items, logoSrc }: { klantNaam: string; items:
 
 function getLogoBase64(): string | undefined {
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-logo-light.svg')
+    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-wordmark-white.svg')
     const svg = fs.readFileSync(logoPath)
     return `data:image/svg+xml;base64,${svg.toString('base64')}`
   } catch { return undefined }

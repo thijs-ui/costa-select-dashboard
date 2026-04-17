@@ -1,35 +1,51 @@
 import Image from 'next/image'
 
 type Variant =
-  | 'primary'       // geel geometrisch merkteken, transparante bg — werkt op elke surface
-  | 'full-dark'     // merkteken + wordmark + descriptor, op deepsea bg (square)
-  | 'icon-white'    // alleen merkteken, op witte bg (square)
-  | 'icon-dark'     // alleen merkteken, op deepsea bg (square)
+  // Alleen het geometrische merkteken (beeldmerk), geel, transparente bg.
+  // Werkt op elke surface; op deepsea bg neemt hij automatisch de juiste look.
+  | 'mark'
+  // Merkteken + "COSTA SELECT" wordmark, horizontaal (787×58).
+  | 'wordmark-white'
+  | 'wordmark-deepsea'
+  // Idem + NL descriptor eronder (787×104).
+  | 'full-nl-white'
+  | 'full-nl-deepsea'
+  // Idem + EN descriptor eronder (787×103).
+  | 'full-en-white'
+  | 'full-en-deepsea'
+  // Square tiles met achtergrond (voor avatars, social, etc.).
+  | 'tile-deepsea'
+  | 'tile-white'
 
 interface VariantInfo {
   src: string
-  nativeWidth: number
-  nativeHeight: number
+  w: number
+  h: number
 }
 
 const VARIANTS: Record<Variant, VariantInfo> = {
-  primary:      { src: '/brand/costa-select-primary.svg',         nativeWidth: 658,  nativeHeight: 377 },
-  'full-dark':  { src: '/brand/costa-select-primary-deepsea.svg', nativeWidth: 1080, nativeHeight: 1080 },
-  'icon-white': { src: '/brand/costa-select-icon-white.svg',      nativeWidth: 1080, nativeHeight: 1080 },
-  'icon-dark':  { src: '/brand/costa-select-icon-deepsea.svg',    nativeWidth: 1080, nativeHeight: 1080 },
+  mark:               { src: '/brand/costa-select-primary.svg',         w: 658,  h: 377 },
+  'wordmark-white':   { src: '/brand/costa-select-wordmark-white.svg',  w: 787,  h: 58 },
+  'wordmark-deepsea': { src: '/brand/costa-select-wordmark-deepsea.svg',w: 787,  h: 58 },
+  'full-nl-white':    { src: '/brand/costa-select-full-nl-white.svg',   w: 787,  h: 104 },
+  'full-nl-deepsea':  { src: '/brand/costa-select-full-nl-deepsea.svg', w: 787,  h: 104 },
+  'full-en-white':    { src: '/brand/costa-select-full-en-white.svg',   w: 787,  h: 103 },
+  'full-en-deepsea':  { src: '/brand/costa-select-full-en-deepsea.svg', w: 787,  h: 103 },
+  'tile-deepsea':     { src: '/brand/costa-select-primary-deepsea.svg', w: 1080, h: 1080 },
+  'tile-white':       { src: '/brand/costa-select-icon-white.svg',      w: 1080, h: 1080 },
 }
 
 interface LogoProps {
   variant?: Variant
-  /** Hoogte in pixels; breedte wordt automatisch berekend vanuit aspect-ratio */
+  /** Hoogte in pixels; breedte wordt automatisch berekend vanuit aspect-ratio. */
   size?: number
   className?: string
   priority?: boolean
 }
 
-export function Logo({ variant = 'primary', size = 48, className = '', priority = false }: LogoProps) {
-  const { src, nativeWidth, nativeHeight } = VARIANTS[variant]
-  const width = Math.round((size / nativeHeight) * nativeWidth)
+export function Logo({ variant = 'wordmark-deepsea', size = 32, className = '', priority = false }: LogoProps) {
+  const { src, w, h } = VARIANTS[variant]
+  const width = Math.round((size / h) * w)
   return (
     <Image
       src={src}
@@ -37,26 +53,6 @@ export function Logo({ variant = 'primary', size = 48, className = '', priority 
       height={size}
       alt="Costa Select"
       priority={priority}
-      className={className}
-    />
-  )
-}
-
-interface BeeldmerkProps {
-  /** Lichte achtergrond? dan de deepsea icon, anders de witte. */
-  onLight?: boolean
-  size?: number
-  className?: string
-}
-
-export function Beeldmerk({ onLight = true, size = 40, className = '' }: BeeldmerkProps) {
-  const src = onLight ? '/brand/costa-select-icon-deepsea.svg' : '/brand/costa-select-icon-white.svg'
-  return (
-    <Image
-      src={src}
-      width={size}
-      height={size}
-      alt="Costa Select"
       className={className}
     />
   )

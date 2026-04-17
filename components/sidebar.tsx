@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@/lib/supabase-browser'
+import { Logo } from '@/components/ui/Logo'
 
 const platformItems = [
   { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
@@ -144,8 +145,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Top spacing */}
-        <div className="h-6" />
+        {/* Brand */}
+        <div className="px-4 pt-5 pb-3">
+          <Logo variant="mark" size={28} />
+        </div>
 
         {/* Platform section */}
         <div className="px-4 pt-4 pb-1">

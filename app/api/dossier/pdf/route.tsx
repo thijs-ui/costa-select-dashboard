@@ -9,7 +9,7 @@ export const maxDuration = 120
 
 function getLogoBase64(): string | undefined {
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-logo-light.svg')
+    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-wordmark-white.svg')
     const svg = fs.readFileSync(logoPath)
     return `data:image/svg+xml;base64,${svg.toString('base64')}`
   } catch {

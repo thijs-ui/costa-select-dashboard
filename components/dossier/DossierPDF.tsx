@@ -89,7 +89,7 @@ const WHITE = '#FFFFFF'
 const s = StyleSheet.create({
   coverPage: { backgroundColor: DEEPSEA, padding: 0, fontFamily: 'Raleway' },
   coverTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 48, paddingTop: 36, paddingBottom: 20 },
-  coverLogo: { width: 160, height: 40 },
+  coverLogo: { width: 380, height: 28 },
   coverTagline: { fontSize: 9, fontFamily: 'Raleway', fontWeight: 600, color: SUN, letterSpacing: 4, textTransform: 'uppercase' },
   coverBody: { flexDirection: 'row', flex: 1, paddingHorizontal: 48, paddingBottom: 36, gap: 40 },
   coverLeft: { flex: 1, justifyContent: 'center', paddingRight: 8 },
@@ -109,7 +109,7 @@ const s = StyleSheet.create({
   coverBranding: { fontSize: 8, fontFamily: 'Raleway', fontWeight: 400, color: MARBLE, opacity: 0.4, letterSpacing: 1 },
   contentPage: { backgroundColor: MARBLE, fontFamily: 'Raleway', padding: 0 },
   headerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: DEEPSEA, paddingHorizontal: 48, paddingVertical: 14 },
-  headerLogo: { width: 120, height: 30 },
+  headerLogo: { width: 244, height: 18 },
   headerPageLabel: { fontSize: 8, fontFamily: 'Raleway', fontWeight: 600, color: SUN, letterSpacing: 3, textTransform: 'uppercase' },
   contentBody: { flex: 1, paddingHorizontal: 48, paddingTop: 28, paddingBottom: 20 },
   sectionLabel: { fontSize: 8, fontFamily: 'Raleway', fontWeight: 600, color: SUN, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 8 },
