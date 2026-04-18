@@ -163,16 +163,14 @@ export async function POST(req: NextRequest) {
 
     // Handle updated deal
     if (action === 'updated' && entity === 'deal') {
-      const dealData = body.data
-      if (!dealData || dealData.status !== 'won') {
-        return NextResponse.json({ ok: true })
-      }
+      const dealId = body.data?.id as number | undefined
+      if (!dealId) return NextResponse.json({ ok: true, skipped: 'no id' })
 
-      // Check if deal already synced
+      // Check if deal already synced (vóór API-fetch, scheelt call)
       const { data: existingDeal } = await supabase
         .from('deals')
         .select('id')
-        .eq('pipedrive_deal_id', dealData.id)
+        .eq('pipedrive_deal_id', dealId)
         .single()
 
       if (existingDeal) {
@@ -183,6 +181,13 @@ export async function POST(req: NextRequest) {
       if (!token) {
         return NextResponse.json({ ok: false, error: 'Geen API token' }, { status: 400 })
       }
+
+      // v2 webhook payload mist enriched fields + custom fields.
+      // Haal volledige deal via v1 API op.
+      const dealRes = await fetch(`https://api.pipedrive.com/v1/deals/${dealId}?api_token=${token}`, { cache: 'no-store' }).then(r => r.json())
+      const dealData = dealRes?.data
+      if (!dealData) return NextResponse.json({ ok: true, skipped: 'not found' })
+      if (dealData.status !== 'won') return NextResponse.json({ ok: true, skipped: 'not won' })
 
       // Load settings
       const { data: settingsData } = await supabase.from('settings').select('key, value')
