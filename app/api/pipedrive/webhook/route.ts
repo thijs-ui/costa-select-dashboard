@@ -32,6 +32,21 @@ async function getToken(): Promise<string | null> {
   return data?.value as string | null
 }
 
+function getEventInfo(body: Record<string, unknown>): { action: string | null; entity: string | null } {
+  // v2 format: body.meta.action ('create'|'change'|'delete') + body.meta.entity
+  const meta = body.meta as Record<string, unknown> | undefined
+  if (meta?.action && meta?.entity) {
+    const map: Record<string, string> = { create: 'added', change: 'updated', update: 'updated', delete: 'deleted' }
+    return { action: map[meta.action as string] ?? null, entity: meta.entity as string }
+  }
+  // v1 format: body.event = "added.activity"
+  if (typeof body.event === 'string' && body.event.includes('.')) {
+    const [action, entity] = body.event.split('.')
+    return { action, entity }
+  }
+  return { action: null, entity: null }
+}
+
 function resolveFieldValue(
   deal: Record<string, unknown>,
   fieldKey: string,
@@ -58,13 +73,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
+    const { action, entity } = getEventInfo(body)
 
-    console.log('[Pipedrive webhook] event:', body.event, 'activity type:', body.data?.type, 'id:', body.data?.id)
+    console.log('[Pipedrive webhook]', { action, entity, type: body.data?.type, id: body.data?.id })
 
     const supabase = createServiceClient()
 
-    // Handle added.activity en updated.activity
-    if (body.event === 'added.activity' || body.event === 'updated.activity') {
+    // Handle added/updated activity
+    if ((action === 'added' || action === 'updated') && entity === 'activity') {
       const act = body.data
       if (!act) return NextResponse.json({ ok: true })
 
@@ -139,8 +155,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, imported: true })
     }
 
-    // Handle updated.deal
-    if (body.event === 'updated.deal') {
+    // Handle updated deal
+    if (action === 'updated' && entity === 'deal') {
       const dealData = body.data
       if (!dealData || dealData.status !== 'won') {
         return NextResponse.json({ ok: true })
