@@ -81,18 +81,27 @@ export async function POST(req: NextRequest) {
 
     // Handle added/updated activity
     if ((action === 'added' || action === 'updated') && entity === 'activity') {
-      const act = body.data
-      if (!act) return NextResponse.json({ ok: true })
-
-        // Alleen Teams Meeting (meeting) en Bezoek Nederland (bezoek_nederland) importeren
+      // Alleen Teams Meeting (meeting) en Bezoek Nederland (bezoek_nederland) importeren
       const TARGET_TYPES: Record<string, string> = {
         'meeting': 'Kennismaking',
         'bezoek_nederland': 'Bezichtiging',
       }
-      const actType = (act.type ?? '') as string
+      const actType = (body.data?.type ?? '') as string
       if (!TARGET_TYPES[actType]) {
-        return NextResponse.json({ ok: true, skipped: true })
+        return NextResponse.json({ ok: true, skipped: 'wrong type' })
       }
+
+      // v2 webhook payload bevat alleen ID's, geen enriched names.
+      // Haal volledige activity via v1 API op voor person_name, user info, deal_id.
+      const actId = body.data?.id as number | undefined
+      if (!actId) return NextResponse.json({ ok: true, skipped: 'no id' })
+
+      const apiToken = await getToken()
+      if (!apiToken) return NextResponse.json({ ok: false, error: 'Geen API token' }, { status: 400 })
+
+      const actRes = await fetch(`https://api.pipedrive.com/v1/activities/${actId}?api_token=${apiToken}`, { cache: 'no-store' }).then(r => r.json())
+      const act = actRes?.data
+      if (!act) return NextResponse.json({ ok: true, skipped: 'not found' })
 
       const status = act.done ? 'Uitgevoerd' : 'Gepland'
       const datum = act.due_date ?? new Date().toISOString().split('T')[0]
@@ -125,19 +134,16 @@ export async function POST(req: NextRequest) {
       let bron: string | null = null
       const dealId = act.deal_id as number | null
       if (dealId) {
-        const token = await getToken()
-        if (token) {
-          const [dealRes, pipelines] = await Promise.all([
-            fetch(`https://api.pipedrive.com/v1/deals/${dealId}?api_token=${token}`, { cache: 'no-store' }).then(r => r.json()),
-            fetchPipelines(token),
-          ])
-          const deal = dealRes.data
-          if (deal) {
-            const pipelineMap = new Map<number, string>()
-            for (const p of pipelines) pipelineMap.set(p.id, p.name)
-            regio = pipelineMap.get(deal.pipeline_id) ?? null
-            bron = deal.channel ?? null
-          }
+        const [dealRes, pipelines] = await Promise.all([
+          fetch(`https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`, { cache: 'no-store' }).then(r => r.json()),
+          fetchPipelines(apiToken),
+        ])
+        const deal = dealRes?.data
+        if (deal) {
+          const pipelineMap = new Map<number, string>()
+          for (const p of pipelines) pipelineMap.set(p.id, p.name)
+          regio = pipelineMap.get(deal.pipeline_id) ?? null
+          bron = deal.channel ?? null
         }
       }
 
