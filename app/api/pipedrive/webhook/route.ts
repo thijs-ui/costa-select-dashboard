@@ -59,6 +59,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
+    console.log('[Pipedrive webhook] event:', body.event, 'activity type:', body.data?.type, 'id:', body.data?.id)
+
     const supabase = createServiceClient()
 
     // Handle added.activity en updated.activity
