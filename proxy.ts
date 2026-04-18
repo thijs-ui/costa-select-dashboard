@@ -18,7 +18,7 @@ const ADMIN_PATHS = [
   '/agentschappen'
 ]
 
-const PUBLIC_PATHS = ['/login', '/api/auth']
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/pipedrive/webhook']
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname

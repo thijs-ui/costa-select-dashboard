@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { fetchDealFields, fetchPipelines, fetchUsers, PipedriveDealField } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
 import { berekenCommissie } from '@/lib/calculations'
-import { requireAdmin } from '@/lib/auth/permissions'
+
+function checkBasicAuth(req: NextRequest): boolean {
+  const header = req.headers.get('authorization')
+  if (!header?.startsWith('Basic ')) return false
+
+  const expectedUser = process.env.PIPEDRIVE_WEBHOOK_USER
+  const expectedPass = process.env.PIPEDRIVE_WEBHOOK_PASSWORD
+  if (!expectedUser || !expectedPass) return false
+
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8')
+  const sep = decoded.indexOf(':')
+  if (sep < 0) return false
+  const user = decoded.slice(0, sep)
+  const pass = decoded.slice(sep + 1)
+
+  const actual = createHash('sha256').update(`${user}:${pass}`).digest()
+  const expected = createHash('sha256').update(`${expectedUser}:${expectedPass}`).digest()
+  return timingSafeEqual(actual, expected)
+}
 
 async function getToken(): Promise<string | null> {
   if (process.env.PIPEDRIVE_API_TOKEN && process.env.PIPEDRIVE_API_TOKEN !== 'xxx') {
@@ -32,8 +51,10 @@ function resolveFieldValue(
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin()
-  if (auth instanceof NextResponse) return auth
+  if (!checkBasicAuth(req)) {
+    console.warn('[Pipedrive webhook] Auth failed', { ip: req.headers.get('x-forwarded-for') })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   try {
     const body = await req.json()
