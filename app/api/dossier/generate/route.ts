@@ -8,6 +8,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
 import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
 import { requireAdmin } from '@/lib/auth/permissions'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 // Allow longer execution for Apify + Claude calls
 export const maxDuration = 120
@@ -133,6 +134,9 @@ Schrijfstijl:
 export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
+
+  const limited = await checkRateLimit(auth.id, 'EXPENSIVE')
+  if (limited) return limited
 
   const body = await request.json()
   const brochureType: 'presentatie' | 'pitch' = body.brochure_type || 'pitch'

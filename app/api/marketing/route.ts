@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/auth/permissions'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 90
 
@@ -92,6 +93,9 @@ async function getFavoriteExamples(category: string, subcategory: string): Promi
 export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
+
+  const limited = await checkRateLimit(auth.id, 'EXPENSIVE')
+  if (limited) return limited
 
   const body = await request.json()
   const { category, subcategory, language, prompt, extra_context, content_type_instructions, length } = body

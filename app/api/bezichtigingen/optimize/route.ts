@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth/permissions'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { getUserRole } from '@/lib/auth/roles'
 
 export const maxDuration = 120
@@ -87,6 +88,9 @@ interface StopInput {
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
+
+  const limited = await checkRateLimit(auth.id, 'EXPENSIVE')
+  if (limited) return limited
 
   const body = await request.json()
   const { trip_id, start_address, start_time, lunch_time, lunch_duration_minutes, stops } = body as {
