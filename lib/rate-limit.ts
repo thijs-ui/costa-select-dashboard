@@ -1,6 +1,7 @@
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { NextResponse } from 'next/server'
+import { logSecurity } from './logger'
 
 const redis = Redis.fromEnv()
 
@@ -37,6 +38,9 @@ export async function checkRateLimit(userId: string, tier: RateLimitTier): Promi
 
   const failing = !userResult.success ? userResult : !globalResult.success ? globalResult : null
   if (!failing) return null
+
+  const bucket = !userResult.success ? tier : 'GLOBAL'
+  logSecurity({ action: 'rate_limit_exceeded', userId, reason: `bucket=${bucket}` })
 
   const retryAfter = Math.max(1, Math.ceil((failing.reset - Date.now()) / 1000))
   return NextResponse.json(

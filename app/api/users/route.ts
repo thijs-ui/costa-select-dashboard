@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
+import { logAudit } from '@/lib/logger'
 
 async function requireAdmin() {
   const user = await getServerUser()
@@ -72,6 +73,8 @@ export async function POST(request: Request) {
     }, { onConflict: 'user_id' })
   }
 
+  logAudit({ action: 'user.created', userId: user.id, resource: `user:${newUser.user?.id}`, metadata: { email, role: role || 'consultant', naam } })
+
   return NextResponse.json({ success: true, user_id: newUser.user?.id })
 }
 
@@ -106,6 +109,8 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  logAudit({ action: 'user.updated', userId: user.id, resource: `user:${user_id}`, metadata: { role: role || 'consultant', naam } })
+
   return NextResponse.json({ success: true })
 }
 
@@ -125,6 +130,8 @@ export async function DELETE(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  logAudit({ action: 'user.deleted', userId: user.id, resource: `user:${user_id}` })
 
   return NextResponse.json({ success: true })
 }

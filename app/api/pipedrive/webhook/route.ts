@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { fetchDealFields, fetchPipelines, fetchUsers, PipedriveDealField } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
 import { berekenCommissie } from '@/lib/calculations'
+import { logSecurity, logAudit } from '@/lib/logger'
 
 function checkBasicAuth(req: NextRequest): boolean {
   const header = req.headers.get('authorization')
@@ -67,7 +68,7 @@ function resolveFieldValue(
 
 export async function POST(req: NextRequest) {
   if (!checkBasicAuth(req)) {
-    console.warn('[Pipedrive webhook] Auth failed', { ip: req.headers.get('x-forwarded-for') })
+    logSecurity({ action: 'webhook_auth_failure', path: '/api/pipedrive/webhook', ip: req.headers.get('x-forwarded-for') })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
         await supabase.from('afspraken')
           .update({ datum, status, lead_naam })
           .eq('id', existing.id)
+        logAudit({ action: 'afspraak.updated_from_pipedrive', userId: 'system:pipedrive-webhook', resource: `afspraak:${existing.id}`, metadata: { pipedrive_activiteit_id: act.id, status } })
         return NextResponse.json({ ok: true, updated: true })
       }
 
@@ -157,6 +159,8 @@ export async function POST(req: NextRequest) {
         bron,
         pipedrive_activiteit_id: act.id,
       })
+
+      logAudit({ action: 'afspraak.imported_from_pipedrive', userId: 'system:pipedrive-webhook', resource: `pipedrive_activiteit_id:${act.id}`, metadata: { type: TARGET_TYPES[actType], lead_naam, regio } })
 
       return NextResponse.json({ ok: true, imported: true })
     }
@@ -309,6 +313,8 @@ export async function POST(req: NextRequest) {
         notities: `Auto-import via Pipedrive webhook (deal: ${dealTitle})`,
         pipedrive_deal_id: dealData.id,
       })
+
+      logAudit({ action: 'deal.imported_from_pipedrive', userId: 'system:pipedrive-webhook', resource: `pipedrive_deal_id:${dealData.id}`, metadata: { dealTitle, aankoopprijs, regio, type_deal } })
 
       return NextResponse.json({ ok: true, imported: true })
     }

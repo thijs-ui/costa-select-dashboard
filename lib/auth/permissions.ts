@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { getServerUser } from '@/lib/server-auth'
 import { getUserRole, type Role } from '../auth/roles'
+import { logSecurity } from '../logger'
 
 /**
  * Permission-helpers voor API-routes.
@@ -22,6 +23,7 @@ export type AuthResult = User | NextResponse
 export async function requireAuth(): Promise<AuthResult> {
   const user = await getServerUser()
   if (!user) {
+    logSecurity({ action: 'auth_failure', reason: 'no_session' })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   return user
@@ -40,6 +42,7 @@ export async function requireRole(role: Role): Promise<AuthResult> {
   if (userRole === 'admin') return auth
   if (userRole === role) return auth
 
+  logSecurity({ action: 'forbidden', userId: auth.id, reason: `required_role=${role}, actual_role=${userRole}` })
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
 
@@ -62,5 +65,6 @@ export async function requireOwnership(resourceUserId: string | null | undefined
   const userRole = await getUserRole(auth.id)
   if (userRole === 'admin') return auth
 
+  logSecurity({ action: 'forbidden', userId: auth.id, reason: `ownership_mismatch, resource_owner=${resourceUserId}` })
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
