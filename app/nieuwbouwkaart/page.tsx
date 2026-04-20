@@ -17,11 +17,29 @@ import NieuwbouwMap from '@/components/nieuwbouw-map'
 import { CircleCheck, TrendingUp } from 'lucide-react'
 import type { Amenity, Listing, ListingFilters } from '@/components/nieuwbouw-types'
 
+// nearby_amenities gebruikt NL-keys in de DB. We mappen naar EN-kinds voor de icon-lookup
+// in amenityMeta() en zetten `name` op basis van NL-labels.
+const AMENITY_KIND_MAP: Record<string, string> = {
+  strand: 'beach', supermarkt: 'supermarket', restaurant: 'restaurant', bar: 'bar',
+  luchthaven: 'airport', treinstation: 'train', ziekenhuis: 'hospital',
+  school: 'school', apotheek: 'pharmacy', golfbaan: 'golf',
+}
+const AMENITY_NAMES: Record<string, string> = {
+  strand: 'Strand', supermarkt: 'Supermarkt', restaurant: 'Restaurant', bar: 'Bar / café',
+  luchthaven: 'Luchthaven', treinstation: 'Treinstation', ziekenhuis: 'Ziekenhuis',
+  school: 'School', apotheek: 'Apotheek', golfbaan: 'Golfbaan',
+}
+
 function mapAmenities(raw: unknown): Amenity[] {
   if (!raw || typeof raw !== 'object') return []
   return Object.entries(raw as Record<string, { distance_km: number; distance_min: number } | null>)
     .filter(([, v]) => v != null)
-    .map(([kind, v]) => ({ kind, name: '', distance_km: v!.distance_km, travel_min: v!.distance_min }))
+    .map(([rawKey, v]) => ({
+      kind: AMENITY_KIND_MAP[rawKey] ?? rawKey,
+      name: AMENITY_NAMES[rawKey] ?? rawKey,
+      distance_km: v!.distance_km,
+      travel_min: v!.distance_min,
+    }))
 }
 
 const emptyFilters: ListingFilters = {
@@ -124,7 +142,7 @@ export default function NieuwbouwkaartPage() {
       />
 
       <div style={{
-        position: 'relative', minHeight: 640, borderRadius: 14, overflow: 'hidden',
+        position: 'relative', minHeight: 960, borderRadius: 14, overflow: 'hidden',
         border: '1px solid rgba(0,75,70,0.12)', background: '#DDE9E6', margin: '0 32px 32px',
       }}>
         <NieuwbouwMap

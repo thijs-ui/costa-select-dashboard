@@ -12,6 +12,7 @@ import {
   X, MapPin, Sparkles, Waves, Car, Home, Bed, BedDouble, Layers2, Building,
   Phone, FileText, Compass, Flag, Sun, ShoppingCart, GraduationCap, Plane,
   Clock4, ExternalLink, FileDown, RefreshCw, Image as ImageIcon, ChevronDown,
+  Utensils, Wine, Stethoscope, Pill as PillIcon, Train,
 } from 'lucide-react'
 import type { Listing, Unit, Amenity } from '@/components/nieuwbouw-types'
 
@@ -503,6 +504,11 @@ function amenityMeta(kind: string): { Icon: React.ComponentType<{ size?: number 
     case 'airport':    return { Icon: Plane, tone: 'sea' }
     case 'supermarket':return { Icon: ShoppingCart, tone: 'sea' }
     case 'school':     return { Icon: GraduationCap, tone: 'sun' }
+    case 'hospital':   return { Icon: Stethoscope, tone: 'sun' }
+    case 'pharmacy':   return { Icon: PillIcon, tone: 'sun' }
+    case 'restaurant': return { Icon: Utensils, tone: 'sea' }
+    case 'bar':        return { Icon: Wine, tone: 'sun' }
+    case 'train':      return { Icon: Train, tone: 'sea' }
     case 'sun':        return { Icon: Sun, tone: 'sea' }
     default:           return { Icon: MapPin, tone: 'sea' }
   }
