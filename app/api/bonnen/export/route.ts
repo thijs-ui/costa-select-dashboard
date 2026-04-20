@@ -1,6 +1,7 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 import JSZip from 'jszip'
 import * as XLSX from 'xlsx'
 
@@ -9,6 +10,9 @@ const kwartaalMaanden: Record<string, number[]> = {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const { searchParams } = new URL(req.url)
   const kwartaal = searchParams.get('kwartaal') ?? 'Q1'
   const jaar = parseInt(searchParams.get('jaar') ?? String(new Date().getFullYear()))
