@@ -1,12 +1,14 @@
-import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireOwnership } from '@/lib/auth/permissions'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get('user_id')
   if (!userId) return NextResponse.json([])
+
+  const auth = await requireOwnership(userId)
+  if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
   const { data, error } = await supabase
@@ -25,11 +27,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
-  if (auth instanceof NextResponse) return auth
-
   const { user_id, session_id, title, messages, chat_id } = await request.json()
   if (!user_id) return NextResponse.json({ error: 'user_id is verplicht' }, { status: 400 })
+
+  const auth = await requireOwnership(user_id)
+  if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
 
@@ -58,11 +60,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireAdmin()
-  if (auth instanceof NextResponse) return auth
-
   const { id, user_id } = await request.json()
   if (!user_id || !id) return NextResponse.json({ error: 'Missende parameters' }, { status: 400 })
+
+  const auth = await requireOwnership(user_id)
+  if (auth instanceof NextResponse) return auth
 
   const supabase = createServiceClient()
   await supabase
