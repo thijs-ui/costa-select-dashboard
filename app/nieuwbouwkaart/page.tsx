@@ -10,7 +10,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { PageLayout } from '@/components/page-layout'
 import NieuwbouwFilterbar from '@/components/nieuwbouw-filterbar'
 import NieuwbouwDetail from '@/components/nieuwbouw-detail'
@@ -38,18 +37,19 @@ export default function NieuwbouwkaartPage() {
   const [filters, setFilters] = useState<ListingFilters>(emptyFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // Load listings + units. nearby_amenities (JSONB) → amenities[] client-side.
+  // Listings komen uit het Bots-Supabase project via /api/nieuwbouw.
+  // nearby_amenities (JSONB) → amenities[] client-side.
   useEffect(() => {
     (async () => {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*, units(*), nearby_amenities, amenities_fetched_at')
-        .eq('is_active', true)
-      if (error) console.error('[NIEUWBOUW]', error)
-      const mapped = ((data ?? []) as (Listing & { nearby_amenities?: unknown })[])
-        .map(l => ({ ...l, amenities: mapAmenities(l.nearby_amenities) }))
-      setListings(mapped)
+      try {
+        const res = await fetch('/api/nieuwbouw')
+        if (!res.ok) throw new Error(`status ${res.status}`)
+        const data = (await res.json()) as (Listing & { nearby_amenities?: unknown })[]
+        setListings(data.map(l => ({ ...l, amenities: mapAmenities(l.nearby_amenities) })))
+      } catch (err) {
+        console.error('[NIEUWBOUW]', err)
+      }
       setLoading(false)
     })()
   }, [])

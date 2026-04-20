@@ -18,10 +18,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...listingRes.data, units: unitsRes.data ?? [] })
   }
 
-  // Lichte data voor kaart — projecten met coördinaten
+  // Volledige data voor kaart (incl. units + nearby_amenities voor nieuwe UI)
   const { data, error } = await supabase
     .from('listings')
-    .select('id, title, latitude, longitude, price, status, property_type, municipality, province, rooms, bathrooms, size_m2, is_new_development, main_image_url, is_active')
+    .select('*, units(*)')
     .eq('is_active', true)
     .not('latitude', 'is', null)
     .not('longitude', 'is', null)
