@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 import { fetchDeals, fetchStages, fetchPipelines, fetchPersons } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 async function getToken(): Promise<string | null> {
   if (process.env.PIPEDRIVE_API_TOKEN && process.env.PIPEDRIVE_API_TOKEN !== 'xxx') {
@@ -14,6 +15,9 @@ async function getToken(): Promise<string | null> {
 }
 
 export async function GET() {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const token = await getToken()
   if (!token) {
     return NextResponse.json({ error: 'Geen Pipedrive API token ingesteld. Voeg PIPEDRIVE_API_TOKEN toe aan .env.local of stel hem in via Aannames.' }, { status: 400 })

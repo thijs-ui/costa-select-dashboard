@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { fetchAllActivities, fetchUsers } from '@/lib/pipedrive'
 import { createServiceClient } from '@/lib/supabase'
+import { requireAdmin } from '@/lib/auth/permissions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -20,6 +21,9 @@ async function getToken(): Promise<string | null> {
 }
 
 export async function GET() {
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
+
   const token = await getToken()
   if (!token) return NextResponse.json({ error: 'Geen API token' }, { status: 400 })
 
