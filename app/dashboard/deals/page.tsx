@@ -1,89 +1,33 @@
+// ============================================================================
+// DROP-IN for: app/dashboard/deals/page.tsx
+//
+// Restyle van bestaande Deals-pagina met:
+//   - KPI-rij (4 tegels, hergebruikt components/kpi-card.tsx)
+//   - DateFilter, Skeleton, PageLayout patterns hergebruikt
+//   - Sticky commissie preview onderaan form (position: sticky; bottom: 0)
+//   - Consultant + regio filters boven de tabel (lichtgewicht)
+//   - Alle brand-tokens: deepsea / sun / marble / sea / sky — geen slate/amber/blue
+//
+// Berekenlogica: 1:1 ongewijzigd via berekenCommissie() uit lib/calculations.ts
+// Data-layer: bestaande supabase.from('deals'|'makelaars'|'settings') blijft
+// Routes: /dashboard/deals — dit vervangt 1:1 het bestand op dat pad
+// ============================================================================
 'use client'
 
-import { useEffect, useRef, useState, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { berekenCommissie, formatEuro, formatPct } from '@/lib/calculations'
-import DateFilter from '@/components/date-filter'
 import { DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
-import { Pencil, Trash2 } from 'lucide-react'
+import DateFilter from '@/components/date-filter'
+import KpiCard from '@/components/kpi-card'
+import { PageLayout } from '@/components/page-layout'
+import { Skeleton } from '@/components/skeleton'
+import DealsForm, { emptyForm, OVERDRACHT_SCENARIOS, FormState } from '@/components/deals-form'
+import DealsTable from '@/components/deals-table'
+import type { Deal, Makelaar, AppSettings } from '@/components/deals-types'
 
-interface Makelaar {
-  id: string
-  naam: string
-  rol: string
-  area_manager_id: string | null
-}
-
-interface Deal {
-  id: string
-  deal_nummer: number
-  datum_passering: string
-  regio: string
-  type_deal: string
-  bron: string
-  aankoopprijs: number
-  commissie_pct: number | null
-  min_fee_toegepast: boolean
-  bruto_commissie: number | null
-  eigen_netwerk: boolean | null
-  makelaar_id: string | null
-  makelaar_pct: number
-  makelaar_commissie: number | null
-  is_overdracht: boolean | null
-  overdracht_scenario: string | null
-  makelaar2_id: string | null
-  makelaar2_pct: number | null
-  makelaar2_commissie: number | null
-  area_manager_id: string | null
-  area_manager_kpi: boolean | null
-  area_manager_commissie: number | null
-  partner_deal: boolean
-  partner_naam: string | null
-  partner_pct: number
-  partner_commissie: number | null
-  netto_commissie_cs: number | null
-  notities: string | null
-  pipedrive_deal_id?: number | null
-}
-
-interface AppSettings {
-  minimum_fee: number
-  commissie_per_type: Record<string, number>
-  regios: string[]
-  deal_types: string[]
-  bronnen: string[]
-}
-
-const OVERDRACHT_SCENARIOS = [
-  { value: 'standaard', label: 'Standaard (20% / 20%)', m1: 20, m2: 20 },
-  { value: 'eigen_netwerk', label: 'Eigen netwerk overdracht (15% / 40%)', m1: 15, m2: 40 },
-  { value: 'tweede_aankoop', label: 'Tweede aankoop andere regio (5% / 35%)', m1: 5, m2: 35 },
-  { value: 'custom', label: 'Aangepast (vrije verdeling)', m1: null, m2: null },
-]
-
-const emptyForm = {
-  datum_passering: new Date().toISOString().split('T')[0],
-  regio: '',
-  type_deal: '',
-  bron: '',
-  aankoopprijs: '' as string | number,
-  commissie_pct: '' as string | number,
-  eigen_netwerk: false,
-  makelaar_id: '',
-  makelaar_pct: 40,
-  is_overdracht: false,
-  overdracht_scenario: 'standaard',
-  makelaar2_id: '',
-  makelaar2_pct: 0,
-  area_manager_kpi: false,
-  partner_deal: false,
-  partner_naam: '',
-  partner_pct: 20,
-  skip_min_fee: false,
-  notities: '',
-}
-
+// ----------------------------------------------------------------------------
 export default function DealsPageWrapper() {
   return (
     <Suspense>
@@ -103,11 +47,14 @@ function DealsPage() {
     deal_types: [],
     bronnen: [],
   })
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState<FormState>(emptyForm)
   const [editingDealId, setEditingDealId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
+  const [filterConsultant, setFilterConsultant] = useState<string>('')
+  const [filterRegio, setFilterRegio] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
   const formRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { loadAll() }, [])
@@ -117,7 +64,7 @@ function DealsPage() {
     if (!editId || deals.length === 0) return
     const deal = deals.find(d => d.id === editId)
     if (deal) startEdit(deal)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deals, searchParams])
 
   async function loadAll() {
@@ -142,7 +89,6 @@ function DealsPage() {
     setLoading(false)
   }
 
-  // Bepaal area manager voor geselecteerde makelaar
   function getAreaManager() {
     const makelaar = makelaars.find(m => m.id === form.makelaar_id)
     if (!makelaar?.area_manager_id) return null
@@ -161,7 +107,9 @@ function DealsPage() {
       eigen_netwerk: form.eigen_netwerk,
       makelaar_pct: form.makelaar_pct / 100,
       is_overdracht: form.is_overdracht,
-      overdracht_scenario: form.is_overdracht ? form.overdracht_scenario as 'standaard' | 'eigen_netwerk' | 'tweede_aankoop' | 'custom' : null,
+      overdracht_scenario: form.is_overdracht
+        ? (form.overdracht_scenario as 'standaard' | 'eigen_netwerk' | 'tweede_aankoop' | 'custom')
+        : null,
       makelaar2_pct: form.makelaar2_pct / 100,
       partner_deal: form.partner_deal,
       partner_pct: form.partner_pct / 100,
@@ -249,9 +197,8 @@ function DealsPage() {
       partner_deal: deal.partner_deal,
       partner_naam: deal.partner_naam ?? '',
       partner_pct: Math.round((deal.partner_pct ?? 0) * 100),
-      // skip_min_fee: true wanneer min fee NIET toegepast is maar bruto < minimum fee
-      // (betekent: gebruiker heeft hem uitgeschakeld)
-      skip_min_fee: !deal.min_fee_toegepast && Number(deal.bruto_commissie ?? 0) < appSettings.minimum_fee,
+      skip_min_fee:
+        !deal.min_fee_toegepast && Number(deal.bruto_commissie ?? 0) < appSettings.minimum_fee,
       notities: deal.notities ?? '',
     })
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
@@ -262,363 +209,105 @@ function DealsPage() {
     setForm(emptyForm)
   }
 
+  // --------------------------------------------------------------------------
   const preview = bereken()
   const areaManager = getAreaManager()
   const range = getDateRange(datePreset)
-  const filteredDeals = deals.filter((d) => isInRange(d.datum_passering, range))
+  const filteredDeals = useMemo(() => {
+    return deals
+      .filter((d) => isInRange(d.datum_passering, range))
+      .filter((d) => !filterConsultant || d.makelaar_id === filterConsultant || d.makelaar2_id === filterConsultant)
+      .filter((d) => !filterRegio || d.regio === filterRegio)
+      .filter((d) => !search || (d.notities ?? '').toLowerCase().includes(search.toLowerCase()) || (d.partner_naam ?? '').toLowerCase().includes(search.toLowerCase()))
+  }, [deals, range, filterConsultant, filterRegio, search])
 
-  // Bepaal effectieve percentages voor display in formulier
-  const scenarioInfo = OVERDRACHT_SCENARIOS.find(s => s.value === form.overdracht_scenario)
-  const displayM1 = form.is_overdracht && scenarioInfo?.m1 != null ? scenarioInfo.m1 : form.eigen_netwerk ? 55 : form.makelaar_pct
-  const displayM2 = form.is_overdracht && scenarioInfo?.m2 != null ? scenarioInfo.m2 : form.makelaar2_pct
+  // KPI aggregates over gefilterde periode
+  const kpis = useMemo(() => {
+    const totaalDeals = filteredDeals.length
+    const bruto = filteredDeals.reduce((a, d) => a + (d.bruto_commissie ?? 0), 0)
+    const netto = filteredDeals.reduce((a, d) => a + (d.netto_commissie_cs ?? 0), 0)
+    const gemAankoop = filteredDeals.length > 0
+      ? filteredDeals.reduce((a, d) => a + d.aankoopprijs, 0) / filteredDeals.length
+      : 0
+    return { totaalDeals, bruto, netto, gemAankoop }
+  }, [filteredDeals])
 
-  if (loading) return <div className="text-slate-400 text-sm p-8">Laden...</div>
+  if (loading) {
+    return (
+      <PageLayout title="Sales">
+        <div className="grid grid-cols-4 gap-3 mb-6">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[88px] rounded-[10px]" />)}
+        </div>
+        <Skeleton className="h-[420px] rounded-[12px] mb-6" />
+        <Skeleton className="h-[280px] rounded-[12px]" />
+      </PageLayout>
+    )
+  }
 
   return (
-    <div className="px-8 py-8">
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="text-xl font-semibold text-slate-900">Sales</h1>
+    <PageLayout title="Sales">
+      {/* Topbar: DateFilter rechts uitgelijnd */}
+      <div className="flex items-center justify-end -mt-12 mb-6">
         <DateFilter value={datePreset} onChange={setDatePreset} />
       </div>
 
-      {/* Invoerformulier */}
-      <div
-        ref={formRef}
-        className={`bg-white rounded-lg border p-5 mb-6 ${editingDealId ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200'}`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-slate-700">
-            {editingDealId ? 'Sale bewerken' : 'Nieuwe sale'}
-          </h2>
-          {editingDealId && (
-            <button onClick={cancelEdit} className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 px-3 py-1 rounded-md">
-              Annuleren
-            </button>
-          )}
-        </div>
-
-        {/* Basisvelden */}
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Datum passering *">
-            <input type="date" value={form.datum_passering}
-              onChange={(e) => setForm({ ...form, datum_passering: e.target.value })}
-              className={inp} />
-          </Field>
-          <Field label="Regio *">
-            <select value={form.regio} onChange={(e) => setForm({ ...form, regio: e.target.value })} className={inp}>
-              <option value="">Kies regio</option>
-              {appSettings.regios.map((r) => <option key={r}>{r}</option>)}
-            </select>
-          </Field>
-          <Field label="Type sale *">
-            <select value={form.type_deal} onChange={(e) => setForm({ ...form, type_deal: e.target.value })} className={inp}>
-              <option value="">Kies type</option>
-              {appSettings.deal_types.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </Field>
-          <Field label="Bron *">
-            <select value={form.bron} onChange={(e) => setForm({ ...form, bron: e.target.value })} className={inp}>
-              <option value="">Kies bron</option>
-              {appSettings.bronnen.map((b) => <option key={b}>{b}</option>)}
-            </select>
-          </Field>
-          <Field label="Aankoopprijs (€) *">
-            <input type="number" placeholder="0" value={form.aankoopprijs}
-              onChange={(e) => setForm({ ...form, aankoopprijs: e.target.value })}
-              className={inp} />
-          </Field>
-          <Field label="Commissie % (leeg = auto)">
-            <input type="number" step="0.1" placeholder="auto" value={form.commissie_pct}
-              onChange={(e) => setForm({ ...form, commissie_pct: e.target.value })}
-              className={inp} />
-          </Field>
-          <Field label="Minimum fee">
-            <label className="flex items-center gap-2 h-[34px] text-sm text-slate-600 cursor-pointer">
-              <input type="checkbox" checked={!form.skip_min_fee}
-                onChange={(e) => setForm({ ...form, skip_min_fee: !e.target.checked })}
-                className="rounded border-slate-300" />
-              Toepassen
-              <span className="text-xs text-slate-400">(€{appSettings.minimum_fee.toLocaleString('nl-NL')})</span>
-            </label>
-          </Field>
-          <Field label="Notities">
-            <input type="text" value={form.notities}
-              onChange={(e) => setForm({ ...form, notities: e.target.value })}
-              className={inp} />
-          </Field>
-        </div>
-
-        {/* Commissieverdeling */}
-        <div className="mt-5 border-t border-slate-100 pt-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Commissieverdeling</div>
-
-          {/* Makelaar 1 */}
-          <div className="grid grid-cols-3 gap-4 mb-3">
-            <Field label="Consultant">
-              <select value={form.makelaar_id}
-                onChange={(e) => setForm({ ...form, makelaar_id: e.target.value, area_manager_kpi: false })}
-                className={inp}>
-                <option value="">Geen / Costa Select</option>
-                {makelaars.map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
-              </select>
-            </Field>
-            <Field label={`Consultant % ${form.eigen_netwerk ? '(eigen netwerk)' : form.is_overdracht && form.overdracht_scenario !== 'custom' ? '(auto)' : ''}`}>
-              {form.eigen_netwerk || (form.is_overdracht && form.overdracht_scenario !== 'custom') ? (
-                <div className={`${inp} bg-slate-50 text-slate-500`}>{displayM1}%</div>
-              ) : (
-                <input type="number" step="1" min="0" max="100" value={form.makelaar_pct}
-                  onChange={(e) => setForm({ ...form, makelaar_pct: Number(e.target.value) })}
-                  className={inp} />
-              )}
-            </Field>
-            <div className="flex items-end gap-4 pb-0.5">
-              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                <input type="checkbox" checked={form.eigen_netwerk}
-                  onChange={(e) => setForm({ ...form, eigen_netwerk: e.target.checked, is_overdracht: e.target.checked ? false : form.is_overdracht })}
-                  className="rounded border-slate-300" />
-                Eigen netwerk sale
-                <span className="text-xs text-slate-400">(55/45)</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Area manager info */}
-          {areaManager && (
-            <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-md flex items-center justify-between">
-              <div className="text-sm text-amber-800">
-                <span className="font-medium">Area manager:</span> {areaManager.naam} — ontvangt {form.area_manager_kpi ? '15%' : '10%'} van CS aandeel
-              </div>
-              <label className="flex items-center gap-2 text-xs text-amber-700 cursor-pointer">
-                <input type="checkbox" checked={form.area_manager_kpi}
-                  onChange={(e) => setForm({ ...form, area_manager_kpi: e.target.checked })}
-                  className="rounded border-amber-300" />
-                KPI behaald (15%)
-              </label>
-            </div>
-          )}
-
-          {/* Overdracht toggle */}
-          <div className="mb-3">
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input type="checkbox" checked={form.is_overdracht}
-                onChange={(e) => setForm({ ...form, is_overdracht: e.target.checked, eigen_netwerk: e.target.checked ? false : form.eigen_netwerk })}
-                className="rounded border-slate-300" />
-              Overdracht sale
-              <span className="text-xs text-slate-400">(split tussen twee consultants)</span>
-            </label>
-          </div>
-
-          {form.is_overdracht && (
-            <div className="grid grid-cols-3 gap-4 p-3 bg-blue-50 border border-blue-100 rounded-md">
-              <Field label="Scenario">
-                <select value={form.overdracht_scenario}
-                  onChange={(e) => setForm({ ...form, overdracht_scenario: e.target.value })}
-                  className={inp}>
-                  {OVERDRACHT_SCENARIOS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Tweede consultant">
-                <select value={form.makelaar2_id}
-                  onChange={(e) => setForm({ ...form, makelaar2_id: e.target.value })}
-                  className={inp}>
-                  <option value="">Kies consultant</option>
-                  {makelaars.filter(m => m.id !== form.makelaar_id).map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
-                </select>
-              </Field>
-              {form.overdracht_scenario === 'custom' ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Consultant 1 %">
-                    <input type="number" step="1" min="0" max="100" value={form.makelaar_pct}
-                      onChange={(e) => setForm({ ...form, makelaar_pct: Number(e.target.value) })}
-                      className={inp} />
-                  </Field>
-                  <Field label="Consultant 2 %">
-                    <input type="number" step="1" min="0" max="100" value={form.makelaar2_pct}
-                      onChange={(e) => setForm({ ...form, makelaar2_pct: Number(e.target.value) })}
-                      className={inp} />
-                  </Field>
-                </div>
-              ) : (
-                <Field label="Verdeling">
-                  <div className={`${inp} bg-white text-slate-500`}>{displayM1}% / {displayM2}%</div>
-                </Field>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Partner deal */}
-        <div className="mt-4 border-t border-slate-100 pt-4">
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer mb-3">
-            <input type="checkbox" checked={form.partner_deal}
-              onChange={(e) => setForm({ ...form, partner_deal: e.target.checked })}
-              className="rounded border-slate-300" />
-            Referral partner deal
-            <span className="text-xs text-slate-400">(partner krijgt % van CS aandeel)</span>
-          </label>
-          {form.partner_deal && (
-            <div className="grid grid-cols-3 gap-4">
-              <Field label="Partner naam">
-                <input type="text" value={form.partner_naam}
-                  onChange={(e) => setForm({ ...form, partner_naam: e.target.value })}
-                  className={inp} />
-              </Field>
-              <Field label="Partner % van CS aandeel">
-                <input type="number" step="1" min="0" max="100" value={form.partner_pct}
-                  onChange={(e) => setForm({ ...form, partner_pct: Number(e.target.value) })}
-                  className={inp} />
-              </Field>
-            </div>
-          )}
-        </div>
-
-        {/* Preview berekening */}
-        {preview && (
-          <div className="mt-4 p-4 bg-slate-50 rounded-md border border-slate-200">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Berekening</div>
-            <div className="grid grid-cols-4 gap-3 text-sm">
-              <PreviewItem label="Bruto commissie" value={formatEuro(preview.bruto_commissie)}
-                sub={preview.min_fee_toegepast
-                  ? `min fee (${formatEuro(preview.bruto_commissie_incl_btw)} incl. BTW)`
-                  : `${(preview.commissie_pct * 100).toFixed(1)}%`} />
-              {preview.makelaar_commissie > 0 && (
-                <PreviewItem
-                  label={`Consultant${form.is_overdracht ? ' 1' : ''} (${(preview.makelaar_pct_effectief * 100).toFixed(0)}%)`}
-                  value={formatEuro(preview.makelaar_commissie)} />
-              )}
-              {preview.makelaar2_commissie > 0 && (
-                <PreviewItem
-                  label={`Consultant 2 (${(preview.makelaar2_pct_effectief * 100).toFixed(0)}%)`}
-                  value={formatEuro(preview.makelaar2_commissie)} />
-              )}
-              <PreviewItem label="CS aandeel" value={formatEuro(preview.cs_aandeel)}
-                sub={`${(100 - (preview.makelaar_pct_effectief + preview.makelaar2_pct_effectief) * 100).toFixed(0)}%`} />
-              {preview.partner_commissie > 0 && (
-                <PreviewItem label={`Partner (${form.partner_pct}% v. CS)`} value={formatEuro(preview.partner_commissie)} />
-              )}
-              {preview.area_manager_commissie > 0 && (
-                <PreviewItem label={`Area mgr (${form.area_manager_kpi ? '15' : '10'}% v. CS)`} value={formatEuro(preview.area_manager_commissie)} />
-              )}
-              <PreviewItem label="Netto omzet CS" value={formatEuro(preview.netto_commissie_cs)} highlight />
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4">
-          <button onClick={saveDeal} disabled={saving}
-            className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
-            {saving ? 'Opslaan...' : editingDealId ? 'Wijzigingen opslaan' : 'Sale opslaan'}
-          </button>
-        </div>
+      {/* KPI-rij */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        <KpiCard
+          label="Totaal deals"
+          value={kpis.totaalDeals}
+          sub={range.label}
+        />
+        <KpiCard
+          label="Bruto commissie"
+          value={formatEuro(kpis.bruto)}
+          sub={kpis.totaalDeals > 0 ? `gem. ${formatEuro(kpis.bruto / kpis.totaalDeals)} / deal` : '—'}
+        />
+        <KpiCard
+          label="Netto omzet CS"
+          value={formatEuro(kpis.netto)}
+          sub="na makelaars + partners"
+          color="green"
+        />
+        <KpiCard
+          label="Gem. aankoopprijs"
+          value={formatEuro(kpis.gemAankoop)}
+          sub={`${kpis.totaalDeals} deal${kpis.totaalDeals === 1 ? '' : 's'}`}
+        />
       </div>
 
-      {/* Deals tabel */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">Sales ({filteredDeals.length})</h2>
-          <span className="text-xs text-slate-400">{range.label}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                {['#', 'Datum', 'Regio', 'Type', 'Bron', 'Aankoopprijs', 'Comm%', 'Bruto', 'Consultant(s)', 'CS netto', 'Notities', ''].map((h) => (
-                  <th key={h} className="text-left px-3 py-2 text-xs uppercase tracking-wide text-slate-500 font-medium whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDeals.length === 0 && (
-                <tr><td colSpan={12} className="px-4 py-6 text-center text-slate-400 text-sm">Geen deals in deze periode</td></tr>
-              )}
-              {filteredDeals.map((deal) => {
-                const m1 = makelaars.find((m) => m.id === deal.makelaar_id)
-                const m2 = makelaars.find((m) => m.id === deal.makelaar2_id)
-                const isEditing = editingDealId === deal.id
-                return (
-                  <tr key={deal.id} className={`border-b border-slate-50 ${isEditing ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
-                    <td className="px-3 py-2 text-slate-500">{deal.deal_nummer}</td>
-                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
-                      {new Date(deal.datum_passering).toLocaleDateString('nl-NL')}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded">{deal.regio}</span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{deal.type_deal}</td>
-                    <td className="px-3 py-2 text-slate-600 max-w-[100px] truncate">{deal.bron}</td>
-                    <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{formatEuro(deal.aankoopprijs)}</td>
-                    <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">
-                      {formatPct(deal.commissie_pct)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{formatEuro(deal.bruto_commissie)}</td>
-                    <td className="px-3 py-2 text-slate-600">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1">
-                          {deal.eigen_netwerk && (
-                            <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded font-medium">EN</span>
-                          )}
-                          {deal.is_overdracht && (
-                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded font-medium">OD</span>
-                          )}
-                          <span>{m1?.naam?.split(' ')[0] ?? '—'}</span>
-                          {m1 && <span className="text-xs text-slate-400">({formatPct(deal.makelaar_pct)})</span>}
-                        </div>
-                        {m2 && (
-                          <div className="text-xs text-slate-500">
-                            {m2.naam.split(' ')[0]} <span className="text-slate-400">({formatPct(deal.makelaar2_pct)})</span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-green-600 whitespace-nowrap">
-                      {formatEuro(deal.netto_commissie_cs)}
-                    </td>
-                    <td className="px-3 py-2 text-slate-500 max-w-[100px] truncate">
-                      <div className="flex items-center gap-1">
-                        {deal.pipedrive_deal_id && (
-                          <span className="bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0">PD</span>
-                        )}
-                        <span className="truncate">{deal.notities ?? '—'}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => startEdit(deal)} className={`p-1 ${isEditing ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`}>
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => deleteDeal(deal.id)} className="text-slate-300 hover:text-red-500 p-1">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+      {/* Form + sticky preview */}
+      <div ref={formRef}>
+        <DealsForm
+          form={form}
+          setForm={setForm}
+          editingDealId={editingDealId}
+          onCancel={cancelEdit}
+          onSave={saveDeal}
+          saving={saving}
+          makelaars={makelaars}
+          appSettings={appSettings}
+          areaManager={areaManager}
+          preview={preview}
+        />
       </div>
-    </div>
-  )
-}
 
-const inp = 'w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400 bg-white'
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-slate-500 mb-1">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function PreviewItem({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
-  return (
-    <div>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className={`font-semibold ${highlight ? 'text-green-600' : 'text-slate-800'}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-400">{sub}</div>}
-    </div>
+      {/* Tabel */}
+      <DealsTable
+        deals={filteredDeals}
+        makelaars={makelaars}
+        editingDealId={editingDealId}
+        onEdit={startEdit}
+        onDelete={deleteDeal}
+        range={range}
+        filterConsultant={filterConsultant}
+        setFilterConsultant={setFilterConsultant}
+        filterRegio={filterRegio}
+        setFilterRegio={setFilterRegio}
+        search={search}
+        setSearch={setSearch}
+        regios={appSettings.regios}
+      />
+    </PageLayout>
   )
 }

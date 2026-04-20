@@ -1,3 +1,7 @@
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse bg-[rgba(0,75,70,0.08)] ${className}`} />
+}
+
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="animate-pulse space-y-3">
