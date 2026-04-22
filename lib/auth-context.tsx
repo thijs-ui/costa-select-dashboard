@@ -47,13 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* fall through naar fallback */ }
 
-    // Fallback: /api/users gaat via service-client en bypasst RLS.
-    // Voorkomt dat een JWT-timing issue de admin-rol "verliest" op cold start.
+    // Fallback: /api/users/me gaat via service-client en bypasst RLS.
+    // Voorkomt dat een JWT-timing issue de rol "verliest" op cold start.
     try {
-      const res = await fetch('/api/users')
+      const res = await fetch('/api/users/me')
       if (res.ok) {
-        const { users } = await res.json()
-        const me = users?.find((x: { id: string }) => x.id === u.id)
+        const me = await res.json()
         if (me?.role) {
           setRole(me.role as Role)
           setNaam(me.naam ?? null)
