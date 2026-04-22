@@ -5,8 +5,9 @@
 
 import {
   QUESTIONS, DIMENSIONS, ANSWER_SCORE, DIMENSION_CAP,
-  type DimensionId, type Question, type Doel,
+  type DimensionId, type Question, type Doel, type Dimension,
 } from './data'
+import type { QuestionBank } from './banks'
 
 const WEIGHT_MIN = 1
 const WEIGHT_MAX = 5
@@ -14,12 +15,16 @@ const WEIGHT_MAX = 5
 export type Weights = Partial<Record<DimensionId, number>>
 
 // ─── Adaptieve vraag-selectie ────────────────────────────────────────────────
-export function getActiveQuestions(weights: Weights): Question[] {
+// `bank` optioneel: als meegegeven worden zijn dimensions + questions gebruikt.
+// Default = algemene bank.
+export function getActiveQuestions(weights: Weights, bank?: QuestionBank): Question[] {
+  const questions = bank?.questions ?? QUESTIONS
+  const dimensions = bank?.dimensions ?? DIMENSIONS
   const active: Question[] = []
-  for (const dim of DIMENSIONS) {
+  for (const dim of dimensions) {
     const w = weights?.[dim.id] ?? 0
     const maxRank = w <= 1 ? 1 : w <= 3 ? 2 : 3
-    const dimQs = QUESTIONS
+    const dimQs = questions
       .filter(q => q.dimension === dim.id && q.rank <= maxRank)
       .sort((a, b) => a.rank - b.rank)
     active.push(...dimQs)
@@ -128,14 +133,16 @@ function computeDimRaws(
   matches: Record<string, number>,
   weights: Weights,
   questionToDim: Record<string, DimensionId>,
+  dimensions?: Dimension[],
 ): Record<string, number> {
-  const dimRaws: Record<string, number> = Object.fromEntries(DIMENSIONS.map(d => [d.id, 0]))
+  const dims = dimensions ?? DIMENSIONS
+  const dimRaws: Record<string, number> = Object.fromEntries(dims.map(d => [d.id, 0]))
   for (const qId of Object.keys(matches)) {
     const dimId = questionToDim[qId]
     if (!dimId) continue
     dimRaws[dimId] += matches[qId]
   }
-  for (const dim of DIMENSIONS) {
+  for (const dim of dims) {
     dimRaws[dim.id] *= weights?.[dim.id] ?? 0
   }
   return dimRaws
@@ -155,20 +162,22 @@ export function calculateScores(
   regionPositions: Record<string, Record<string, number>>,
   coverage: string[] = [],
   bonus = 0,
+  bank?: QuestionBank,
 ): ScoreResult[] {
-  const activeQuestions = getActiveQuestions(weights)
+  const dimensions = bank?.dimensions ?? DIMENSIONS
+  const activeQuestions = getActiveQuestions(weights, bank)
   const questionToDim: Record<string, DimensionId> =
     Object.fromEntries(activeQuestions.map(q => [q.id, q.dimension]))
 
   const perfectMatches = Object.fromEntries(activeQuestions.map(q => [q.id, 4]))
-  const perfectDimRaws = computeDimRaws(perfectMatches, weights, questionToDim)
+  const perfectDimRaws = computeDimRaws(perfectMatches, weights, questionToDim, dimensions)
   const perfectCapped = applyDimensionCap(perfectDimRaws)
   const maxTotal = Object.values(perfectCapped).reduce((a, b) => a + b, 0)
 
   return Object.keys(regionPositions).map(regionId => {
     const positions = regionPositions[regionId]
     const matches: Record<string, number> = {}
-    const dimMatches: Record<string, number> = Object.fromEntries(DIMENSIONS.map(d => [d.id, 0]))
+    const dimMatches: Record<string, number> = Object.fromEntries(dimensions.map(d => [d.id, 0]))
 
     for (const q of activeQuestions) {
       const letter = answers?.[q.id]
@@ -179,7 +188,7 @@ export function calculateScores(
       dimMatches[q.dimension] += m
     }
 
-    const dimRaws = computeDimRaws(matches, weights, questionToDim)
+    const dimRaws = computeDimRaws(matches, weights, questionToDim, dimensions)
     const capped = applyDimensionCap(dimRaws)
     const total = Object.values(capped).reduce((a, b) => a + b, 0)
     const rawPct = maxTotal > 0 ? total / maxTotal : 0

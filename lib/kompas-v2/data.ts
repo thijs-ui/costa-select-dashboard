@@ -225,7 +225,9 @@ export const TYPE_AVAILABILITY: Record<string, Record<TypeKey, Availability>> = 
 export type Doel = 'tweede-huis' | 'permanent' | 'investering'
 
 export const DOEL_WEIGHT_ADJUSTMENTS: Record<Doel, Partial<Record<DimensionId, number>>> = {
-  'investering':  { verhuur: +2, levensstijl: -1 },
+  // Vanaf Fase 7: investeerder-bank vervangt de bonus-weging — eigen matrix
+  // doet het inhoudelijke werk.
+  'investering':  {},
   'permanent':    { gemeenschap: +1, bereikbaarheid: -1 },
   'tweede-huis':  {},
 }

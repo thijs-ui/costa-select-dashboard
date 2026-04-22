@@ -7,10 +7,11 @@
 import { useMemo, useReducer, useState } from 'react'
 import { Compass, ChevronLeft, ChevronRight, RotateCcw, Trophy } from 'lucide-react'
 import {
-  REGIONS, DIMENSIONS, REGION_POSITIONS, CONSULTANT_COVERAGE,
+  REGIONS, CONSULTANT_COVERAGE,
   SERVICE_BONUS, MEDIAN_PRICES, TYPE_AVAILABILITY, DOEL_WEIGHT_ADJUSTMENTS,
   UI_TYPE_MAP, type Doel, type DimensionId,
 } from '@/lib/kompas-v2/data'
+import { getBankForProfile } from '@/lib/kompas-v2/banks'
 import {
   getActiveQuestions, applyDoelAdjustment, filterRegions,
   calculateScores, rankRegions, type Weights,
@@ -33,16 +34,18 @@ type Action =
   | { type: 'SET_STEP'; step: Step }
   | { type: 'SET_DOEL'; doel: Doel }
   | { type: 'SET_FILTER'; key: keyof FilterAnswers; value: FilterAnswers[keyof FilterAnswers] }
-  | { type: 'SET_WEIGHT'; dim: DimensionId; value: number }
+  | { type: 'SET_WEIGHT'; dim: string; value: number }  // string, want bank bepaalt de ids
   | { type: 'ANSWER'; qid: string; letter: 'A' | 'B' | 'C' }
   | { type: 'PREV_Q' }
   | { type: 'RESET' }
 
+// Default weights vullen we leeg in en laten het per bank initialiseren bij
+// profiel-keuze. Reducer zet op basis van gekozen bank.
 const initial: State = {
   step: 'profile',
   doel: null,
   filterAnswers: {},
-  weights: Object.fromEntries(DIMENSIONS.map(d => [d.id, 3])) as Weights,
+  weights: {},
   answers: {},
   questionIndex: 0,
 }
@@ -50,7 +53,13 @@ const initial: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_STEP':    return { ...state, step: action.step }
-    case 'SET_DOEL':    return { ...state, doel: action.doel, step: 'filters' }
+    case 'SET_DOEL': {
+      // Init weights per bank-dimensies (general of investor) op middenweging 3.
+      const bank = getBankForProfile(action.doel)
+      const freshWeights: Weights = {}
+      for (const d of bank.dimensions) freshWeights[d.id] = 3
+      return { ...state, doel: action.doel, weights: freshWeights, step: 'filters' }
+    }
     case 'SET_FILTER':  return { ...state, filterAnswers: { ...state.filterAnswers, [action.key]: action.value } }
     case 'SET_WEIGHT':  return { ...state, weights: { ...state.weights, [action.dim]: action.value } }
     case 'ANSWER':      return { ...state, answers: { ...state.answers, [action.qid]: action.letter }, questionIndex: state.questionIndex + 1 }
@@ -63,12 +72,16 @@ function reducer(state: State, action: Action): State {
 export default function KompasV2Page() {
   const [state, dispatch] = useReducer(reducer, initial)
 
+  // Bank volgt het profiel: investering → investeerder-vragen+matrix,
+  // anders → algemene bank.
+  const bank = useMemo(() => getBankForProfile(state.doel), [state.doel])
+
   const effectiveWeights = useMemo(
     () => applyDoelAdjustment(state.weights, state.doel, DOEL_WEIGHT_ADJUSTMENTS),
     [state.weights, state.doel],
   )
 
-  const questions = useMemo(() => getActiveQuestions(effectiveWeights), [effectiveWeights])
+  const questions = useMemo(() => getActiveQuestions(effectiveWeights, bank), [effectiveWeights, bank])
 
   const regionFilter = useMemo(
     () => filterRegions(REGIONS.map(r => r.id), state.filterAnswers, MEDIAN_PRICES, TYPE_AVAILABILITY, UI_TYPE_MAP),
@@ -77,20 +90,20 @@ export default function KompasV2Page() {
 
   const activePositions = useMemo(() => {
     const out: Record<string, Record<string, number>> = {}
-    for (const [id, pos] of Object.entries(REGION_POSITIONS)) {
+    for (const [id, pos] of Object.entries(bank.regionPositions)) {
       if (regionFilter[id]?.active) out[id] = pos
     }
     return out
-  }, [regionFilter])
+  }, [regionFilter, bank])
 
   const ranked = useMemo(() => {
     if (state.step !== 'results') return []
-    const raw = calculateScores(state.answers, effectiveWeights, activePositions, CONSULTANT_COVERAGE, SERVICE_BONUS)
+    const raw = calculateScores(state.answers, effectiveWeights, activePositions, CONSULTANT_COVERAGE, SERVICE_BONUS, bank)
     return rankRegions(raw, effectiveWeights).map(r => {
       const meta = REGIONS.find(x => x.id === r.regionId)!
       return { ...r, name: meta.name, subtitle: meta.subtitle, pct: Math.round(r.score * 100) }
     })
-  }, [state.step, state.answers, effectiveWeights, activePositions])
+  }, [state.step, state.answers, effectiveWeights, activePositions, bank])
 
   const eliminated = REGIONS.filter(r => !regionFilter[r.id]?.active)
 
@@ -136,6 +149,7 @@ export default function KompasV2Page() {
 
       {state.step === 'weights' && (
         <WeightsStep
+          dimensions={bank.dimensions}
           weights={state.weights}
           totalQuestions={questions.length}
           onSetWeight={(dim, v) => dispatch({ type: 'SET_WEIGHT', dim, value: v })}
@@ -147,6 +161,7 @@ export default function KompasV2Page() {
       {state.step === 'questions' && questions[state.questionIndex] && (
         <QuestionStep
           question={questions[state.questionIndex]}
+          dimensions={bank.dimensions}
           index={state.questionIndex}
           total={questions.length}
           selected={state.answers[questions[state.questionIndex].id]}
@@ -279,11 +294,12 @@ function FiltersStep({
 }
 
 function WeightsStep({
-  weights, totalQuestions, onSetWeight, onNext, onBack,
+  dimensions, weights, totalQuestions, onSetWeight, onNext, onBack,
 }: {
+  dimensions: { id: string; name: string }[]
   weights: Weights
   totalQuestions: number
-  onSetWeight: (dim: DimensionId, v: number) => void
+  onSetWeight: (dim: string, v: number) => void
   onNext: () => void
   onBack: () => void
 }) {
@@ -298,8 +314,8 @@ function WeightsStep({
       </div>
 
       <div className="space-y-3 mb-8">
-        {DIMENSIONS.map(dim => {
-          const w = weights[dim.id] ?? 3
+        {dimensions.map(dim => {
+          const w = (weights as Record<string, number | undefined>)[dim.id] ?? 3
           return (
             <div key={dim.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-2">
@@ -337,16 +353,17 @@ function WeightsStep({
 }
 
 function QuestionStep({
-  question, index, total, selected, onAnswer, onBack,
+  question, dimensions, index, total, selected, onAnswer, onBack,
 }: {
   question: { id: string; text: string; dimension: string; options: { id: 'A' | 'B' | 'C'; label: string }[] }
+  dimensions: { id: string; name: string }[]
   index: number
   total: number
   selected: 'A' | 'B' | 'C' | undefined
   onAnswer: (l: 'A' | 'B' | 'C') => void
   onBack: () => void
 }) {
-  const dimLabel = DIMENSIONS.find(d => d.id === question.dimension)?.name ?? question.dimension
+  const dimLabel = dimensions.find(d => d.id === question.dimension)?.name ?? question.dimension
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
