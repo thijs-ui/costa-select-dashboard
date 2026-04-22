@@ -13,7 +13,6 @@ const ADMIN_PATHS = [
   '/maandkosten',
   '/bonnen',
   '/funnel',
-  '/dossier',
   '/pipedrive',
   '/agentschappen'
 ]
