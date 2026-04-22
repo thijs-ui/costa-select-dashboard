@@ -1,6 +1,6 @@
 import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
 import { checkRateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 120
@@ -9,7 +9,7 @@ const WONINGBOT_API_URL = process.env.WONINGBOT_API_URL || 'http://localhost:300
 const WONINGBOT_API_KEY = process.env.WONINGBOT_API_KEY || ''
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const limited = await checkRateLimit(auth.id, 'MEDIUM')

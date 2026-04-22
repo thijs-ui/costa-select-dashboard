@@ -2,7 +2,7 @@ import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
 import { checkRateLimit } from '@/lib/rate-limit'
 
 const anthropic = new Anthropic({
@@ -10,7 +10,7 @@ const anthropic = new Anthropic({
 })
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const limited = await checkRateLimit(auth.id, 'LIGHT')

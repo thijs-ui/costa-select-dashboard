@@ -7,7 +7,7 @@ import { docs } from '@/lib/kennisbank-docs'
 import { createServiceClient } from '@/lib/supabase'
 import { scrapeCostaSelect, isCostaSelectUrl } from '@/lib/scrapers/costaselect'
 import { scrapeIdealista, isIdealistaUrl } from '@/lib/scrapers/idealista'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
 import { checkRateLimit } from '@/lib/rate-limit'
 
 // Allow longer execution for Apify + Claude calls
@@ -132,7 +132,7 @@ Schrijfstijl:
 - Schrijf in het Nederlands`
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const limited = await checkRateLimit(auth.id, 'EXPENSIVE')

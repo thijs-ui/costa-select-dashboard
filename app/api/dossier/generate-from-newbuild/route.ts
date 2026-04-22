@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServiceClient } from '@/lib/supabase'
 import { createBotsClient } from '@/lib/supabase-bots'
-import { requireAdmin } from '@/lib/auth/permissions'
+import { requireAuth } from '@/lib/auth/permissions'
 import { checkRateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 120
@@ -95,7 +95,7 @@ async function downloadAndStorePhotos(photos: string[], dossierId: string): Prom
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const limited = await checkRateLimit(auth.id, 'EXPENSIVE')
