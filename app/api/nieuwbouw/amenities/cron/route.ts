@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createBotsClient } from '@/lib/supabase-bots'
+import { logSecurity } from '@/lib/logger'
 
 export const maxDuration = 300 // 5 minuten
 
@@ -47,9 +48,12 @@ async function findNearest(lat: number, lng: number, type: string, radius: numbe
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 export async function GET(request: Request) {
-  // Verifieer cron authorization
+  // Vercel Cron stuurt `Authorization: Bearer ${CRON_SECRET}`. Fail-closed:
+  // als CRON_SECRET niet is gezet, wordt de route volledig geblokkeerd.
+  const cronSecret = process.env.CRON_SECRET
   const authHeader = request.headers.get('authorization')
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    logSecurity({ action: 'auth_failure', path: '/api/nieuwbouw/amenities/cron', reason: 'invalid_cron_secret' })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

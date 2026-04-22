@@ -1,9 +1,12 @@
-import { getServerUser } from '@/lib/server-auth'
 import { NextResponse } from 'next/server'
 import { createBotsClient } from '@/lib/supabase-bots'
+import { requireAuth } from '@/lib/auth/permissions'
 
 // GET: data uit het Bots Supabase project
 export async function GET(request: Request) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const supabase = createBotsClient()
   const { searchParams } = new URL(request.url)
   const full = searchParams.get('id')
