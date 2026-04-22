@@ -4,8 +4,8 @@
 // Logica en data komen uit lib/kompas-v2/. UI is basic; Claude Design
 // pakt de polish op.
 
-import { useMemo, useReducer, useState } from 'react'
-import { Compass, ChevronLeft, ChevronRight, RotateCcw, Trophy } from 'lucide-react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
+import { Compass, ChevronLeft, ChevronRight, RotateCcw, Trophy, ChevronDown, Copy, Check } from 'lucide-react'
 import {
   REGIONS, CONSULTANT_COVERAGE,
   SERVICE_BONUS, MEDIAN_PRICES, TYPE_AVAILABILITY, DOEL_WEIGHT_ADJUSTMENTS,
@@ -18,6 +18,40 @@ import {
 } from '@/lib/kompas-v2/logic'
 
 type Step = 'profile' | 'filters' | 'weights' | 'questions' | 'results'
+
+// ─── URL state (deelbare-link feature) ───────────────────────────────────────
+// State wordt geëncodeerd als base64-JSON in `?s=...` query param. Decoder
+// hydrate't de reducer bij load als er een valide payload staat.
+interface SharePayload {
+  d?: string
+  f?: Record<string, unknown>
+  w?: Record<string, number>
+  a?: Record<string, 'A' | 'B' | 'C'>
+}
+
+function encodeState(s: State): string {
+  const payload: SharePayload = { d: s.doel ?? undefined, f: s.filterAnswers, w: s.weights as Record<string, number>, a: s.answers }
+  if (typeof window === 'undefined') return ''
+  return window.btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+}
+
+function decodeState(encoded: string): SharePayload | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return JSON.parse(decodeURIComponent(escape(window.atob(encoded)))) as SharePayload
+  } catch {
+    return null
+  }
+}
+
+function buildShareUrl(s: State): string {
+  if (typeof window === 'undefined') return ''
+  const encoded = encodeState(s)
+  if (!encoded) return ''
+  const url = new URL(window.location.href)
+  url.searchParams.set('s', encoded)
+  return url.toString()
+}
 
 type FilterAnswers = { type?: 'appartement' | 'woning' | 'beide'; budget?: number }
 
@@ -38,6 +72,7 @@ type Action =
   | { type: 'ANSWER'; qid: string; letter: 'A' | 'B' | 'C' }
   | { type: 'PREV_Q' }
   | { type: 'RESET' }
+  | { type: 'HYDRATE'; payload: SharePayload }
 
 // Default weights vullen we leeg in en laten het per bank initialiseren bij
 // profiel-keuze. Reducer zet op basis van gekozen bank.
@@ -65,12 +100,36 @@ function reducer(state: State, action: Action): State {
     case 'ANSWER':      return { ...state, answers: { ...state.answers, [action.qid]: action.letter }, questionIndex: state.questionIndex + 1 }
     case 'PREV_Q':      return { ...state, questionIndex: Math.max(0, state.questionIndex - 1) }
     case 'RESET':       return initial
+    case 'HYDRATE': {
+      // Vul state uit gedecodeerde share-link en spring direct naar results.
+      const p = action.payload
+      const doel = (p.d as Doel) ?? null
+      return {
+        ...state,
+        doel,
+        filterAnswers: (p.f as FilterAnswers) ?? {},
+        weights: (p.w as Weights) ?? {},
+        answers: (p.a as Record<string, 'A' | 'B' | 'C'>) ?? {},
+        step: 'results',
+        questionIndex: 0,
+      }
+    }
     default:            return state
   }
 }
 
 export default function KompasV2Page() {
   const [state, dispatch] = useReducer(reducer, initial)
+
+  // Deelbare link: hydrate state uit ?s=... bij mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const s = params.get('s')
+    if (!s) return
+    const decoded = decodeState(s)
+    if (decoded) dispatch({ type: 'HYDRATE', payload: decoded })
+  }, [])
 
   // Bank volgt het profiel: investering → investeerder-vragen+matrix,
   // anders → algemene bank.
@@ -171,7 +230,13 @@ export default function KompasV2Page() {
       )}
 
       {state.step === 'results' && (
-        <ResultsStep ranked={ranked} eliminated={eliminated.map(r => ({ ...r, reasons: regionFilter[r.id]?.reasons ?? [] }))} />
+        <ResultsStep
+          ranked={ranked}
+          eliminated={eliminated.map(r => ({ ...r, reasons: regionFilter[r.id]?.reasons ?? [] }))}
+          dimensions={bank.dimensions}
+          activeQuestions={questions}
+          shareUrl={buildShareUrl(state)}
+        />
       )}
     </div>
   )
@@ -401,18 +466,57 @@ function QuestionStep({
   )
 }
 
+type RankedRegion = {
+  regionId: string
+  name: string
+  subtitle: string
+  pct: number
+  hasCoverage: boolean
+  dimMatches: Record<string, number>
+}
+
 function ResultsStep({
-  ranked, eliminated,
+  ranked, eliminated, dimensions, activeQuestions, shareUrl,
 }: {
-  ranked: { regionId: string; name: string; subtitle: string; pct: number; hasCoverage: boolean }[]
+  ranked: RankedRegion[]
   eliminated: { id: string; name: string; subtitle: string; reasons: string[] }[]
+  dimensions: { id: string; name: string }[]
+  activeQuestions: { id: string; dimension: string }[]
+  shareUrl: string
 }) {
-  const [showAll, setShowAll] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
   if (ranked.length === 0) {
-    return <p className="text-gray-500 font-body">Geen regio's overgebleven na filters. Pas filters aan.</p>
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+        <p className="text-gray-500 font-body mb-4">Geen regio's voldoen aan alle filters.</p>
+        <p className="text-xs text-gray-400 font-body">Ga een stap terug en verruim je budget of type woning.</p>
+      </div>
+    )
   }
+
+  // Max match-score per dim (n_active_questions_in_dim × 4).
+  const maxPerDim = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const d of dimensions) {
+      const n = activeQuestions.filter(q => q.dimension === d.id).length
+      out[d.id] = n * 4
+    }
+    return out
+  }, [dimensions, activeQuestions])
+
+  function copyShareLink() {
+    if (!shareUrl) return
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   const winner = ranked[0]
   const rest = ranked.slice(1)
+
   return (
     <div>
       <div className="text-center mb-4">
@@ -431,23 +535,71 @@ function ResultsStep({
         )}
       </div>
 
-      <h3 className="font-heading font-bold text-deepsea uppercase tracking-wide text-xs mb-2">Alle regio's</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-heading font-bold text-deepsea uppercase tracking-wide text-xs">Alle regio's</h3>
+        <button
+          onClick={copyShareLink}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 font-body"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? 'Link gekopieerd' : 'Deel mijn match'}
+        </button>
+      </div>
+
       <div className="space-y-2 mb-6">
-        {(showAll ? rest : rest.slice(0, 4)).map((r, i) => (
-          <div key={r.regionId} className="bg-white rounded-xl border border-gray-100 p-3 flex items-center justify-between">
-            <div>
-              <span className="text-gray-400 text-xs font-heading mr-2">#{i + 2}</span>
-              <span className="font-body font-medium text-deepsea">{r.name}</span>
-              {r.hasCoverage && <span className="ml-2 text-[10px] text-sun-dark font-body">✓ consultant</span>}
+        {ranked.map((r, i) => {
+          const isWinner = i === 0
+          const isOpen = openId === r.regionId
+          return (
+            <div key={r.regionId} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <button
+                onClick={() => setOpenId(isOpen ? null : r.regionId)}
+                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-xs font-heading w-6">#{i + 1}</span>
+                  <span className="font-body font-medium text-deepsea">{r.name}</span>
+                  {r.hasCoverage && <span className="text-[10px] text-sun-dark font-body">✓ consultant</span>}
+                  {isWinner && <span className="text-[10px] text-gray-400 font-body">winnaar</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-heading font-bold text-deepsea">{r.pct}%</span>
+                  <ChevronDown
+                    size={14}
+                    className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="px-3 pb-3 border-t border-gray-50">
+                  <p className="text-xs text-gray-400 font-body mt-2 mb-2">{r.subtitle}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {dimensions.map(dim => {
+                      const raw = r.dimMatches?.[dim.id] ?? 0
+                      const max = maxPerDim[dim.id] || 0
+                      const pct = max > 0 ? Math.round((raw / max) * 100) : 0
+                      return (
+                        <div key={dim.id} className="text-xs font-body">
+                          <div className="flex justify-between mb-0.5">
+                            <span className="text-gray-500 truncate mr-1">{dim.name}</span>
+                            <span className="text-deepsea font-bold">{pct}%</span>
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-sun rounded-full"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-            <span className="font-heading font-bold text-deepsea">{r.pct}%</span>
-          </div>
-        ))}
-        {rest.length > 4 && (
-          <button onClick={() => setShowAll(s => !s)} className="text-xs text-gray-500 hover:text-deepsea font-body">
-            {showAll ? 'Minder tonen' : `Toon ${rest.length - 4} meer`}
-          </button>
-        )}
+          )
+        })}
       </div>
 
       {eliminated.length > 0 && (
