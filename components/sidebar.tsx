@@ -45,6 +45,7 @@ const platformItems = [
   { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
   { href: '/training', label: 'Training', icon: GraduationCap },
   { href: '/kompas', label: 'Costa Kompas', icon: Compass },
+  { href: '/kompas-v2', label: 'Costa Kompas v2', icon: Compass },
 ]
 
 const dashboardItems = [
