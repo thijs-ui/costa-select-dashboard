@@ -12,10 +12,10 @@ async function requireAdmin() {
   return user
 }
 
-// GET: lijst alle gebruikers met hun rollen en namen
+// GET: lijst alle gebruikers met hun rollen en namen (admin-only)
 export async function GET() {
-  const user = await getServerUser()
-  if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 })
+  const user = await requireAdmin()
+  if (!user) return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
 
   const service = createServiceClient()
 
