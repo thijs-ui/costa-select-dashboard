@@ -99,6 +99,25 @@ h1, h2, h3, h4 {
 .bz-anim-fade-in { animation: bz-fade-in 180ms ease-out; }
 .bz-spinner { animation: bz-spin 0.8s linear infinite; }
 
+/* ─── Dossier animations ─────────────────────────────────────────────── */
+@keyframes ds-slide-down {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ds-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ds-spin { to { transform: rotate(360deg); } }
+@keyframes ds-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.ds-anim-slide-down { animation: ds-slide-down 180ms ease-out; }
+.ds-anim-fade-in { animation: ds-fade-in 180ms ease-out; }
+.ds-spinner { animation: ds-spin 0.8s linear infinite; }
+.ds-anim-pulse { animation: ds-pulse 2s ease-in-out infinite; }
+
 /* ─── Print: bezichtigingen itinerary ────────────────────────────────── */
 @media print {
   aside { display: none !important; }
