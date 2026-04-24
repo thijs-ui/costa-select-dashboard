@@ -118,6 +118,54 @@ h1, h2, h3, h4 {
 .ds-spinner { animation: ds-spin 0.8s linear infinite; }
 .ds-anim-pulse { animation: ds-pulse 2s ease-in-out infinite; }
 
+/* ─── Calculator animations + slider ─────────────────────────────────── */
+@keyframes calc-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes calc-slide-down {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.calc-anim-fade-in { animation: calc-fade-in 160ms ease-out; }
+.calc-anim-slide-down { animation: calc-slide-down 180ms ease-out; }
+
+/* Rate slider — pseudo-elements can't be styled inline */
+.calc-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #0EAE96 0%, #0EAE96 var(--calc-pos, 40%), rgba(0,75,70,0.14) var(--calc-pos, 40%), rgba(0,75,70,0.14) 100%);
+  outline: none;
+  cursor: pointer;
+}
+.calc-slider.warn {
+  background: linear-gradient(to right, #c03e34 0%, #c03e34 var(--calc-pos, 40%), rgba(224,82,82,0.22) var(--calc-pos, 40%), rgba(224,82,82,0.22) 100%);
+}
+.calc-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2px solid #004B46;
+  box-shadow: 0 1px 3px rgba(7,42,36,0.2);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.calc-slider::-webkit-slider-thumb:hover { transform: scale(1.1); }
+.calc-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2px solid #004B46;
+  cursor: pointer;
+}
+
 /* ─── Print: bezichtigingen itinerary ────────────────────────────────── */
 @media print {
   aside { display: none !important; }
