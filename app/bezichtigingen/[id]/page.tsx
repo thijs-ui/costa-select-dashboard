@@ -35,7 +35,7 @@ import {
   BzHeader,
   CountPill,
   EmptyCard,
-} from '../page'
+} from '@/components/bezichtigingen/atoms'
 
 // ───────── Types ─────────
 interface Trip {
