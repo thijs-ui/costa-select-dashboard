@@ -1,15 +1,31 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '@/lib/auth-context'
-import { PageLayout } from '@/components/page-layout'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Users, Plus, ArrowLeft, Trash2, ExternalLink, Loader2,
-  Bed, Bath, Maximize2, PenLine, Link2, X, Star, Download,
-  FileText, Eye, Megaphone, Check,
+  ArrowLeft,
+  Bath,
+  Bed,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Inbox,
+  Link2,
+  Loader2,
+  MapPin,
+  Maximize2,
+  PenLine,
+  Plus,
+  Star,
+  Trash2,
+  Users,
+  X,
 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/auth-context'
+import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
 
+// ───────── Types ─────────
 interface ShortlistSummary {
   id: string
   klant_naam: string
@@ -41,40 +57,196 @@ interface ShortlistDetail {
   shortlist_items: ShortlistItem[]
 }
 
-function formatPrice(price: number | null): string {
-  if (!price) return ''
-  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(price)
+// ───────── Utils ─────────
+function formatPrice(n: number | null): string | null {
+  if (n == null) return null
+  return '€ ' + new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)
 }
 
+function formatDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const days = Math.floor((now.getTime() - d.getTime()) / 86_400_000)
+  if (days === 0) return 'vandaag'
+  if (days === 1) return 'gisteren'
+  if (days < 7) return `${days} dagen geleden`
+  const months = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
+  return `${d.getDate()} ${months[d.getMonth()]}`
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+}
+
+// ───────── Page ─────────
 export default function WoninglijstPage() {
   const { user } = useAuth()
-  const [shortlists, setShortlists] = useState<ShortlistSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'overview' | 'detail'>('overview')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Overview data
+  const [shortlists, setShortlists] = useState<ShortlistSummary[]>([])
+  const [overviewLoading, setOverviewLoading] = useState(true)
+
+  // Detail data
   const [detail, setDetail] = useState<ShortlistDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // New client form
+  // Overview form
   const [showNewForm, setShowNewForm] = useState(false)
-  const [newName, setNewName] = useState('')
 
-  // Add URL form
+  // Detail forms/filters
   const [showAddUrl, setShowAddUrl] = useState(false)
-  const [addUrl, setAddUrl] = useState('')
-  const [addTitle, setAddTitle] = useState('')
-  const [addNote, setAddNote] = useState('')
-
-  // Edit note
+  const [favOnly, setFavOnly] = useState(false)
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [editingNoteText, setEditingNoteText] = useState('')
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Dossier modal
+  const [dossierItem, setDossierItem] = useState<DossierModalItem | null>(null)
+
+  // ─── Load overview ─────────────────────────────────────────
+  const loadOverview = useCallback(async () => {
+    try {
+      const res = await fetch('/api/woninglijst', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) setShortlists(data)
+      }
+    } catch {
+      /* ignore */
+    }
+    setOverviewLoading(false)
+  }, [])
+
+  useEffect(() => {
+    loadOverview()
+  }, [loadOverview])
+
+  // ─── Load detail on selectedId change ──────────────────────
+  const loadDetail = useCallback(async (id: string) => {
+    setDetailLoading(true)
+    try {
+      const res = await fetch(`/api/woninglijst/${id}`, { credentials: 'include' })
+      if (res.ok) setDetail(await res.json())
+    } catch {
+      /* ignore */
+    }
+    setDetailLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (selectedId) loadDetail(selectedId)
+    else setDetail(null)
+  }, [selectedId, loadDetail])
+
+  // ─── CRUD ──────────────────────────────────────────────────
+  async function createCustomer(name: string) {
+    await fetch('/api/woninglijst', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ klant_naam: name, created_by: user?.id }),
+    })
+    loadOverview()
+  }
+
+  async function deleteCustomer(id: string) {
+    if (!confirm('Weet je zeker dat je deze klant en alle woningen wilt verwijderen?')) return
+    await fetch(`/api/woninglijst/${id}`, { method: 'DELETE' })
+    if (selectedId === id) {
+      setSelectedId(null)
+      setView('overview')
+    }
+    loadOverview()
+  }
+
+  async function addItem(url: string, title: string, notities: string) {
+    if (!selectedId) return
+    const trimmedTitle = title.trim()
+    await fetch(`/api/woninglijst/${selectedId}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{ url: url.trim(), ...(trimmedTitle ? { title: trimmedTitle } : {}), notities: notities.trim() }],
+      }),
+    })
+    loadDetail(selectedId)
+    loadOverview()
+  }
+
+  async function toggleFavorite(itemId: string, current: boolean) {
+    if (!detail || !selectedId) return
+    setDetail(prev =>
+      prev
+        ? {
+            ...prev,
+            shortlist_items: prev.shortlist_items.map(i =>
+              i.id === itemId ? { ...i, is_favorite: !current } : i
+            ),
+          }
+        : null
+    )
+    await fetch(`/api/woninglijst/${selectedId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, is_favorite: !current }),
+    })
+  }
+
+  async function saveNote(itemId: string, text: string) {
+    if (!selectedId) return
+    await fetch(`/api/woninglijst/${selectedId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, item_notities: text }),
+    })
+    setEditingNoteId(null)
+    loadDetail(selectedId)
+  }
+
+  async function deleteItem(itemId: string) {
+    if (!selectedId) return
+    await fetch(`/api/woninglijst/${selectedId}/items`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId }),
+    })
+    loadDetail(selectedId)
+    loadOverview()
+  }
+
+  async function bulkDelete() {
+    if (!selectedId || selectedItems.size === 0) return
+    if (
+      !confirm(
+        `Weet je zeker dat je ${selectedItems.size} woningen wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`
+      )
+    )
+      return
+    await fetch(`/api/woninglijst/${selectedId}/items`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_ids: Array.from(selectedItems) }),
+    })
+    setSelectedItems(new Set())
+    loadDetail(selectedId)
+    loadOverview()
+  }
 
   async function downloadPdf() {
     if (!detail) return
     setPdfLoading(true)
     try {
-      const items = showFavoritesOnly ? detail.shortlist_items.filter(i => i.is_favorite) : detail.shortlist_items
+      const items = favOnly
+        ? detail.shortlist_items.filter(i => i.is_favorite)
+        : detail.shortlist_items
       const res = await fetch('/api/woninglijst/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,502 +260,1309 @@ export default function WoninglijstPage() {
       a.download = `woningoverzicht-${detail.klant_naam.replace(/\s+/g, '-').toLowerCase()}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setPdfLoading(false)
   }
 
-  async function toggleFavorite(itemId: string, current: boolean) {
-    if (!detail || !selectedId) return
-    // Optimistic update
-    setDetail(prev => prev ? {
-      ...prev,
-      shortlist_items: prev.shortlist_items.map(item =>
-        item.id === itemId ? { ...item, is_favorite: !current } : item
-      ),
-    } : null)
-    await fetch(`/api/woninglijst/${selectedId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId, is_favorite: !current }),
-    })
+  // ─── View-switch helpers ───────────────────────────────────
+  function openDetail(id: string) {
+    setSelectedId(id)
+    setView('detail')
+    setSelectedItems(new Set())
+    setFavOnly(false)
+    setEditingNoteId(null)
+    setShowAddUrl(false)
   }
 
-  const fetchShortlists = useCallback(async () => {
-    try {
-      const res = await fetch('/api/woninglijst', { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) setShortlists(data)
-      }
-    } catch { /* ignore */ }
-    setLoading(false)
-  }, [])
+  function backToOverview() {
+    setView('overview')
+    setSelectedId(null)
+    setSelectedItems(new Set())
+    setShowAddUrl(false)
+  }
 
-  const fetchDetail = useCallback(async (id: string) => {
-    setDetailLoading(true)
-    try {
-      const res = await fetch(`/api/woninglijst/${id}`, { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        setDetail(data)
-      }
-    } catch { /* ignore */ }
-    setDetailLoading(false)
-  }, [])
+  // ─── Render ────────────────────────────────────────────────
+  return (
+    <>
+      <div
+        className="flex flex-col bg-marble"
+        style={{ height: '100vh', minWidth: 0, overflow: 'hidden' }}
+      >
+        {view === 'overview' ? (
+          <OverviewView
+            shortlists={shortlists}
+            loading={overviewLoading}
+            showNewForm={showNewForm}
+            setShowNewForm={setShowNewForm}
+            onCreate={createCustomer}
+            onOpen={openDetail}
+            onDelete={deleteCustomer}
+          />
+        ) : (
+          <DetailView
+            detail={detail}
+            loading={detailLoading}
+            onBack={backToOverview}
+            showAddUrl={showAddUrl}
+            setShowAddUrl={setShowAddUrl}
+            onAddItem={addItem}
+            favOnly={favOnly}
+            setFavOnly={setFavOnly}
+            selectedItems={selectedItems}
+            setSelectedItems={setSelectedItems}
+            editingNoteId={editingNoteId}
+            setEditingNoteId={setEditingNoteId}
+            onToggleFav={toggleFavorite}
+            onSaveNote={saveNote}
+            onDeleteItem={deleteItem}
+            onBulkDelete={bulkDelete}
+            onDownloadPdf={downloadPdf}
+            pdfLoading={pdfLoading}
+            onOpenDossier={setDossierItem}
+          />
+        )}
+      </div>
 
-  useEffect(() => { fetchShortlists() }, [fetchShortlists])
+      <DossierModal item={dossierItem} onClose={() => setDossierItem(null)} />
+    </>
+  )
+}
 
-  useEffect(() => {
-    if (selectedId) fetchDetail(selectedId)
-    else setDetail(null)
-  }, [selectedId, fetchDetail])
+// ═════════ OVERVIEW ═════════
+function OverviewView({
+  shortlists,
+  loading,
+  showNewForm,
+  setShowNewForm,
+  onCreate,
+  onOpen,
+  onDelete,
+}: {
+  shortlists: ShortlistSummary[]
+  loading: boolean
+  showNewForm: boolean
+  setShowNewForm: (v: boolean) => void
+  onCreate: (name: string) => void
+  onOpen: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const [name, setName] = useState('')
+  const isEmpty = !loading && shortlists.length === 0
 
-  async function handleCreateClient() {
-    if (!newName.trim()) return
-    await fetch('/api/woninglijst', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ klant_naam: newName.trim(), created_by: user?.id }),
-    })
-    setNewName('')
+  function submit() {
+    if (!name.trim()) return
+    onCreate(name.trim())
+    setName('')
     setShowNewForm(false)
-    fetchShortlists()
   }
 
-  async function handleDeleteShortlist(id: string) {
-    if (!confirm('Weet je zeker dat je deze klant en alle woningen wilt verwijderen?')) return
-    await fetch(`/api/woninglijst/${id}`, { method: 'DELETE' })
-    if (selectedId === id) { setSelectedId(null); setDetail(null) }
-    fetchShortlists()
-  }
+  return (
+    <>
+      {/* Header */}
+      <WlHeader>
+        <div className="min-w-0">
+          <WlEyebrow>Dashboard</WlEyebrow>
+          <h1
+            className="font-heading font-bold text-deepsea"
+            style={{ fontSize: 30, lineHeight: 1, letterSpacing: '-0.01em', margin: '0 0 4px' }}
+          >
+            Woninglijsten
+            <CountPill>
+              {shortlists.length} klant{shortlists.length === 1 ? '' : 'en'}
+            </CountPill>
+          </h1>
+          <p className="font-body" style={{ fontSize: 13, color: '#7A8C8B', margin: 0 }}>
+            Beheer shortlists voor je klanten
+          </p>
+        </div>
+        <div className="flex items-center" style={{ gap: 10 }}>
+          <WlButton variant="primary" onClick={() => setShowNewForm(!showNewForm)}>
+            <Plus size={14} strokeWidth={2.2} /> Nieuwe klant
+          </WlButton>
+        </div>
+      </WlHeader>
 
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto" style={{ overflowX: 'hidden' }}>
+        <div className="mx-auto" style={{ maxWidth: 1040, padding: '22px 36px 60px' }}>
+          {showNewForm && (
+            <InlineForm>
+              <div className="grid grid-cols-1" style={{ gap: 8, marginBottom: 10 }}>
+                <WlInput
+                  autoFocus
+                  placeholder="Naam van de klant..."
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') submit()
+                    if (e.key === 'Escape') setShowNewForm(false)
+                  }}
+                />
+              </div>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <WlButton variant="primary" disabled={!name.trim()} onClick={submit}>
+                  Aanmaken
+                </WlButton>
+                <WlButton
+                  variant="subtle"
+                  onClick={() => {
+                    setName('')
+                    setShowNewForm(false)
+                  }}
+                >
+                  Annuleren
+                </WlButton>
+              </div>
+            </InlineForm>
+          )}
+
+          {loading ? (
+            <div
+              className="flex items-center justify-center"
+              style={{ padding: '60px 0', color: '#7A8C8B' }}
+            >
+              <Loader2 size={20} className="animate-spin" />
+            </div>
+          ) : isEmpty ? (
+            <EmptyCard
+              icon={<Users size={26} strokeWidth={1.5} />}
+              title="Nog geen klanten"
+              text="Maak een nieuwe klant aan om hun shortlist samen te stellen."
+              cta={
+                <WlButton variant="primary" onClick={() => setShowNewForm(true)}>
+                  <Plus size={14} strokeWidth={2.2} /> Nieuwe klant
+                </WlButton>
+              }
+            />
+          ) : (
+            <div
+              className="flex flex-col bg-white overflow-hidden"
+              style={{
+                border: '1px solid rgba(0,75,70,0.12)',
+                borderRadius: 14,
+              }}
+            >
+              {shortlists.map((s, i) => (
+                <CustomerRow
+                  key={s.id}
+                  customer={s}
+                  isFirst={i === 0}
+                  onOpen={() => onOpen(s.id)}
+                  onDelete={() => onDelete(s.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function CustomerRow({
+  customer,
+  isFirst,
+  onOpen,
+  onDelete,
+}: {
+  customer: ShortlistSummary
+  isFirst: boolean
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onClick={onOpen}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-center cursor-pointer transition-colors relative"
+      style={{
+        gap: 16,
+        padding: '16px 20px',
+        borderTop: isFirst ? 'none' : '1px solid rgba(0,75,70,0.08)',
+        background: hovered ? '#E6F0EF' : 'transparent',
+      }}
+    >
+      <div
+        className="flex items-center justify-center shrink-0 font-heading font-bold text-deepsea"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: '#FFE5BD',
+          fontSize: 14,
+          letterSpacing: '0.02em',
+        }}
+      >
+        {initials(customer.klant_naam)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div
+          className="font-heading font-bold truncate"
+          style={{
+            fontSize: 15.5,
+            color: '#004B46',
+            letterSpacing: '-0.005em',
+            marginBottom: 3,
+          }}
+        >
+          {customer.klant_naam}
+        </div>
+        <div
+          className="flex items-center flex-wrap font-body"
+          style={{ fontSize: 11.5, color: '#7A8C8B', gap: 8 }}
+        >
+          <span>
+            Bijgewerkt <b style={{ color: '#5F7472', fontWeight: 600 }}>{formatDate(customer.updated_at)}</b>
+          </span>
+          {customer.notities && (
+            <>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '40ch',
+                }}
+              >
+                {customer.notities}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+      <div
+        className="shrink-0 font-heading font-bold"
+        style={{
+          padding: '6px 12px',
+          background: '#E6F0EF',
+          color: '#004B46',
+          fontSize: 12,
+          borderRadius: 999,
+        }}
+      >
+        {customer.item_count} {customer.item_count === 1 ? 'woning' : 'woningen'}
+      </div>
+      <button
+        onClick={e => {
+          e.stopPropagation()
+          onDelete()
+        }}
+        title="Verwijderen"
+        className="flex items-center justify-center shrink-0 cursor-pointer transition-all"
+        style={{
+          opacity: hovered ? 1 : 0,
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          background: 'transparent',
+          color: '#7A8C8B',
+          border: 'none',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = 'rgba(224,82,82,0.12)'
+          e.currentTarget.style.color = '#c24040'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = '#7A8C8B'
+        }}
+      >
+        <Trash2 size={14} strokeWidth={1.8} />
+      </button>
+      <div
+        className="shrink-0 flex items-center transition-colors"
+        style={{ color: hovered ? '#004B46' : '#7A8C8B' }}
+      >
+        <ChevronRight size={16} strokeWidth={2} />
+      </div>
+    </div>
+  )
+}
+
+// ═════════ DETAIL ═════════
+function DetailView({
+  detail,
+  loading,
+  onBack,
+  showAddUrl,
+  setShowAddUrl,
+  onAddItem,
+  favOnly,
+  setFavOnly,
+  selectedItems,
+  setSelectedItems,
+  editingNoteId,
+  setEditingNoteId,
+  onToggleFav,
+  onSaveNote,
+  onDeleteItem,
+  onBulkDelete,
+  onDownloadPdf,
+  pdfLoading,
+  onOpenDossier,
+}: {
+  detail: ShortlistDetail | null
+  loading: boolean
+  onBack: () => void
+  showAddUrl: boolean
+  setShowAddUrl: (v: boolean) => void
+  onAddItem: (url: string, title: string, note: string) => Promise<void>
+  favOnly: boolean
+  setFavOnly: (v: boolean) => void
+  selectedItems: Set<string>
+  setSelectedItems: (s: Set<string>) => void
+  editingNoteId: string | null
+  setEditingNoteId: (id: string | null) => void
+  onToggleFav: (id: string, current: boolean) => void
+  onSaveNote: (id: string, text: string) => void
+  onDeleteItem: (id: string) => void
+  onBulkDelete: () => void
+  onDownloadPdf: () => void
+  pdfLoading: boolean
+  onOpenDossier: (item: DossierModalItem) => void
+}) {
+  const [addUrl, setAddUrl] = useState('')
+  const [addTitle, setAddTitle] = useState('')
+  const [addNote, setAddNote] = useState('')
   const [addLoading, setAddLoading] = useState(false)
 
-  async function handleAddUrl() {
-    if (!selectedId || !addUrl.trim()) return
+  const items = useMemo(() => detail?.shortlist_items ?? [], [detail?.shortlist_items])
+  const hasFavorites = items.some(i => i.is_favorite)
+
+  const filtered = useMemo(() => {
+    const arr = favOnly ? items.filter(i => i.is_favorite) : [...items]
+    arr.sort((a, b) => (b.is_favorite === a.is_favorite ? 0 : b.is_favorite ? 1 : -1))
+    return arr
+  }, [items, favOnly])
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every(i => selectedItems.has(i.id))
+
+  function toggleSelectAll() {
+    const nx = new Set(selectedItems)
+    if (allVisibleSelected) filtered.forEach(i => nx.delete(i.id))
+    else filtered.forEach(i => nx.add(i.id))
+    setSelectedItems(nx)
+  }
+
+  function toggleOne(id: string) {
+    const nx = new Set(selectedItems)
+    if (nx.has(id)) nx.delete(id)
+    else nx.add(id)
+    setSelectedItems(nx)
+  }
+
+  async function submitAdd() {
+    if (!addUrl.trim()) return
     setAddLoading(true)
-    // Don't send title if empty — lets the backend auto-enrich from URL
-    const title = addTitle.trim()
-    await fetch(`/api/woninglijst/${selectedId}/items`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: [{ url: addUrl.trim(), ...(title ? { title } : {}), notities: addNote.trim() }],
-      }),
-    })
+    await onAddItem(addUrl, addTitle, addNote)
     setAddUrl('')
     setAddTitle('')
     setAddNote('')
     setShowAddUrl(false)
     setAddLoading(false)
-    fetchDetail(selectedId)
-    fetchShortlists()
   }
 
-  const router = useRouter()
+  const title = detail?.klant_naam || 'Laden...'
+  const subtitle =
+    detail?.notities || 'Shortlist — beheer, markeer favorieten en genereer dossiers.'
 
-  // Dossier modal
-  const [dossierItem, setDossierItem] = useState<ShortlistItem | null>(null)
-  const [dossierMode, setDossierMode] = useState<'presentatie' | 'pitch' | ''>('')
-  const [dossierGenerating, setDossierGenerating] = useState(false)
-  const [dossierResult, setDossierResult] = useState<{ id: string } | null>(null)
-  const [dossierError, setDossierError] = useState('')
-
-  function openDossierModal(item: ShortlistItem) {
-    setDossierItem(item)
-    setDossierMode('')
-    setDossierResult(null)
-    setDossierError('')
-  }
-
-  async function generateDossierFromUrl() {
-    if (!dossierItem || !dossierMode) return
-    setDossierGenerating(true)
-    setDossierError('')
-    try {
-      const res = await fetch('/api/dossier/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'url', url: dossierItem.url, brochure_type: dossierMode }),
-      })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Mislukt') }
-      const data = await res.json()
-      setDossierResult({ id: data.id || 'created' })
-    } catch (err) {
-      setDossierError(err instanceof Error ? err.message : 'Dossier genereren mislukt')
-    }
-    setDossierGenerating(false)
-  }
-
-  function closeDossierModal() {
-    setDossierItem(null)
-    setDossierMode('')
-    setDossierResult(null)
-    setDossierError('')
-  }
-
-  // Multi-select state
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-
-  function toggleSelectItem(id: string) {
-    setSelectedItems(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function selectAll(items: ShortlistItem[]) {
-    setSelectedItems(new Set(items.map(i => i.id)))
-  }
-
-  function clearSelection() {
-    setSelectedItems(new Set())
-  }
-
-  async function bulkDelete() {
-    if (!selectedId || selectedItems.size === 0) return
-    if (!confirm(`Weet je zeker dat je ${selectedItems.size} woningen wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return
-    await fetch(`/api/woninglijst/${selectedId}/items`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_ids: Array.from(selectedItems) }),
-    })
-    clearSelection()
-    fetchDetail(selectedId)
-    fetchShortlists()
-  }
-
-  async function handleDeleteItem(itemId: string) {
-    if (!selectedId) return
-    await fetch(`/api/woninglijst/${selectedId}/items`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId }),
-    })
-    fetchDetail(selectedId)
-    fetchShortlists()
-  }
-
-  async function handleSaveNote(itemId: string) {
-    if (!selectedId) return
-    const supabaseUrl = '/api/woninglijst/' + selectedId + '/items'
-    // Update note via a PATCH-style approach: delete and re-add would be messy.
-    // Instead, use a direct update endpoint. For now, we update the item inline.
-    // We'll use the shortlist PATCH endpoint pattern
-    await fetch(`/api/woninglijst/${selectedId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId, item_notities: editingNoteText }),
-    })
-    setEditingNoteId(null)
-    fetchDetail(selectedId)
-  }
-
-  // ─── OVERVIEW ───────────────────────────────────────────
-  if (!selectedId) {
-    return (
-      <PageLayout title="Woninglijsten" subtitle="Beheer shortlists voor je klanten">
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-sm text-gray-400">{shortlists.length} klant{shortlists.length !== 1 ? 'en' : ''}</p>
+  return (
+    <>
+      <WlHeader>
+        <div className="min-w-0">
           <button
-            onClick={() => setShowNewForm(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#004B46] text-[#FFFAEF] text-sm font-medium rounded-xl hover:bg-[#0A6B63] transition-colors cursor-pointer"
+            onClick={onBack}
+            className="inline-flex items-center font-body font-semibold uppercase cursor-pointer transition-colors"
+            style={{
+              gap: 6,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11.5,
+              color: '#7A8C8B',
+              letterSpacing: '0.08em',
+              marginBottom: 10,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#7A8C8B')}
           >
-            <Plus size={15} /> Nieuwe klant
+            <ArrowLeft size={13} strokeWidth={2} /> Terug naar overzicht
           </button>
+          <WlEyebrow>Woninglijst</WlEyebrow>
+          <h1
+            className="font-heading font-bold text-deepsea"
+            style={{ fontSize: 30, lineHeight: 1, letterSpacing: '-0.01em', margin: '0 0 4px' }}
+          >
+            {title}
+            <CountPill>
+              {items.length} woning{items.length === 1 ? '' : 'en'}
+            </CountPill>
+          </h1>
+          <p
+            className="font-body truncate"
+            style={{ fontSize: 13, color: '#7A8C8B', margin: 0, maxWidth: 600 }}
+          >
+            {subtitle}
+          </p>
         </div>
+        <div className="flex items-center" style={{ gap: 10 }}>
+          <WlButton
+            variant="ghost"
+            disabled={items.length === 0 || pdfLoading}
+            onClick={onDownloadPdf}
+          >
+            {pdfLoading ? (
+              <Loader2 size={14} className="animate-spin" strokeWidth={2} />
+            ) : (
+              <Download size={14} strokeWidth={2} />
+            )}{' '}
+            Download overzicht
+          </WlButton>
+          <WlButton variant="primary" onClick={() => setShowAddUrl(!showAddUrl)}>
+            <Link2 size={14} strokeWidth={2} /> Woning toevoegen
+          </WlButton>
+        </div>
+      </WlHeader>
 
-        {showNewForm && (
-          <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex gap-3">
-            <input
-              autoFocus
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleCreateClient()}
-              placeholder="Naam van de klant..."
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
-            />
-            <button onClick={handleCreateClient} className="px-4 py-2 bg-[#004B46] text-white text-sm rounded-lg cursor-pointer">Aanmaken</button>
-            <button onClick={() => { setShowNewForm(false); setNewName('') }} className="px-3 py-2 text-gray-400 hover:text-gray-600 cursor-pointer"><X size={16} /></button>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400">
-            <Loader2 size={20} className="animate-spin" />
-          </div>
-        ) : shortlists.length === 0 ? (
-          <div className="text-center py-16">
-            <Users size={40} className="mx-auto mb-3 text-gray-200" />
-            <p className="text-sm text-gray-400">Nog geen klanten. Maak een nieuwe klant aan.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {shortlists.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setSelectedId(s.id)}
-                className="w-full flex items-center justify-between bg-white rounded-xl border border-gray-100 px-5 py-4 hover:shadow-sm transition-shadow cursor-pointer group text-left"
+      <div className="flex-1 overflow-y-auto" style={{ overflowX: 'hidden' }}>
+        <div className="mx-auto" style={{ maxWidth: 1040, padding: '22px 36px 60px' }}>
+          {showAddUrl && (
+            <InlineForm>
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: '2fr 1fr 1fr',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
               >
-                <div>
-                  <p className="text-sm font-semibold text-[#004B46]">{s.klant_naam}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {s.item_count} woning{s.item_count !== 1 ? 'en' : ''}
-                    {' · '}
-                    {new Date(s.updated_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
+                <WlInput
+                  autoFocus
+                  placeholder="URL van de woning (Idealista, Costa Select, ...)"
+                  value={addUrl}
+                  onChange={e => setAddUrl(e.target.value)}
+                />
+                <WlInput
+                  placeholder="Titel (optioneel)"
+                  value={addTitle}
+                  onChange={e => setAddTitle(e.target.value)}
+                />
+                <WlInput
+                  placeholder="Notitie (optioneel)"
+                  value={addNote}
+                  onChange={e => setAddNote(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <WlButton
+                  variant="primary"
+                  disabled={!addUrl.trim() || addLoading}
+                  onClick={submitAdd}
+                >
+                  {addLoading ? (
+                    <>
+                      <span
+                        className="wl-spinner inline-block"
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 999,
+                          border: '2px solid rgba(255,250,239,0.3)',
+                          borderTopColor: '#FFFAEF',
+                        }}
+                      />
+                      Ophalen...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} strokeWidth={2.2} /> Toevoegen
+                    </>
+                  )}
+                </WlButton>
+                <WlButton
+                  variant="subtle"
+                  onClick={() => {
+                    setShowAddUrl(false)
+                    setAddUrl('')
+                    setAddTitle('')
+                    setAddNote('')
+                  }}
+                >
+                  <X size={14} strokeWidth={2.2} /> Annuleren
+                </WlButton>
+                <span
+                  className="font-body"
+                  style={{ fontSize: 11, color: '#7A8C8B', marginLeft: 'auto' }}
+                >
+                  Scraper haalt foto, prijs en metadata op.
+                </span>
+              </div>
+            </InlineForm>
+          )}
+
+          {items.length > 0 && (
+            <div
+              className="flex items-center flex-wrap"
+              style={{ gap: 18, padding: '10px 4px 14px' }}
+            >
+              <label
+                className="inline-flex items-center font-body cursor-pointer"
+                style={{ gap: 8, fontSize: 12.5, color: '#5F7472', userSelect: 'none' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                  className="cursor-pointer"
+                  style={{ width: 16, height: 16, accentColor: '#004B46' }}
+                />
+                Alles selecteren
+              </label>
+              {hasFavorites && (
+                <label
+                  className="inline-flex items-center font-body cursor-pointer"
+                  style={{ gap: 8, fontSize: 12.5, color: '#5F7472', userSelect: 'none' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={favOnly}
+                    onChange={e => setFavOnly(e.target.checked)}
+                    className="cursor-pointer"
+                    style={{ width: 16, height: 16, accentColor: '#004B46' }}
+                  />
+                  Alleen favorieten
+                </label>
+              )}
+              {selectedItems.size > 0 && (
+                <div
+                  className="wl-anim-fade-in flex items-center font-body font-semibold"
+                  style={{
+                    marginLeft: 'auto',
+                    gap: 10,
+                    padding: '7px 8px 7px 14px',
+                    background: '#FEF6E4',
+                    border: '1px solid rgba(212,146,26,0.35)',
+                    borderRadius: 10,
+                    fontSize: 12,
+                    color: '#D4921A',
+                  }}
+                >
+                  <span>
+                    <span
+                      className="font-heading font-bold"
+                      style={{ color: '#D4921A' }}
+                    >
+                      {selectedItems.size}
+                    </span>{' '}
+                    geselecteerd
+                  </span>
+                  <span style={{ opacity: 0.4 }}>·</span>
                   <button
-                    onClick={e => { e.stopPropagation(); handleDeleteShortlist(s.id) }}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                    onClick={onBulkDelete}
+                    className="cursor-pointer font-body font-semibold"
+                    style={{
+                      padding: '4px 8px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#D4921A',
+                      borderRadius: 6,
+                    }}
                   >
-                    <Trash2 size={14} className="text-red-400" />
+                    Verwijderen
+                  </button>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <button
+                    onClick={() => setSelectedItems(new Set())}
+                    className="cursor-pointer font-body font-semibold"
+                    style={{
+                      padding: '4px 8px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#D4921A',
+                      borderRadius: 6,
+                    }}
+                  >
+                    Wissen
                   </button>
                 </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </PageLayout>
-    )
-  }
+              )}
+            </div>
+          )}
 
-  // ─── DETAIL ─────────────────────────────────────────────
-  return (
-    <PageLayout title={detail?.klant_naam || 'Laden...'} subtitle="Woninglijst">
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => setSelectedId(null)}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-[#004B46] transition-colors cursor-pointer"
-        >
-          <ArrowLeft size={15} /> Terug naar overzicht
-        </button>
-        <div className="flex items-center gap-2 ml-auto">
-          <button
-            onClick={() => setShowAddUrl(true)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#004B46] text-[#FFFAEF] text-sm font-medium rounded-xl hover:bg-[#0A6B63] transition-colors cursor-pointer"
-          >
-            <Link2 size={15} /> Woning toevoegen
-          </button>
-          <button
-            onClick={downloadPdf}
-            disabled={pdfLoading || !detail?.shortlist_items?.length}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white text-[#004B46] border border-[#004B46] text-sm font-medium rounded-xl hover:bg-[#004B46]/5 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {pdfLoading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Download overzicht
-          </button>
+          {loading ? (
+            <div
+              className="flex items-center justify-center"
+              style={{ padding: '60px 0', color: '#7A8C8B' }}
+            >
+              <Loader2 size={20} className="animate-spin" />
+            </div>
+          ) : items.length === 0 ? (
+            <EmptyCard
+              icon={<Inbox size={26} strokeWidth={1.5} />}
+              title="Nog geen woningen toegevoegd"
+              text="Plak een URL om te beginnen — de scraper vult de metadata automatisch aan."
+              cta={
+                <WlButton variant="primary" onClick={() => setShowAddUrl(true)}>
+                  <Link2 size={14} strokeWidth={2} /> Woning toevoegen
+                </WlButton>
+              }
+            />
+          ) : (
+            <div className="flex flex-col" style={{ gap: 12 }}>
+              {filtered.map(item => (
+                <PropertyRow
+                  key={item.id}
+                  item={item}
+                  selected={selectedItems.has(item.id)}
+                  onToggleSelect={() => toggleOne(item.id)}
+                  onToggleFav={() => onToggleFav(item.id, item.is_favorite)}
+                  onDelete={() => onDeleteItem(item.id)}
+                  onOpenDossier={() =>
+                    onOpenDossier({ title: item.title, url: item.url })
+                  }
+                  isEditingNote={editingNoteId === item.id}
+                  onStartEditNote={() => setEditingNoteId(item.id)}
+                  onCancelEditNote={() => setEditingNoteId(null)}
+                  onSaveNote={text => onSaveNote(item.id, text)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
+    </>
+  )
+}
 
-      {showAddUrl && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 space-y-3">
-          <input
-            autoFocus
-            value={addUrl}
-            onChange={e => setAddUrl(e.target.value)}
-            placeholder="URL van de woning (Idealista, Costa Select, ...)"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
+// ═════════ PROPERTY ROW ═════════
+function PropertyRow({
+  item,
+  selected,
+  onToggleSelect,
+  onToggleFav,
+  onDelete,
+  onOpenDossier,
+  isEditingNote,
+  onStartEditNote,
+  onCancelEditNote,
+  onSaveNote,
+}: {
+  item: ShortlistItem
+  selected: boolean
+  onToggleSelect: () => void
+  onToggleFav: () => void
+  onDelete: () => void
+  onOpenDossier: () => void
+  isEditingNote: boolean
+  onStartEditNote: () => void
+  onCancelEditNote: () => void
+  onSaveNote: (text: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  const kk = item.price ? Math.round(item.price * 0.1) : null
+  const hasTitle = !!item.title
+  const hasMeta =
+    !!item.location ||
+    item.price != null ||
+    item.bedrooms != null ||
+    item.bathrooms != null ||
+    item.size_m2 != null
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex bg-white transition-all"
+      style={{
+        gap: 16,
+        padding: 14,
+        borderRadius: 14,
+        border: selected ? '1px solid #F5AF40' : '1px solid rgba(0,75,70,0.12)',
+        boxShadow: selected
+          ? '0 0 0 2px rgba(245,175,64,0.25), 0 4px 12px rgba(7,42,36,0.06)'
+          : hovered
+          ? '0 4px 12px rgba(7,42,36,0.06)'
+          : 'none',
+        background: selected ? '#FFFCF5' : '#FFFFFF',
+      }}
+    >
+      <div className="shrink-0" style={{ paddingTop: 4 }}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="cursor-pointer"
+          style={{ width: 18, height: 18, accentColor: '#F5AF40' }}
+        />
+      </div>
+
+      <div
+        className="shrink-0 overflow-hidden"
+        style={{
+          width: 176,
+          height: 128,
+          borderRadius: 10,
+          position: 'relative',
+        }}
+      >
+        {item.thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.thumbnail}
+            alt=""
+            className="w-full h-full"
+            style={{ objectFit: 'cover', display: 'block' }}
           />
-          <input
-            value={addTitle}
-            onChange={e => setAddTitle(e.target.value)}
-            placeholder="Titel (optioneel)"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
-          />
-          <input
-            value={addNote}
-            onChange={e => setAddNote(e.target.value)}
-            placeholder="Notitie (optioneel)"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#004B46]"
-          />
-          <div className="flex gap-2">
-            <button onClick={handleAddUrl} disabled={addLoading} className="flex items-center gap-1.5 px-4 py-2 bg-[#004B46] text-white text-sm rounded-lg cursor-pointer disabled:opacity-50">
-              {addLoading ? <><Loader2 size={14} className="animate-spin" /> Ophalen...</> : 'Toevoegen'}
-            </button>
-            <button onClick={() => { setShowAddUrl(false); setAddUrl(''); setAddTitle(''); setAddNote('') }} className="px-3 py-2 text-gray-400 hover:text-gray-600 cursor-pointer"><X size={16} /></button>
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(135deg, #E6F0EF, #FFE5BD)',
+              color: 'rgba(0,75,70,0.35)',
+            }}
+          >
+            <ImageIcon size={36} strokeWidth={1.4} />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {detailLoading ? (
-        <div className="flex items-center justify-center py-16 text-gray-400">
-          <Loader2 size={20} className="animate-spin" />
+      <div className="flex-1 min-w-0 flex flex-col" style={{ gap: 6 }}>
+        <div className="flex items-start" style={{ gap: 10 }}>
+          {item.is_favorite && (
+            <span
+              className="inline-flex items-center justify-center shrink-0"
+              style={{ width: 22, height: 22 }}
+            >
+              <Star
+                size={15}
+                fill="#F5AF40"
+                stroke="#D4921A"
+                strokeWidth={1.5}
+              />
+            </span>
+          )}
+          <h4
+            className={
+              hasTitle
+                ? 'font-heading font-bold truncate'
+                : 'font-body truncate'
+            }
+            style={
+              hasTitle
+                ? {
+                    fontSize: 17,
+                    color: '#004B46',
+                    lineHeight: 1.2,
+                    letterSpacing: '-0.005em',
+                    margin: 0,
+                    flex: 1,
+                    minWidth: 0,
+                  }
+                : {
+                    fontSize: 13.5,
+                    fontWeight: 500,
+                    color: '#5F7472',
+                    margin: 0,
+                    flex: 1,
+                    minWidth: 0,
+                  }
+            }
+          >
+            {hasTitle ? item.title : item.url}
+          </h4>
+          {item.source && (
+            <span
+              className="shrink-0 font-body font-bold uppercase"
+              style={{
+                fontSize: 9.5,
+                letterSpacing: '0.12em',
+                color: '#7A8C8B',
+                opacity: 0.7,
+                alignSelf: 'center',
+              }}
+            >
+              {item.source}
+            </span>
+          )}
         </div>
-      ) : !detail?.shortlist_items?.length ? (
-        <div className="text-center py-16">
-          <p className="text-sm text-gray-400">Nog geen woningen toegevoegd.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {/* Filters + multi-select action bar */}
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-              <input type="checkbox"
-                checked={selectedItems.size === detail.shortlist_items.length && detail.shortlist_items.length > 0}
-                onChange={e => e.target.checked ? selectAll(detail.shortlist_items) : clearSelection()}
-                className="rounded border-gray-300" />
-              Alles selecteren
-            </label>
-            {detail.shortlist_items.some(i => i.is_favorite) && (
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                <input type="checkbox" checked={showFavoritesOnly} onChange={e => setShowFavoritesOnly(e.target.checked)} className="rounded border-gray-300" />
-                Alleen favorieten
-              </label>
+
+        {hasMeta && (
+          <div
+            className="flex flex-wrap items-center font-body"
+            style={{ gap: 12, fontSize: 12.5, color: '#5F7472', lineHeight: 1.4 }}
+          >
+            {item.location && (
+              <span className="inline-flex items-center" style={{ gap: 5 }}>
+                <MapPin size={12} strokeWidth={1.8} /> {item.location}
+              </span>
             )}
-            {selectedItems.size > 0 && (
-              <div className="ml-auto flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
-                <span className="text-xs text-red-700 font-medium">{selectedItems.size} geselecteerd</span>
-                <button onClick={bulkDelete} className="text-xs bg-red-500 text-white px-2 py-1 rounded cursor-pointer hover:bg-red-600">Verwijderen</button>
-                <button onClick={clearSelection} className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">Wissen</button>
-              </div>
+            {item.price != null && (
+              <>
+                <span
+                  className="font-heading font-bold"
+                  style={{
+                    fontSize: 15.5,
+                    color: '#004B46',
+                    letterSpacing: '-0.005em',
+                  }}
+                >
+                  {formatPrice(item.price)}
+                </span>
+                {kk != null && (
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      color: '#7A8C8B',
+                      marginLeft: -6,
+                    }}
+                  >
+                    k.k. ~{formatPrice(kk)}
+                  </span>
+                )}
+              </>
+            )}
+            {item.bedrooms != null && (
+              <span className="inline-flex items-center" style={{ gap: 5 }}>
+                <Bed size={13} strokeWidth={1.8} color="#7A8C8B" />
+                <b style={{ fontWeight: 600, color: '#004B46' }}>{item.bedrooms}</b> slpk
+              </span>
+            )}
+            {item.bathrooms != null && (
+              <span className="inline-flex items-center" style={{ gap: 5 }}>
+                <Bath size={13} strokeWidth={1.8} color="#7A8C8B" />
+                <b style={{ fontWeight: 600, color: '#004B46' }}>{item.bathrooms}</b> badk
+              </span>
+            )}
+            {item.size_m2 != null && (
+              <span className="inline-flex items-center" style={{ gap: 5 }}>
+                <Maximize2 size={13} strokeWidth={1.8} color="#7A8C8B" />
+                <b style={{ fontWeight: 600, color: '#004B46' }}>{item.size_m2}</b> m²
+              </span>
             )}
           </div>
-          {[...detail.shortlist_items]
-            .sort((a, b) => (a.is_favorite === b.is_favorite ? 0 : a.is_favorite ? -1 : 1))
-            .filter(item => !showFavoritesOnly || item.is_favorite)
-            .map(item => (
-            <div key={item.id} className={`bg-white rounded-xl border overflow-hidden flex group ${selectedItems.has(item.id) ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}>
-              <div className="flex items-center pl-3">
-                <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleSelectItem(item.id)}
-                  className="rounded border-gray-300 cursor-pointer" />
-              </div>
-              {item.thumbnail && (
-                <div className="w-44 h-32 shrink-0">
-                  <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="flex-1 px-5 py-4 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold text-[#004B46] truncate">{item.title || item.url}</p>
-                    <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-500 flex-wrap">
-                      {item.location && <span>{item.location}</span>}
-                      {item.price && (
-                        <>
-                          <span className="text-[#0EAE96] font-semibold">{formatPrice(item.price)}</span>
-                          <span className="text-gray-300">·</span>
-                          <span className="text-gray-500 text-xs">k.k. ~{Math.round(item.price * 0.1).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
-                        </>
-                      )}
-                      {item.bedrooms && <span className="flex items-center gap-1"><Bed size={13} /> {item.bedrooms}</span>}
-                      {item.bathrooms && <span className="flex items-center gap-1"><Bath size={13} /> {item.bathrooms}</span>}
-                      {item.size_m2 && <span className="flex items-center gap-1"><Maximize2 size={13} /> {item.size_m2} m²</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => openDossierModal(item)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#004B46] text-white text-xs font-medium rounded-lg hover:bg-[#0A6B63] cursor-pointer">
-                      <FileText size={13} /> Dossier
-                    </button>
-                    <button
-                      onClick={() => toggleFavorite(item.id, item.is_favorite)}
-                      className={`p-1 cursor-pointer transition-colors ${item.is_favorite ? 'text-[#F5AF40]' : 'text-gray-300 hover:text-[#F5AF40]'}`}
-                    >
-                      <Star size={13} fill={item.is_favorite ? 'currentColor' : 'none'} />
-                    </button>
-                    {item.url && (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-300 hover:text-[#004B46]">
-                        <ExternalLink size={13} />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => { setEditingNoteId(item.id); setEditingNoteText(item.notities || '') }}
-                      className="p-1 text-gray-300 hover:text-[#004B46] cursor-pointer"
-                    >
-                      <PenLine size={13} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteItem(item.id)}
-                      className="p-1 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-                {editingNoteId === item.id ? (
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      autoFocus
-                      value={editingNoteText}
-                      onChange={e => setEditingNoteText(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleSaveNote(item.id); if (e.key === 'Escape') setEditingNoteId(null) }}
-                      placeholder="Notitie..."
-                      className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#004B46]"
-                    />
-                    <button onClick={() => handleSaveNote(item.id)} className="text-xs text-[#004B46] font-medium cursor-pointer">Opslaan</button>
-                  </div>
-                ) : item.notities ? (
-                  <p className="text-xs text-gray-400 mt-1 italic">{item.notities}</p>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        )}
 
-      {/* Dossier modal */}
-      {dossierItem && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={closeDossierModal} />
-          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-8" onClick={e => e.stopPropagation()}>
-              {dossierResult ? (
-                <div className="text-center py-6">
-                  <Check size={52} className="mx-auto mb-4 text-emerald-500" />
-                  <h3 className="text-xl font-bold text-[#004B46] mb-2">Dossier aangemaakt!</h3>
-                  <p className="text-sm text-slate-500 mb-6">{dossierItem.title || dossierItem.url}</p>
-                  <div className="flex justify-center gap-3">
-                    <button onClick={() => router.push('/dossier')}
-                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] cursor-pointer">
-                      Bekijk dossier
-                    </button>
-                    <button onClick={closeDossierModal}
-                      className="bg-white border border-gray-200 text-gray-700 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
-                      Blijf hier
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-base font-semibold text-slate-900">Dossier genereren</h3>
-                    <button onClick={closeDossierModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
-                  </div>
-                  <p className="text-sm text-slate-500 mb-5">{dossierItem.title || dossierItem.url}</p>
-
-                  <div className="grid grid-cols-2 gap-4 mb-5">
-                    <button onClick={() => setDossierMode('presentatie')}
-                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'presentatie' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Eye size={20} className={dossierMode === 'presentatie' ? 'text-[#004B46]' : 'text-gray-400'} />
-                      <div className="text-base font-semibold mt-2">Presenteren</div>
-                      <div className="text-xs text-gray-500 mt-1">Feitelijke woningpresentatie</div>
-                    </button>
-                    <button onClick={() => setDossierMode('pitch')}
-                      className={`p-5 rounded-xl border-2 text-left transition-all cursor-pointer ${dossierMode === 'pitch' ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <Megaphone size={20} className={dossierMode === 'pitch' ? 'text-[#004B46]' : 'text-gray-400'} />
-                      <div className="text-base font-semibold mt-2">Pitchen</div>
-                      <div className="text-xs text-gray-500 mt-1">Met voordelen, nadelen & advies</div>
-                    </button>
-                  </div>
-
-                  {dossierError && <p className="text-sm text-red-500 mb-3">{dossierError}</p>}
-
-                  <div className="flex justify-end gap-2">
-                    <button onClick={closeDossierModal} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5 cursor-pointer">Annuleren</button>
-                    <button onClick={generateDossierFromUrl} disabled={!dossierMode || dossierGenerating}
-                      className="bg-[#004B46] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[#0A6B63] disabled:opacity-50 cursor-pointer flex items-center gap-2">
-                      {dossierGenerating ? <><Loader2 size={14} className="animate-spin" /> Genereren...</> : 'Genereer'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+        {isEditingNote ? (
+          <NoteEditor
+            initial={item.notities || ''}
+            onSave={onSaveNote}
+            onCancel={onCancelEditNote}
+          />
+        ) : item.notities ? (
+          <div
+            className="font-body italic"
+            style={{
+              fontSize: 12.5,
+              color: '#5F7472',
+              padding: '8px 12px',
+              background: '#E6F0EF',
+              borderRadius: 8,
+              borderLeft: '2px solid #004B46',
+              marginTop: 2,
+            }}
+          >
+            {item.notities}
           </div>
-        </>
-      )}
-    </PageLayout>
+        ) : null}
+      </div>
+
+      <div className="shrink-0 flex items-start" style={{ gap: 6 }}>
+        <button
+          onClick={onOpenDossier}
+          className="inline-flex items-center font-body font-bold uppercase cursor-pointer transition-colors"
+          style={{
+            gap: 6,
+            padding: '7px 12px',
+            borderRadius: 8,
+            background: '#004B46',
+            color: '#FFFAEF',
+            border: '1px solid #004B46',
+            fontSize: 11.5,
+            letterSpacing: '0.03em',
+            marginRight: 4,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#0A6B63')}
+          onMouseLeave={e => (e.currentTarget.style.background = '#004B46')}
+        >
+          <FileText size={12} strokeWidth={2} /> Dossier
+        </button>
+        <IconAction
+          title="Favoriet"
+          onClick={onToggleFav}
+          active={item.is_favorite}
+          variant="fav"
+        >
+          <Star
+            size={14}
+            strokeWidth={1.8}
+            fill={item.is_favorite ? '#F5AF40' : 'none'}
+            stroke={item.is_favorite ? '#D4921A' : 'currentColor'}
+          />
+        </IconAction>
+        {item.url && (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open in nieuw tabblad"
+            className="flex items-center justify-center shrink-0 cursor-pointer transition-all"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: '1px solid rgba(0,75,70,0.12)',
+              background: '#FFFFFF',
+              color: '#5F7472',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#E6F0EF'
+              e.currentTarget.style.color = '#004B46'
+              e.currentTarget.style.borderColor = '#004B46'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#FFFFFF'
+              e.currentTarget.style.color = '#5F7472'
+              e.currentTarget.style.borderColor = 'rgba(0,75,70,0.12)'
+            }}
+          >
+            <ExternalLink size={14} strokeWidth={1.8} />
+          </a>
+        )}
+        <IconAction title="Notitie" onClick={onStartEditNote}>
+          <PenLine size={14} strokeWidth={1.8} />
+        </IconAction>
+        <IconAction title="Verwijderen" onClick={onDelete} variant="delete">
+          <Trash2 size={14} strokeWidth={1.8} />
+        </IconAction>
+      </div>
+    </div>
+  )
+}
+
+// ═════════ NOTE EDITOR ═════════
+function NoteEditor({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial: string
+  onSave: (text: string) => void
+  onCancel: () => void
+}) {
+  const [draft, setDraft] = useState(initial)
+  return (
+    <div className="flex items-center" style={{ gap: 8, marginTop: 2 }}>
+      <WlInput
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        placeholder="Notitie..."
+        style={{ padding: '8px 12px', fontSize: 12.5 }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') onSave(draft)
+          if (e.key === 'Escape') onCancel()
+        }}
+      />
+      <button
+        onClick={() => onSave(draft)}
+        className="font-body font-bold cursor-pointer shrink-0 transition-colors"
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#004B46',
+          fontSize: 12,
+          padding: '8px 10px',
+          borderRadius: 8,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#E6F0EF')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      >
+        Opslaan
+      </button>
+    </div>
+  )
+}
+
+// ═════════ SMALL ATOMS ═════════
+function WlHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="flex justify-between items-end bg-marble shrink-0"
+      style={{
+        gap: 24,
+        padding: '26px 36px 22px',
+        borderBottom: '1px solid rgba(0,75,70,0.12)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function WlEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="font-body font-bold uppercase text-sun-dark"
+      style={{ fontSize: 10, letterSpacing: '0.18em', marginBottom: 10 }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function CountPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center font-body font-bold text-deepsea"
+      style={{
+        gap: 6,
+        padding: '3px 10px',
+        background: '#E6F0EF',
+        fontSize: 11,
+        borderRadius: 999,
+        letterSpacing: '0.02em',
+        marginLeft: 10,
+        verticalAlign: 4,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+function InlineForm({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="wl-anim-slide-down bg-white"
+      style={{
+        border: '1px solid rgba(0,75,70,0.16)',
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 16,
+        boxShadow: '0 1px 2px rgba(7,42,36,0.04)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function WlInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const { style, className, ...rest } = props
+  return (
+    <input
+      {...rest}
+      className={`w-full font-body bg-marble outline-none transition-all focus:bg-white focus:border-deepsea ${className ?? ''}`}
+      style={{
+        boxSizing: 'border-box',
+        padding: '10px 14px',
+        border: '1.5px solid rgba(0,75,70,0.16)',
+        borderRadius: 10,
+        fontSize: 13.5,
+        color: '#004B46',
+        ...style,
+      }}
+      onFocus={e => {
+        e.currentTarget.style.borderColor = '#004B46'
+        e.currentTarget.style.background = '#FFFFFF'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,75,70,0.08)'
+      }}
+      onBlur={e => {
+        e.currentTarget.style.borderColor = 'rgba(0,75,70,0.16)'
+        e.currentTarget.style.background = '#FFFAEF'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    />
+  )
+}
+
+function WlButton({
+  variant,
+  disabled,
+  onClick,
+  children,
+}: {
+  variant: 'primary' | 'ghost' | 'subtle'
+  disabled?: boolean
+  onClick?: () => void
+  children: React.ReactNode
+}) {
+  const styles = {
+    primary: {
+      background: '#004B46',
+      color: '#FFFAEF',
+      border: '1.5px solid #004B46',
+      fontWeight: 600,
+    },
+    ghost: {
+      background: '#FFFFFF',
+      color: '#004B46',
+      border: '1.5px solid rgba(0,75,70,0.18)',
+      fontWeight: 600,
+    },
+    subtle: {
+      background: 'transparent',
+      color: '#5F7472',
+      border: '1.5px solid transparent',
+      fontWeight: 500,
+    },
+  }[variant]
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center font-body cursor-pointer transition-all disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap"
+      style={{
+        padding: '9px 14px',
+        borderRadius: 10,
+        fontSize: 12,
+        letterSpacing: '0.02em',
+        gap: 7,
+        ...styles,
+      }}
+      onMouseEnter={e => {
+        if (disabled) return
+        if (variant === 'primary') {
+          e.currentTarget.style.background = '#0A6B63'
+          e.currentTarget.style.borderColor = '#0A6B63'
+        } else if (variant === 'ghost') {
+          e.currentTarget.style.background = '#E6F0EF'
+          e.currentTarget.style.borderColor = '#004B46'
+        } else if (variant === 'subtle') {
+          e.currentTarget.style.background = '#E6F0EF'
+          e.currentTarget.style.color = '#004B46'
+        }
+      }}
+      onMouseLeave={e => {
+        if (disabled) return
+        if (variant === 'primary') {
+          e.currentTarget.style.background = '#004B46'
+          e.currentTarget.style.borderColor = '#004B46'
+        } else if (variant === 'ghost') {
+          e.currentTarget.style.background = '#FFFFFF'
+          e.currentTarget.style.borderColor = 'rgba(0,75,70,0.18)'
+        } else if (variant === 'subtle') {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = '#5F7472'
+        }
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function EmptyCard({
+  icon,
+  title,
+  text,
+  cta,
+}: {
+  icon: React.ReactNode
+  title: string
+  text: string
+  cta?: React.ReactNode
+}) {
+  return (
+    <div
+      className="text-center bg-white"
+      style={{
+        border: '1px dashed rgba(0,75,70,0.2)',
+        borderRadius: 14,
+        padding: '48px 24px',
+      }}
+    >
+      <div
+        className="inline-flex items-center justify-center"
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: '#E6F0EF',
+          color: '#004B46',
+          marginBottom: 12,
+        }}
+      >
+        {icon}
+      </div>
+      <h3
+        className="font-heading font-bold text-deepsea"
+        style={{ fontSize: 18, margin: '0 0 6px' }}
+      >
+        {title}
+      </h3>
+      <p
+        className="font-body"
+        style={{ fontSize: 13, color: '#5F7472', margin: '0 0 14px' }}
+      >
+        {text}
+      </p>
+      {cta}
+    </div>
+  )
+}
+
+function IconAction({
+  title,
+  onClick,
+  active,
+  variant,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  active?: boolean
+  variant?: 'fav' | 'delete'
+  children: React.ReactNode
+}) {
+  const base = {
+    default: { bg: '#FFFFFF', color: '#5F7472', border: 'rgba(0,75,70,0.12)' },
+    favActive: { bg: '#FEF6E4', color: '#D4921A', border: '#F5AF40' },
+  }
+  const state = active && variant === 'fav' ? base.favActive : base.default
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="flex items-center justify-center shrink-0 cursor-pointer transition-all"
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        border: `1px solid ${state.border}`,
+        background: state.bg,
+        color: state.color,
+      }}
+      onMouseEnter={e => {
+        if (variant === 'delete') {
+          e.currentTarget.style.background = 'rgba(224,82,82,0.1)'
+          e.currentTarget.style.color = '#c24040'
+          e.currentTarget.style.borderColor = 'rgba(224,82,82,0.3)'
+        } else if (variant === 'fav') {
+          e.currentTarget.style.background = '#FEF6E4'
+          e.currentTarget.style.color = '#D4921A'
+          e.currentTarget.style.borderColor = '#F5AF40'
+        } else {
+          e.currentTarget.style.background = '#E6F0EF'
+          e.currentTarget.style.color = '#004B46'
+          e.currentTarget.style.borderColor = '#004B46'
+        }
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = state.bg
+        e.currentTarget.style.color = state.color
+        e.currentTarget.style.borderColor = state.border
+      }}
+    >
+      {children}
+    </button>
   )
 }

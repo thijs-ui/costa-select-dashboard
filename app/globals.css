@@ -71,3 +71,22 @@ h1, h2, h3, h4 {
 .wb-dot:nth-child(2) { animation-delay: 0.2s; }
 .wb-dot:nth-child(3) { animation-delay: 0.4s; }
 
+/* ─── Woninglijst animations ──────────────────────────────────────────── */
+@keyframes wl-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wl-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wl-spin { to { transform: rotate(360deg); } }
+.wl-anim-slide-down { animation: wl-slide-down 220ms ease-out; }
+.wl-anim-fade-in { animation: wl-fade-in 180ms ease-out; }
+.wl-anim-modal-in { animation: wl-modal-in 220ms cubic-bezier(.4,0,.2,1); }
+.wl-spinner { animation: wl-spin 0.8s linear infinite; }
+
