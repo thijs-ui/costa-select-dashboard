@@ -1,14 +1,43 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
-import { PageLayout } from '@/components/page-layout'
-import {
-  ArrowLeft, Plus, Trash2, MapPin, Clock, Navigation, Loader2,
-  ExternalLink, Phone, Save, Utensils, CheckCircle2, Home, Flag,
-  Mail, MessageCircle, Download,
-} from 'lucide-react'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Car,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Clock,
+  ExternalLink,
+  Flag,
+  GripVertical,
+  Loader2,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Plus,
+  Play,
+  Printer,
+  Route as RouteIcon,
+  Sparkles,
+  Trash2,
+  User as UserIcon,
+  Utensils,
+  Zap,
+} from 'lucide-react'
+import {
+  BzButton,
+  BzEyebrow,
+  BzHeader,
+  CountPill,
+  EmptyCard,
+} from '../page'
 
+// ───────── Types ─────────
 interface Trip {
   id: string
   client_name: string
@@ -20,8 +49,8 @@ interface Trip {
   lunch_time: string
   lunch_duration_minutes: number
   notes: string | null
+  status: 'concept' | 'gepland' | 'afgerond'
   route_data: RouteData | null
-  status: string
 }
 
 interface Stop {
@@ -41,80 +70,151 @@ interface Stop {
 }
 
 interface RouteData {
-  stops: Array<{ stop_id: string; sort_order: number; estimated_arrival: string; estimated_departure: string; travel_time_to_next_minutes: number }>
+  stops: Array<{
+    stop_id: string
+    sort_order: number
+    estimated_arrival: string
+    estimated_departure: string
+    travel_time_to_next_minutes: number
+  }>
   lunch: { after_stop_order: number; start_time: string; end_time: string }
   total_driving_minutes: number
   estimated_end_time: string
   route_summary: string
 }
 
-const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20'
+type SaveState = 'saved' | 'saving' | 'error'
 
-export default function TripDetailPage({ params }: { params: Promise<{ id: string }> }) {
+// ───────── Utils ─────────
+function formatDate(iso: string): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('nl-NL', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatPrice(n: number | null): string {
+  if (n == null) return ''
+  return '€ ' + new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)
+}
+
+function formatTime(t: string | null | undefined): string {
+  if (!t) return ''
+  return t.substring(0, 5)
+}
+
+function diffMinutes(a: string, b: string): number {
+  if (!a || !b) return 0
+  const [ah, am] = a.split(':').map(Number)
+  const [bh, bm] = b.split(':').map(Number)
+  return Math.max(0, bh * 60 + bm - (ah * 60 + am))
+}
+
+// ───────── Page ─────────
+export default function BezichtigingDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const { id } = use(params)
+  const router = useRouter()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [stops, setStops] = useState<Stop[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [optimizing, setOptimizing] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('saved')
   const [error, setError] = useState('')
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // New stop form
-  const [newAddress, setNewAddress] = useState('')
-  const [newTitle, setNewTitle] = useState('')
-  const [newPrice, setNewPrice] = useState('')
-  const [newUrl, setNewUrl] = useState('')
-
-  useEffect(() => { loadData() }, [id])
-
-  async function loadData() {
-    const [tripRes, stopsRes] = await Promise.all([
-      fetch(`/api/bezichtigingen?id=${id}`),
-      fetch(`/api/bezichtigingen/stops?trip_id=${id}`),
-    ])
-
-    // Trips endpoint returns array, find by id
-    if (tripRes.ok) {
-      const trips = await tripRes.json()
-      const found = Array.isArray(trips) ? trips.find((t: Trip) => t.id === id) : null
-      setTrip(found ?? null)
+  // ─── Load ─────────────────────────────────────
+  const loadData = useCallback(async () => {
+    try {
+      const [tripRes, stopsRes] = await Promise.all([
+        fetch(`/api/bezichtigingen?id=${id}`, { credentials: 'include' }),
+        fetch(`/api/bezichtigingen/stops?trip_id=${id}`, { credentials: 'include' }),
+      ])
+      if (tripRes.ok) {
+        const trips = await tripRes.json()
+        const found = Array.isArray(trips) ? trips.find((t: Trip) => t.id === id) : null
+        setTrip(found ?? null)
+      }
+      if (stopsRes.ok) {
+        const data = await stopsRes.json()
+        setStops(Array.isArray(data) ? data : [])
+      }
+    } catch {
+      /* ignore */
     }
-    if (stopsRes.ok) setStops(await stopsRes.json())
     setLoading(false)
+  }, [id])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // ─── Save (debounced) ─────────────────────────
+  function pingSave(updates: Partial<Trip>) {
+    setSaveState('saving')
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/bezichtigingen', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...updates }),
+        })
+        setSaveState(res.ok ? 'saved' : 'error')
+      } catch {
+        setSaveState('error')
+      }
+    }, 500)
   }
 
-  async function saveTrip(updates: Partial<Trip>) {
+  function updateTrip(patch: Partial<Trip>) {
     if (!trip) return
-    setSaving(true)
-    await fetch('/api/bezichtigingen', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: trip.id, ...updates }),
-    })
-    setTrip(prev => prev ? { ...prev, ...updates } as Trip : null)
-    setSaving(false)
+    setTrip({ ...trip, ...patch })
+    pingSave(patch)
   }
 
-  async function addStop() {
-    if (!newAddress.trim()) return
+  function changeStatus(status: 'concept' | 'gepland' | 'afgerond') {
+    updateTrip({ status })
+  }
+
+  // ─── Stop CRUD ────────────────────────────────
+  async function addStop(draft: {
+    address: string
+    property_title: string
+    listing_url: string
+    price: string
+    viewing_duration_minutes: number
+    contact_name: string
+    contact_phone: string
+    notes: string
+  }) {
     const res = await fetch('/api/bezichtigingen/stops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         trip_id: id,
-        address: newAddress.trim(),
-        property_title: newTitle.trim() || null,
-        price: newPrice ? Number(newPrice) : null,
-        listing_url: newUrl.trim() || null,
+        address: draft.address.trim(),
+        property_title: draft.property_title.trim() || null,
+        listing_url: draft.listing_url.trim() || null,
+        price: draft.price ? Number(draft.price) : null,
+        viewing_duration_minutes: draft.viewing_duration_minutes || 30,
+        contact_name: draft.contact_name.trim() || null,
+        contact_phone: draft.contact_phone.trim() || null,
+        notes: draft.notes.trim() || null,
       }),
     })
     if (res.ok) {
       const stop = await res.json()
       setStops(prev => [...prev, stop])
-      setNewAddress('')
-      setNewTitle('')
-      setNewPrice('')
-      setNewUrl('')
+      // Adding a stop invalidates the route
+      if (trip?.route_data) {
+        setTrip({ ...trip, route_data: null })
+      }
     }
   }
 
@@ -125,10 +225,49 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       body: JSON.stringify({ id: stopId }),
     })
     setStops(prev => prev.filter(s => s.id !== stopId))
+    if (trip?.route_data) {
+      setTrip({ ...trip, route_data: null })
+    }
   }
 
-  async function optimizeRoute() {
-    if (!trip || stops.length < 2) return
+  async function moveStop(stopId: string, dir: -1 | 1) {
+    const i = stops.findIndex(s => s.id === stopId)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= stops.length) return
+
+    const reordered = [...stops]
+    ;[reordered[i], reordered[j]] = [reordered[j], reordered[i]]
+    const withOrder = reordered.map((s, k) => ({ ...s, sort_order: k + 1 }))
+    setStops(withOrder)
+    if (trip?.route_data) {
+      setTrip({ ...trip, route_data: null })
+    }
+
+    // Persist new sort_order for the two swapped stops in parallel
+    await Promise.all([
+      fetch('/api/bezichtigingen/stops', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: withOrder[i].id, sort_order: withOrder[i].sort_order }),
+      }),
+      fetch('/api/bezichtigingen/stops', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: withOrder[j].id, sort_order: withOrder[j].sort_order }),
+      }),
+    ])
+  }
+
+  // ─── Route optimize ───────────────────────────
+  const canOptimize =
+    !!trip &&
+    stops.length >= 1 &&
+    !!trip.start_address &&
+    !!trip.start_time &&
+    !!trip.trip_date
+
+  async function optimize() {
+    if (!trip || !canOptimize) return
     setOptimizing(true)
     setError('')
     try {
@@ -137,7 +276,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           trip_id: trip.id,
-          start_address: trip.start_address || stops[0]?.address,
+          start_address: trip.start_address,
           start_time: trip.start_time,
           lunch_time: trip.lunch_time,
           lunch_duration_minutes: trip.lunch_duration_minutes,
@@ -148,27 +287,25 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
           })),
         }),
       })
-
       if (!res.ok) {
-        const data = await res.json()
+        const data = await res.json().catch(() => ({ error: 'Mislukt' }))
         throw new Error(data.error || 'Route optimalisatie mislukt')
       }
-
       const routeData: RouteData = await res.json()
-      setTrip(prev => prev ? { ...prev, route_data: routeData } : null)
+      setTrip(prev => (prev ? { ...prev, route_data: routeData } : null))
 
-      // Update stops met nieuwe volgorde en tijden
-      const updatedStops = [...stops]
+      // Update stops with new sort_order + estimated_arrival
+      const updated = [...stops]
       for (const rs of routeData.stops) {
-        const stop = updatedStops.find(s => s.id === rs.stop_id)
+        const stop = updated.find(s => s.id === rs.stop_id)
         if (stop) {
           stop.sort_order = rs.sort_order
           stop.estimated_arrival = rs.estimated_arrival
           stop.travel_time_minutes = rs.travel_time_to_next_minutes
         }
       }
-      updatedStops.sort((a, b) => a.sort_order - b.sort_order)
-      setStops(updatedStops)
+      updated.sort((a, b) => a.sort_order - b.sort_order)
+      setStops(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Route optimalisatie mislukt')
     } finally {
@@ -176,317 +313,1474 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  function getGoogleMapsLink() {
+  // ─── Share ────────────────────────────────────
+  function getWhatsAppUrl(): string {
     if (!trip) return ''
-    const waypoints = [trip.start_address || '', ...stops.map(s => s.address)].filter(Boolean)
-    return `https://www.google.com/maps/dir/${waypoints.map(w => encodeURIComponent(w)).join('/')}`
+    const route = trip.route_data
+    const dateStr = new Date(trip.trip_date).toLocaleDateString('nl-NL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    })
+    const firstName = trip.client_name?.split(/\s+/)[0] || 'klant'
+
+    const lines = [
+      `Hi ${firstName}, hierbij je programma voor ${dateStr}:`,
+      '',
+      ...(route?.stops ?? []).map(rs => {
+        const s = stops.find(x => x.id === rs.stop_id)
+        return `${rs.estimated_arrival} — ${s?.property_title || s?.address}\n${s?.address ?? ''}`
+      }),
+    ]
+    if (route?.lunch) {
+      lines.push('', `Lunch ${route.lunch.start_time}–${route.lunch.end_time}`)
+    }
+    if (route) {
+      lines.push(`Einde rond ${route.estimated_end_time}.`)
+    }
+    const phone = trip.client_phone?.replace(/\D/g, '') || ''
+    return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`
   }
 
-  function getWhatsAppLink() {
+  function getEmailUrl(): string {
     if (!trip) return ''
-    const msg = `Hoi ${trip.client_name}, hierbij de planning voor onze bezichtigingsdag op ${new Date(trip.trip_date).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}. We bekijken ${stops.length} woningen. Ik neem binnenkort contact met je op voor de details!`
-    const phone = trip.client_phone?.replace(/[^0-9+]/g, '') || ''
-    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
-  }
-
-  function getEmailLink() {
-    if (!trip) return ''
-    const datum = new Date(trip.trip_date).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    const subject = `Bezichtigingsplanning ${datum} — Costa Select`
-    const body = `Beste ${trip.client_name},\n\nHierbij de planning voor onze bezichtigingsdag op ${datum}.\n\nWe bekijken ${stops.length} woningen. De dag begint om ${trip.start_time?.substring(0, 5) ?? '09:00'}${trip.start_address ? ` bij ${trip.start_address}` : ''}.\n\nMet vriendelijke groet,\nCosta Select`
+    const dateStr = new Date(trip.trip_date).toLocaleDateString('nl-NL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+    const subject = `Bezichtigingsplanning ${dateStr} — Costa Select`
+    const body = `Beste ${trip.client_name},\n\nHierbij de planning voor onze bezichtigingsdag op ${dateStr}.\n\nWe bekijken ${stops.length} woningen. De dag begint om ${formatTime(trip.start_time)}${
+      trip.start_address ? ` bij ${trip.start_address}` : ''
+    }.\n\nMet vriendelijke groet,\nCosta Select`
     return `mailto:${trip.client_email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   }
 
-  if (loading) return <PageLayout title="Bezichtiging"><div className="text-slate-400 text-sm">Laden...</div></PageLayout>
-  if (!trip) return <PageLayout title="Niet gevonden"><div className="text-slate-400 text-sm">Trip niet gevonden.</div></PageLayout>
+  // ─── Render ───────────────────────────────────
+  if (loading) {
+    return (
+      <div
+        className="flex items-center justify-center bg-marble"
+        style={{ height: '100vh', color: '#7A8C8B' }}
+      >
+        <Loader2 size={20} className="animate-spin" />
+      </div>
+    )
+  }
 
-  const routeData = trip.route_data
+  if (!trip) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center bg-marble"
+        style={{ height: '100vh' }}
+      >
+        <p className="font-body" style={{ fontSize: 13, color: '#7A8C8B', marginBottom: 12 }}>
+          Bezichtigingsdag niet gevonden.
+        </p>
+        <BzButton variant="ghost" onClick={() => router.push('/bezichtigingen')}>
+          <ArrowLeft size={14} strokeWidth={2} /> Terug naar overzicht
+        </BzButton>
+      </div>
+    )
+  }
+
+  const route = trip.route_data
+  const subtitle = route
+    ? `Geoptimaliseerde route · eindigt om ${route.estimated_end_time}`
+    : 'Vul de details in en optimaliseer de route om reistijden en aankomsttijden te berekenen.'
 
   return (
-    <PageLayout>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/bezichtigingen" className="text-slate-400 hover:text-slate-600"><ArrowLeft size={20} /></Link>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-slate-900">Bezichtiging: {trip.client_name}</h1>
-          <p className="text-sm text-slate-500">{new Date(trip.trip_date).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+    <div
+      className="bz-print-page flex flex-col bg-marble"
+      style={{ height: '100vh', minWidth: 0, overflow: 'hidden' }}
+    >
+      <BzHeader>
+        <div className="min-w-0 flex-1">
+          <button
+            onClick={() => router.push('/bezichtigingen')}
+            className="bz-print-hide inline-flex items-center font-body font-semibold uppercase cursor-pointer transition-colors"
+            style={{
+              gap: 6,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11.5,
+              color: '#7A8C8B',
+              letterSpacing: '0.08em',
+              marginBottom: 10,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#7A8C8B')}
+          >
+            <ArrowLeft size={13} strokeWidth={2} /> Bezichtigingsdagen
+          </button>
+          <BzEyebrow>
+            {formatDate(trip.trip_date)} · {formatTime(trip.start_time)}
+          </BzEyebrow>
+          <h1
+            className="font-heading font-bold text-deepsea"
+            style={{ fontSize: 30, lineHeight: 1, letterSpacing: '-0.01em', margin: '0 0 4px' }}
+          >
+            {trip.client_name || 'Nieuwe bezichtigingsdag'}
+            <CountPill>
+              {stops.length} {stops.length === 1 ? 'stop' : 'stops'}
+            </CountPill>
+          </h1>
+          <p
+            className="font-body"
+            style={{ fontSize: 13, color: '#7A8C8B', margin: 0, maxWidth: 700 }}
+          >
+            {subtitle}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={trip.status} onChange={e => saveTrip({ status: e.target.value })}
-            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400">
-            <option value="concept">Concept</option>
-            <option value="gepland">Gepland</option>
-            <option value="afgerond">Afgerond</option>
-          </select>
+        <div className="bz-print-hide flex items-center" style={{ gap: 10 }}>
+          <SaveIndicator state={saveState} />
+          <StatusSelect status={trip.status} onChange={changeStatus} />
         </div>
-      </div>
+      </BzHeader>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ===== LINKER KOLOM: Trip-gegevens + Stops ===== */}
-        <div className="space-y-6">
-          {/* Trip-gegevens */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">Trip-gegevens</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="block text-xs text-slate-500 mb-1">Klantnaam *</label>
-                <input value={trip.client_name} onChange={e => setTrip({ ...trip, client_name: e.target.value })}
-                  onBlur={() => saveTrip({ client_name: trip.client_name })} className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Email</label>
-                <input value={trip.client_email ?? ''} onChange={e => setTrip({ ...trip, client_email: e.target.value })}
-                  onBlur={() => saveTrip({ client_email: trip.client_email })} className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Telefoon</label>
-                <input value={trip.client_phone ?? ''} onChange={e => setTrip({ ...trip, client_phone: e.target.value })}
-                  onBlur={() => saveTrip({ client_phone: trip.client_phone })} className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Datum *</label>
-                <input type="date" value={trip.trip_date} onChange={e => { setTrip({ ...trip, trip_date: e.target.value }); saveTrip({ trip_date: e.target.value }) }} className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Starttijd</label>
-                <input type="time" value={trip.start_time?.substring(0, 5) ?? '09:00'}
-                  onChange={e => { setTrip({ ...trip, start_time: e.target.value }); saveTrip({ start_time: e.target.value }) }} className={inp} />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs text-slate-500 mb-1">Vertrekpunt</label>
-                <input value={trip.start_address ?? ''} onChange={e => setTrip({ ...trip, start_address: e.target.value })}
-                  onBlur={() => saveTrip({ start_address: trip.start_address })} placeholder="Hotel, luchthaven of adres" className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Lunchtijd</label>
-                <input type="time" value={trip.lunch_time?.substring(0, 5) ?? '13:00'}
-                  onChange={e => { setTrip({ ...trip, lunch_time: e.target.value }); saveTrip({ lunch_time: e.target.value }) }} className={inp} />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Lunchpauze (min)</label>
-                <input type="number" value={trip.lunch_duration_minutes}
-                  onChange={e => { setTrip({ ...trip, lunch_duration_minutes: Number(e.target.value) }); saveTrip({ lunch_duration_minutes: Number(e.target.value) }) }} className={inp} />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs text-slate-500 mb-1">Notities</label>
-                <textarea value={trip.notes ?? ''} onChange={e => setTrip({ ...trip, notes: e.target.value })}
-                  onBlur={() => saveTrip({ notes: trip.notes })} rows={2} className={`${inp} resize-none`} />
-              </div>
-            </div>
-          </div>
-
-          {/* Stops */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">Woningen ({stops.length})</h2>
-
-            {/* Bestaande stops */}
-            <div className="space-y-2 mb-4">
-              {stops.map((stop, idx) => (
-                <div key={stop.id} className="border border-slate-100 rounded-xl p-3 hover:border-slate-200 transition-colors">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <span className="text-xs font-bold text-[#004B46] bg-[#004B46]/10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{stop.property_title || stop.address}</p>
-                        <p className="text-xs text-slate-400 truncate">{stop.address}</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          {stop.price && <span className="text-xs text-slate-500">€ {Number(stop.price).toLocaleString('nl-NL')}</span>}
-                          <span className="text-xs text-slate-400">{stop.viewing_duration_minutes} min</span>
-                          {stop.listing_url && (
-                            <a href={stop.listing_url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-[#004B46]" onClick={e => e.stopPropagation()}>
-                              <ExternalLink size={11} />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <button onClick={() => deleteStop(stop.id)} className="text-slate-300 hover:text-red-500 p-1 cursor-pointer shrink-0">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+      <div className="flex-1 overflow-y-auto" style={{ overflowX: 'hidden' }}>
+        <div className="mx-auto" style={{ maxWidth: 1280, padding: '22px 36px 60px' }}>
+          <div
+            className="bz-print-grid grid"
+            style={{
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)',
+              gap: 20,
+              alignItems: 'start',
+            }}
+          >
+            {/* LEFT COLUMN — form + stops */}
+            <div className="bz-print-hide">
+              <TripForm trip={trip} onChange={updateTrip} />
+              <StopsCard
+                stops={stops}
+                customerName={trip.client_name}
+                onAdd={addStop}
+                onDelete={deleteStop}
+                onMove={moveStop}
+              />
             </div>
 
-            {/* Nieuwe stop toevoegen */}
-            <div className="border-t border-slate-100 pt-4">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Stop toevoegen</div>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div className="col-span-2">
-                  <input value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="Adres *"
-                    onKeyDown={e => { if (e.key === 'Enter') addStop() }} className={inp} />
-                </div>
-                <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Titel (optioneel)" className={inp} />
-                <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Prijs (optioneel)" type="number" className={inp} />
-                <div className="col-span-2">
-                  <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="Listing URL (optioneel)" className={inp} />
-                </div>
+            {/* RIGHT COLUMN — actions + timeline */}
+            <div>
+              <div
+                className="bz-print-hide flex flex-wrap"
+                style={{ gap: 8, marginBottom: 16 }}
+              >
+                <BzButton
+                  variant="sun"
+                  disabled={!canOptimize || optimizing}
+                  onClick={optimize}
+                  className="flex-1"
+                >
+                  {optimizing ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" strokeWidth={2} /> Route berekenen…
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={14} strokeWidth={2} /> {route ? 'Opnieuw optimaliseren' : 'Optimaliseer route'}
+                    </>
+                  )}
+                </BzButton>
+                <a
+                  href={getWhatsAppUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex-1 ${!route || !trip.client_phone ? 'pointer-events-none' : ''}`}
+                  aria-disabled={!route || !trip.client_phone}
+                >
+                  <BzButton
+                    variant="whatsapp"
+                    disabled={!route || !trip.client_phone}
+                    className="w-full"
+                  >
+                    <MessageCircle size={14} strokeWidth={2} /> WhatsApp
+                  </BzButton>
+                </a>
+                <a
+                  href={getEmailUrl()}
+                  className={`flex-1 ${!route || !trip.client_email ? 'pointer-events-none' : ''}`}
+                  aria-disabled={!route || !trip.client_email}
+                >
+                  <BzButton
+                    variant="ghost"
+                    disabled={!route || !trip.client_email}
+                    className="w-full"
+                  >
+                    <Mail size={14} strokeWidth={2} /> E-mail
+                  </BzButton>
+                </a>
+                <BzButton
+                  variant="ghost"
+                  disabled={!route}
+                  onClick={() => window.print()}
+                  className="flex-1"
+                >
+                  <Printer size={14} strokeWidth={2} /> Print
+                </BzButton>
               </div>
-              <button onClick={addStop} disabled={!newAddress.trim()}
-                className="flex items-center gap-1 text-sm text-[#004B46] hover:text-[#0A6B63] font-medium cursor-pointer disabled:opacity-30">
-                <Plus size={14} /> Toevoegen
-              </button>
+
+              {!canOptimize && (
+                <div
+                  className="bz-print-hide flex items-center"
+                  style={{
+                    marginBottom: 14,
+                    padding: '10px 14px',
+                    background: 'rgba(224,82,82,0.1)',
+                    border: '1px solid rgba(224,82,82,0.25)',
+                    borderRadius: 10,
+                    fontSize: 12.5,
+                    color: '#c24040',
+                    gap: 8,
+                  }}
+                >
+                  <AlertCircle size={14} strokeWidth={2} className="shrink-0" />
+                  Vul klantnaam, datum, starttijd, startadres en minstens 1 stop in om te optimaliseren.
+                </div>
+              )}
+
+              {error && (
+                <div
+                  className="bz-print-hide flex items-center"
+                  style={{
+                    marginBottom: 14,
+                    padding: '10px 14px',
+                    background: 'rgba(224,82,82,0.1)',
+                    border: '1px solid rgba(224,82,82,0.25)',
+                    borderRadius: 10,
+                    fontSize: 12.5,
+                    color: '#c24040',
+                    gap: 8,
+                  }}
+                >
+                  <AlertCircle size={14} strokeWidth={2} className="shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <Timeline trip={trip} stops={stops} route={route} />
             </div>
-          </div>
-        </div>
-
-        {/* ===== RECHTER KOLOM: Route & Tijdlijn ===== */}
-        <div className="space-y-4">
-          {/* Actieknoppen */}
-          <div className="flex flex-wrap gap-2">
-            <button onClick={optimizeRoute} disabled={optimizing || stops.length < 2}
-              className="bg-[#004B46] text-[#FFFAEF] font-semibold px-4 py-2.5 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm">
-              {optimizing ? <><Loader2 size={14} className="animate-spin" /> Route berekenen...</> : <><Navigation size={14} /> Route optimaliseren</>}
-            </button>
-            {stops.length > 0 && (
-              <a href={getGoogleMapsLink()} target="_blank" rel="noopener noreferrer"
-                className="bg-white text-slate-700 border border-slate-200 font-medium px-4 py-2.5 rounded-xl hover:bg-slate-50 flex items-center gap-2 text-sm">
-                <MapPin size={14} /> Google Maps
-              </a>
-            )}
-            {trip.client_phone && (
-              <a href={getWhatsAppLink()} target="_blank" rel="noopener noreferrer"
-                className="bg-[#25D366] text-white font-medium px-4 py-2.5 rounded-xl hover:bg-[#20BD5A] flex items-center gap-2 text-sm">
-                <MessageCircle size={14} /> WhatsApp
-              </a>
-            )}
-            {trip.client_email && (
-              <a href={getEmailLink()}
-                className="bg-blue-600 text-white font-medium px-4 py-2.5 rounded-xl hover:bg-blue-700 flex items-center gap-2 text-sm">
-                <Mail size={14} /> Email
-              </a>
-            )}
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-50 rounded-xl text-sm text-red-700">{error}</div>
-          )}
-
-          {/* Tijdlijn */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">
-              {routeData ? 'Route & Tijdlijn' : 'Tijdlijn'}
-            </h2>
-
-            {stops.length === 0 ? (
-              <div className="py-8 text-center">
-                <MapPin size={24} className="mx-auto mb-2 text-slate-300" />
-                <p className="text-slate-400 text-sm">Voeg woningen toe om een route te plannen</p>
-              </div>
-            ) : (
-              <div className="relative pl-8">
-                {/* Verticale lijn */}
-                <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-slate-200" />
-
-                {/* Vertrekpunt */}
-                {trip.start_address && (
-                  <TimelineNode icon={<Flag size={12} />} color="bg-[#004B46]"
-                    time={trip.start_time?.substring(0, 5) ?? '09:00'}
-                    title={`Vertrek: ${trip.start_address}`}
-                  />
-                )}
-
-                {/* Stops */}
-                {stops.map((stop, idx) => {
-                  const routeStop = routeData?.stops.find(rs => rs.stop_id === stop.id)
-                  const isAfterLunch = routeData?.lunch && idx === routeData.lunch.after_stop_order
-
-                  return (
-                    <div key={stop.id}>
-                      {/* Reistijd indicator */}
-                      {(stop.travel_time_minutes || routeStop?.travel_time_to_next_minutes) && idx > 0 && (
-                        <div className="ml-4 py-1 text-[10px] text-slate-400 flex items-center gap-1">
-                          <span>↓ {stop.travel_time_minutes ?? '?'} min rijden</span>
-                        </div>
-                      )}
-
-                      <TimelineNode
-                        icon={<Home size={12} />}
-                        color="bg-[#F5AF40]"
-                        time={routeStop?.estimated_arrival ?? stop.estimated_arrival?.substring(0, 5) ?? ''}
-                        title={stop.property_title || stop.address}
-                        subtitle={stop.address !== (stop.property_title || stop.address) ? stop.address : undefined}
-                        meta={[
-                          stop.price ? `€ ${Number(stop.price).toLocaleString('nl-NL')}` : null,
-                          `${stop.viewing_duration_minutes} min bezichtiging`,
-                          stop.contact_name ? `📞 ${stop.contact_name}` : null,
-                        ].filter(Boolean) as string[]}
-                        listingUrl={stop.listing_url}
-                      />
-
-                      {/* Lunch na deze stop */}
-                      {isAfterLunch && routeData?.lunch && (
-                        <>
-                          <div className="ml-4 py-1 text-[10px] text-slate-400">↓</div>
-                          <TimelineNode
-                            icon={<Utensils size={12} />}
-                            color="bg-emerald-500"
-                            time={routeData.lunch.start_time}
-                            title={`Lunchpauze (${trip.lunch_duration_minutes} min)`}
-                          />
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-
-                {/* Einde */}
-                {routeData && (
-                  <>
-                    <div className="ml-4 py-1 text-[10px] text-slate-400">↓</div>
-                    <TimelineNode
-                      icon={<CheckCircle2 size={12} />}
-                      color="bg-emerald-600"
-                      time={routeData.estimated_end_time}
-                      title="Einde dag"
-                      meta={[`Totaal ${routeData.total_driving_minutes} min rijden`]}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-
-            {routeData?.route_summary && (
-              <p className="mt-4 text-xs text-slate-500 italic border-t border-slate-100 pt-3">{routeData.route_summary}</p>
-            )}
           </div>
         </div>
       </div>
-    </PageLayout>
+    </div>
   )
 }
 
-function TimelineNode({ icon, color, time, title, subtitle, meta, listingUrl }: {
-  icon: React.ReactNode
-  color: string
-  time: string
-  title: string
-  subtitle?: string
-  meta?: string[]
-  listingUrl?: string | null
+// ═════════ Save indicator ═════════
+function SaveIndicator({ state }: { state: SaveState }) {
+  return (
+    <span
+      className="inline-flex items-center font-body"
+      style={{
+        gap: 5,
+        fontSize: 11,
+        color: state === 'error' ? '#c24040' : '#7A8C8B',
+      }}
+    >
+      {state === 'saving' ? (
+        <>
+          <Loader2 size={12} className="animate-spin" strokeWidth={2.4} />
+          Opslaan…
+        </>
+      ) : state === 'error' ? (
+        <>
+          <AlertCircle size={12} strokeWidth={2.4} /> Niet opgeslagen
+        </>
+      ) : (
+        <>
+          <Check size={12} strokeWidth={2.4} color="#10b981" />
+          <span style={{ color: '#7A8C8B' }}>Opgeslagen</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+// ═════════ Status select ═════════
+function StatusSelect({
+  status,
+  onChange,
+}: {
+  status: 'concept' | 'gepland' | 'afgerond'
+  onChange: (status: 'concept' | 'gepland' | 'afgerond') => void
 }) {
   return (
-    <div className="relative flex items-start gap-3 py-2">
-      <div className={`absolute left-[-20px] w-6 h-6 rounded-full ${color} text-white flex items-center justify-center z-10`}>
-        {icon}
+    <div className="relative inline-block">
+      <select
+        value={status}
+        onChange={e => onChange(e.target.value as 'concept' | 'gepland' | 'afgerond')}
+        className="font-body font-semibold cursor-pointer transition-colors"
+        style={{
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          background: '#FFFFFF',
+          border: '1.5px solid rgba(0,75,70,0.18)',
+          borderRadius: 10,
+          padding: '8px 36px 8px 14px',
+          fontSize: 12,
+          color: '#004B46',
+        }}
+      >
+        <option value="concept">Concept</option>
+        <option value="gepland">Gepland</option>
+        <option value="afgerond">Afgerond</option>
+      </select>
+      <span
+        style={{
+          position: 'absolute',
+          right: 14,
+          top: '50%',
+          width: 8,
+          height: 8,
+          borderRight: '1.8px solid #004B46',
+          borderBottom: '1.8px solid #004B46',
+          transform: 'translateY(-75%) rotate(45deg)',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  )
+}
+
+// ═════════ Trip form ═════════
+function TripForm({
+  trip,
+  onChange,
+}: {
+  trip: Trip
+  onChange: (patch: Partial<Trip>) => void
+}) {
+  return (
+    <Card>
+      <CardTitle icon={<UserIcon size={16} strokeWidth={1.8} />}>
+        <span>Klant & dag</span>
+      </CardTitle>
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: '1fr 1fr', gap: '12px 14px' }}
+      >
+        <Field label="Klantnaam" required colFull>
+          <BzInput
+            value={trip.client_name || ''}
+            onChange={e => onChange({ client_name: e.target.value })}
+          />
+        </Field>
+        <Field label="E-mail">
+          <BzInput
+            type="email"
+            value={trip.client_email || ''}
+            placeholder="klant@email.com"
+            onChange={e => onChange({ client_email: e.target.value })}
+          />
+        </Field>
+        <Field label="Telefoon">
+          <BzInput
+            value={trip.client_phone || ''}
+            placeholder="+31 ..."
+            onChange={e => onChange({ client_phone: e.target.value })}
+          />
+        </Field>
+        <Field label="Datum" required>
+          <BzInput
+            type="date"
+            value={trip.trip_date || ''}
+            onChange={e => onChange({ trip_date: e.target.value })}
+          />
+        </Field>
+        <Field label="Starttijd">
+          <BzInput
+            type="time"
+            value={formatTime(trip.start_time)}
+            onChange={e => onChange({ start_time: e.target.value })}
+          />
+        </Field>
+        <Field label="Startadres / hotel" colFull>
+          <BzInput
+            value={trip.start_address || ''}
+            placeholder="Adres of hotel waar de klant verblijft"
+            onChange={e => onChange({ start_address: e.target.value })}
+          />
+        </Field>
+        <Field label="Lunchpauze">
+          <BzInput
+            type="time"
+            value={formatTime(trip.lunch_time)}
+            onChange={e => onChange({ lunch_time: e.target.value })}
+          />
+        </Field>
+        <Field label="Lunchduur">
+          <BzSelect
+            value={String(trip.lunch_duration_minutes || 60)}
+            onChange={e =>
+              onChange({ lunch_duration_minutes: Number(e.target.value) })
+            }
+          >
+            <option value="30">30 min</option>
+            <option value="45">45 min</option>
+            <option value="60">60 min</option>
+            <option value="90">90 min</option>
+          </BzSelect>
+        </Field>
+        <Field label="Interne notities" colFull>
+          <BzTextarea
+            value={trip.notes || ''}
+            placeholder="Wensen, budget, type woning..."
+            onChange={e => onChange({ notes: e.target.value })}
+          />
+        </Field>
+      </div>
+    </Card>
+  )
+}
+
+// ═════════ Stops card ═════════
+interface StopDraft {
+  address: string
+  property_title: string
+  listing_url: string
+  price: string
+  viewing_duration_minutes: number
+  contact_name: string
+  contact_phone: string
+  notes: string
+}
+
+const EMPTY_DRAFT: StopDraft = {
+  address: '',
+  property_title: '',
+  listing_url: '',
+  price: '',
+  viewing_duration_minutes: 30,
+  contact_name: '',
+  contact_phone: '',
+  notes: '',
+}
+
+function StopsCard({
+  stops,
+  customerName,
+  onAdd,
+  onDelete,
+  onMove,
+}: {
+  stops: Stop[]
+  customerName: string
+  onAdd: (draft: StopDraft) => Promise<void>
+  onDelete: (id: string) => void
+  onMove: (id: string, dir: -1 | 1) => void
+}) {
+  const [draft, setDraft] = useState<StopDraft>(EMPTY_DRAFT)
+  const [showExtra, setShowExtra] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  async function submit() {
+    if (!draft.address.trim()) return
+    setAdding(true)
+    await onAdd(draft)
+    setDraft(EMPTY_DRAFT)
+    setShowExtra(false)
+    setAdding(false)
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+        <CardTitle icon={<MapPin size={16} strokeWidth={1.8} />} noMargin>
+          <span>Stops</span>
+          <span
+            className="font-body font-semibold"
+            style={{ fontSize: 11, color: '#7A8C8B', marginLeft: 4 }}
+          >
+            {stops.length} {stops.length === 1 ? 'adres' : 'adressen'}
+          </span>
+        </CardTitle>
+        {customerName && (
+          <Link
+            href="/woninglijst"
+            className="inline-flex items-center font-body font-semibold transition-colors"
+            style={{
+              gap: 6,
+              fontSize: 11,
+              color: '#004B46',
+              textDecoration: 'none',
+              padding: '6px 10px',
+              borderRadius: 8,
+              background: '#E6F0EF',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,75,70,0.14)')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#E6F0EF')}
+          >
+            <ClipboardList size={11} strokeWidth={2} /> Uit shortlist
+          </Link>
+        )}
+      </div>
+
+      {stops.length === 0 ? (
+        <div
+          className="text-center font-body"
+          style={{ padding: '18px 0', fontSize: 12.5, color: '#7A8C8B' }}
+        >
+          Voeg hieronder het eerste adres toe.
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          {stops.map((s, idx) => (
+            <StopRow
+              key={s.id}
+              stop={s}
+              index={idx}
+              total={stops.length}
+              onMove={onMove}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+
+      <Divider>Nieuwe stop toevoegen</Divider>
+
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}
+      >
+        <Field label="Adres" required colFull>
+          <BzInput
+            value={draft.address}
+            placeholder="Straat, nummer, plaats"
+            onChange={e => setDraft({ ...draft, address: e.target.value })}
+          />
+        </Field>
+        <Field label="Titel woning">
+          <BzInput
+            value={draft.property_title}
+            placeholder="Villa Mirador"
+            onChange={e => setDraft({ ...draft, property_title: e.target.value })}
+          />
+        </Field>
+        <Field label="Prijs (€)">
+          <BzInput
+            type="number"
+            value={draft.price}
+            placeholder="795000"
+            onChange={e => setDraft({ ...draft, price: e.target.value })}
+          />
+        </Field>
+        {showExtra && (
+          <>
+            <Field label="Listing URL" colFull>
+              <BzInput
+                value={draft.listing_url}
+                placeholder="https://..."
+                onChange={e => setDraft({ ...draft, listing_url: e.target.value })}
+              />
+            </Field>
+            <Field label="Duur bezichtiging">
+              <BzSelect
+                value={String(draft.viewing_duration_minutes)}
+                onChange={e =>
+                  setDraft({ ...draft, viewing_duration_minutes: Number(e.target.value) })
+                }
+              >
+                <option value="20">20 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="60">60 min</option>
+              </BzSelect>
+            </Field>
+            <Field label="Contactpersoon">
+              <BzInput
+                value={draft.contact_name}
+                placeholder="Verkoper / makelaar"
+                onChange={e => setDraft({ ...draft, contact_name: e.target.value })}
+              />
+            </Field>
+            <Field label="Telefoon contact" colFull>
+              <BzInput
+                value={draft.contact_phone}
+                placeholder="+34 ..."
+                onChange={e => setDraft({ ...draft, contact_phone: e.target.value })}
+              />
+            </Field>
+            <Field label="Opmerkingen" colFull>
+              <BzTextarea
+                value={draft.notes}
+                onChange={e => setDraft({ ...draft, notes: e.target.value })}
+              />
+            </Field>
+          </>
+        )}
+        <div
+          className="flex items-center"
+          style={{ gridColumn: '1 / -1', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}
+        >
+          {!showExtra && (
+            <BzButton variant="subtle" onClick={() => setShowExtra(true)}>
+              <Plus size={14} strokeWidth={2.2} /> Meer details
+            </BzButton>
+          )}
+          <BzButton variant="primary" disabled={!draft.address.trim() || adding} onClick={submit}>
+            {adding ? (
+              <Loader2 size={14} className="animate-spin" strokeWidth={2} />
+            ) : (
+              <Plus size={14} strokeWidth={2.2} />
+            )}{' '}
+            Stop toevoegen
+          </BzButton>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function StopRow({
+  stop,
+  index,
+  total,
+  onMove,
+  onDelete,
+}: {
+  stop: Stop
+  index: number
+  total: number
+  onMove: (id: string, dir: -1 | 1) => void
+  onDelete: (id: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-start bg-white transition-all"
+      style={{
+        gap: 12,
+        padding: 12,
+        border: hovered
+          ? '1px solid rgba(0,75,70,0.24)'
+          : '1px solid rgba(0,75,70,0.12)',
+        borderRadius: 12,
+        boxShadow: hovered ? '0 4px 10px rgba(7,42,36,0.05)' : 'none',
+      }}
+    >
+      <button
+        title="Verplaatsen"
+        className="flex items-center shrink-0"
+        style={{
+          color: '#7A8C8B',
+          cursor: 'grab',
+          padding: 2,
+          background: 'transparent',
+          border: 'none',
+        }}
+      >
+        <GripVertical size={14} strokeWidth={2} />
+      </button>
+      <div
+        className="flex items-center justify-center shrink-0 font-heading font-bold text-marble"
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 999,
+          background: '#004B46',
+          fontSize: 12.5,
+          letterSpacing: '-0.02em',
+        }}
+      >
+        {index + 1}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          {time && <span className="text-xs font-semibold text-[#004B46] tabular-nums">{time}</span>}
-          <span className="text-sm font-medium text-slate-800 truncate">{title}</span>
-          {listingUrl && (
-            <a href={listingUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-[#004B46] shrink-0">
-              <ExternalLink size={11} />
+        <div
+          className="font-heading font-bold truncate"
+          style={{
+            fontSize: 14,
+            color: '#004B46',
+            letterSpacing: '-0.005em',
+            marginBottom: 2,
+          }}
+        >
+          {stop.property_title || stop.address}
+        </div>
+        {stop.property_title && (
+          <div
+            className="font-body truncate"
+            style={{ fontSize: 11.5, color: '#7A8C8B', marginBottom: 4 }}
+          >
+            {stop.address}
+          </div>
+        )}
+        <div
+          className="flex items-center flex-wrap font-body"
+          style={{ gap: 10, fontSize: 11.5, color: '#5F7472' }}
+        >
+          {stop.price != null && (
+            <span
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 11.5 }}
+            >
+              {formatPrice(stop.price)}
+            </span>
+          )}
+          <span className="inline-flex items-center" style={{ gap: 4 }}>
+            <Clock size={11} strokeWidth={1.8} color="#7A8C8B" />
+            {stop.viewing_duration_minutes}m
+          </span>
+          {stop.contact_name && (
+            <span className="inline-flex items-center" style={{ gap: 4 }}>
+              <UserIcon size={11} strokeWidth={1.8} color="#7A8C8B" />
+              {stop.contact_name}
+            </span>
+          )}
+          {stop.listing_url && (
+            <a
+              href={stop.listing_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open listing"
+              className="inline-flex items-center transition-colors"
+              style={{ color: '#5F7472' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#5F7472')}
+            >
+              <ExternalLink size={11} strokeWidth={1.8} />
             </a>
           )}
         </div>
-        {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
-        {meta && meta.length > 0 && (
-          <div className="flex items-center gap-3 mt-0.5">
-            {meta.map((m, i) => <span key={i} className="text-[10px] text-slate-500">{m}</span>)}
+      </div>
+      <div className="flex items-start shrink-0" style={{ gap: 4 }}>
+        <SmallIconButton
+          title="Omhoog"
+          disabled={index === 0}
+          onClick={() => onMove(stop.id, -1)}
+        >
+          <ChevronUp size={13} strokeWidth={1.8} />
+        </SmallIconButton>
+        <SmallIconButton
+          title="Omlaag"
+          disabled={index === total - 1}
+          onClick={() => onMove(stop.id, 1)}
+        >
+          <ChevronDown size={13} strokeWidth={1.8} />
+        </SmallIconButton>
+        <SmallIconButton title="Verwijder" variant="delete" onClick={() => onDelete(stop.id)}>
+          <Trash2 size={13} strokeWidth={1.8} />
+        </SmallIconButton>
+      </div>
+    </div>
+  )
+}
+
+function SmallIconButton({
+  title,
+  onClick,
+  disabled,
+  variant,
+  children,
+}: {
+  title: string
+  onClick?: () => void
+  disabled?: boolean
+  variant?: 'delete'
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-center cursor-pointer transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 7,
+        border: 'none',
+        background: 'transparent',
+        color: '#7A8C8B',
+      }}
+      onMouseEnter={e => {
+        if (disabled) return
+        if (variant === 'delete') {
+          e.currentTarget.style.background = 'rgba(224,82,82,0.12)'
+          e.currentTarget.style.color = '#c24040'
+        } else {
+          e.currentTarget.style.background = '#E6F0EF'
+          e.currentTarget.style.color = '#004B46'
+        }
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.color = '#7A8C8B'
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ═════════ TIMELINE ═════════
+type TimelineItem =
+  | { kind: 'start'; time: string; title: string; subtitle: string }
+  | { kind: 'segment'; minutes: number; isLunchSegment: boolean }
+  | {
+      kind: 'stop'
+      sortOrder: number
+      time: string
+      endTime: string
+      stop: Stop
+    }
+  | { kind: 'lunch'; time: string; endTime: string; subtitle: string }
+  | { kind: 'end'; time: string; title: string; subtitle: string }
+
+function Timeline({
+  trip,
+  stops,
+  route,
+}: {
+  trip: Trip
+  stops: Stop[]
+  route: RouteData | null
+}) {
+  const items: TimelineItem[] = useMemo(() => {
+    if (!route) return []
+    const list: TimelineItem[] = []
+    list.push({
+      kind: 'start',
+      time: formatTime(trip.start_time),
+      title: 'Vertrek',
+      subtitle: trip.start_address || '—',
+    })
+    const rs = route.stops || []
+    const lunchAfter = route.lunch?.after_stop_order
+    rs.forEach((r, idx) => {
+      const prevTravel = idx === 0 ? null : rs[idx - 1].travel_time_to_next_minutes
+      if (prevTravel != null) {
+        list.push({ kind: 'segment', minutes: prevTravel, isLunchSegment: false })
+      } else if (idx === 0) {
+        list.push({
+          kind: 'segment',
+          minutes: diffMinutes(formatTime(trip.start_time), r.estimated_arrival),
+          isLunchSegment: false,
+        })
+      }
+      const stop = stops.find(s => s.id === r.stop_id)
+      if (stop) {
+        list.push({
+          kind: 'stop',
+          sortOrder: r.sort_order,
+          time: r.estimated_arrival,
+          endTime: r.estimated_departure,
+          stop,
+        })
+      }
+      if (lunchAfter === r.sort_order && route.lunch) {
+        list.push({
+          kind: 'segment',
+          minutes: diffMinutes(r.estimated_departure, route.lunch.start_time),
+          isLunchSegment: true,
+        })
+        list.push({
+          kind: 'lunch',
+          time: route.lunch.start_time,
+          endTime: route.lunch.end_time,
+          subtitle: `${trip.lunch_duration_minutes} min · klant krijgt frisse energie`,
+        })
+      }
+    })
+    list.push({
+      kind: 'end',
+      time: route.estimated_end_time,
+      title: 'Einde bezichtigingsdag',
+      subtitle: trip.start_address
+        ? `Terug bij ${trip.start_address.split(',')[0]}`
+        : 'Afronding',
+    })
+    return list
+  }, [trip, stops, route])
+
+  if (!route) {
+    return (
+      <Card>
+        <div className="flex items-center justify-between" style={{ marginBottom: 16, gap: 10 }}>
+          <h3
+            className="font-heading font-bold text-deepsea"
+            style={{
+              fontSize: 16,
+              margin: 0,
+              letterSpacing: '-0.005em',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <RouteIcon size={16} strokeWidth={1.8} /> Route
+          </h3>
+        </div>
+        <EmptyCard
+          icon={<MapPin size={26} strokeWidth={1.5} />}
+          title="Nog geen geoptimaliseerde route"
+          text="Klik op Optimaliseer route om reistijden en aankomsttijden te berekenen."
+        />
+      </Card>
+    )
+  }
+
+  const drivingH = Math.floor(route.total_driving_minutes / 60)
+  const drivingM = route.total_driving_minutes % 60
+  const drivingStr = `${drivingH > 0 ? drivingH + 'u ' : ''}${drivingM}m`
+
+  return (
+    <Card className="bz-print-card">
+      <div className="flex items-center justify-between" style={{ marginBottom: 16, gap: 10 }}>
+        <h3
+          className="font-heading font-bold text-deepsea"
+          style={{
+            fontSize: 16,
+            margin: 0,
+            letterSpacing: '-0.005em',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <RouteIcon size={16} strokeWidth={1.8} /> Route
+        </h3>
+        <div
+          className="flex font-body"
+          style={{ gap: 14, fontSize: 11.5, color: '#5F7472' }}
+        >
+          <div>
+            <span>Totaal rijden</span>{' '}
+            <b
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 13, letterSpacing: '-0.005em' }}
+            >
+              {drivingStr}
+            </b>
+          </div>
+          <div>
+            <span>Einde</span>{' '}
+            <b
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 13, letterSpacing: '-0.005em' }}
+            >
+              {route.estimated_end_time}
+            </b>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex flex-col">
+        {items.map((item, idx) => {
+          if (item.kind === 'segment') {
+            return (
+              <Segment
+                key={`seg-${idx}`}
+                minutes={item.minutes}
+                isLunch={item.isLunchSegment}
+              />
+            )
+          }
+          if (item.kind === 'lunch') {
+            return (
+              <Node
+                key={`node-${idx}`}
+                kind="lunch"
+                time={item.time}
+                endTime={item.endTime}
+                title="Lunchpauze"
+                subtitle={item.subtitle}
+              />
+            )
+          }
+          if (item.kind === 'stop') {
+            return (
+              <StopNode
+                key={`node-${idx}`}
+                sortOrder={item.sortOrder}
+                time={item.time}
+                endTime={item.endTime}
+                stop={item.stop}
+              />
+            )
+          }
+          return (
+            <Node
+              key={`node-${idx}`}
+              kind={item.kind}
+              time={item.time}
+              title={item.title}
+              subtitle={item.subtitle}
+            />
+          )
+        })}
+      </div>
+
+      {route.route_summary && (
+        <div
+          className="flex items-start"
+          style={{
+            marginTop: 16,
+            padding: '14px 16px',
+            background: '#FEF6E4',
+            border: '1px solid rgba(212,146,26,0.3)',
+            borderRadius: 12,
+            gap: 10,
+          }}
+        >
+          <Sparkles
+            size={16}
+            strokeWidth={2}
+            color="#D4921A"
+            className="shrink-0"
+            style={{ marginTop: 1 }}
+          />
+          <div>
+            <div
+              className="font-body font-bold uppercase text-sun-dark"
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.14em',
+                marginBottom: 3,
+              }}
+            >
+              Route-logica
+            </div>
+            <div
+              className="font-body italic"
+              style={{ fontSize: 12.5, color: '#5F7472', lineHeight: 1.5 }}
+            >
+              {route.route_summary}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function Segment({ minutes, isLunch }: { minutes: number; isLunch: boolean }) {
+  const color = isLunch ? '#10b981' : '#0A6B63'
+  return (
+    <div className="flex items-center" style={{ gap: 14 }}>
+      <div style={{ width: 58 }} />
+      <div
+        className="flex items-center justify-center shrink-0"
+        style={{ width: 36, padding: '6px 0' }}
+      >
+        <div
+          style={{
+            width: 6,
+            height: 44,
+            borderRadius: 3,
+            background: `repeating-linear-gradient(180deg, ${color} 0 4px, transparent 4px 8px)`,
+            opacity: isLunch ? 0.7 : 0.65,
+          }}
+        />
+      </div>
+      <div
+        className="flex items-center flex-1 font-body"
+        style={{ fontSize: 11.5, color: '#7A8C8B', gap: 7 }}
+      >
+        <Car size={12} strokeWidth={1.8} style={{ opacity: 0.65 }} />
+        <span>
+          <b style={{ fontWeight: 600, color: '#5F7472' }}>{minutes}m</b> rijden
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function Node({
+  kind,
+  time,
+  endTime,
+  title,
+  subtitle,
+}: {
+  kind: 'start' | 'lunch' | 'end'
+  time: string
+  endTime?: string
+  title: string
+  subtitle?: string
+}) {
+  const dotColors = {
+    start: { bg: '#004B46', color: '#FFFFFF' },
+    lunch: { bg: '#10b981', color: '#FFFFFF' },
+    end: { bg: '#004B46', color: '#FFFFFF' },
+  }
+  const dotIcons = {
+    start: <Play size={15} strokeWidth={2.2} />,
+    lunch: <Utensils size={15} strokeWidth={2.2} />,
+    end: <Flag size={15} strokeWidth={2.2} />,
+  }
+  return (
+    <div className="flex items-start" style={{ gap: 14, padding: '6px 0', position: 'relative' }}>
+      <div
+        className="font-heading font-bold text-deepsea shrink-0 text-right"
+        style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
+      >
+        {time}
+        {endTime && (
+          <span
+            className="block font-body"
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: '#7A8C8B',
+              marginTop: 1,
+              letterSpacing: 0,
+            }}
+          >
+            → {endTime}
+          </span>
+        )}
+      </div>
+      <div
+        className="shrink-0 flex flex-col items-center"
+        style={{ width: 36, paddingTop: 6 }}
+      >
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: dotColors[kind].bg,
+            color: dotColors[kind].color,
+            position: 'relative',
+            zIndex: 2,
+            boxShadow: '0 0 0 3px #fff, 0 1px 4px rgba(7,42,36,0.18)',
+          }}
+        >
+          {dotIcons[kind]}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0" style={{ padding: '6px 2px 14px' }}>
+        <div className="flex items-center" style={{ gap: 8, marginBottom: 2 }}>
+          <div
+            className="font-heading font-bold"
+            style={{
+              fontSize: 15,
+              color: '#004B46',
+              letterSpacing: '-0.005em',
+            }}
+          >
+            {title}
+          </div>
+        </div>
+        {subtitle && (
+          <div
+            className="font-body truncate"
+            style={{ fontSize: 11.5, color: '#7A8C8B' }}
+          >
+            {subtitle}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function StopNode({
+  sortOrder,
+  time,
+  endTime,
+  stop,
+}: {
+  sortOrder: number
+  time: string
+  endTime: string
+  stop: Stop
+}) {
+  return (
+    <div className="flex items-start" style={{ gap: 14, padding: '6px 0', position: 'relative' }}>
+      <div
+        className="font-heading font-bold text-deepsea shrink-0 text-right"
+        style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
+      >
+        {time}
+        {endTime && (
+          <span
+            className="block font-body"
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: '#7A8C8B',
+              marginTop: 1,
+              letterSpacing: 0,
+            }}
+          >
+            → {endTime}
+          </span>
+        )}
+      </div>
+      <div
+        className="shrink-0 flex flex-col items-center"
+        style={{ width: 36, paddingTop: 6 }}
+      >
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: '#F5AF40',
+            color: '#004B46',
+            position: 'relative',
+            zIndex: 2,
+            boxShadow: '0 0 0 3px #fff, 0 1px 4px rgba(7,42,36,0.18)',
+          }}
+        >
+          <MapPin size={15} strokeWidth={2.2} />
+        </div>
+      </div>
+      <div className="flex-1 min-w-0" style={{ padding: '6px 2px 14px' }}>
+        <div
+          className="font-heading font-bold"
+          style={{
+            fontSize: 15,
+            color: '#004B46',
+            letterSpacing: '-0.005em',
+            marginBottom: 2,
+          }}
+        >
+          <span style={{ color: '#D4921A', marginRight: 6 }}>{sortOrder}.</span>
+          {stop.property_title || stop.address}
+        </div>
+        <div
+          className="font-body truncate"
+          style={{ fontSize: 11.5, color: '#7A8C8B', marginBottom: 6 }}
+        >
+          {stop.address}
+        </div>
+        <div
+          className="flex flex-wrap font-body"
+          style={{ gap: 10, fontSize: 11.5, color: '#5F7472' }}
+        >
+          {stop.price != null && (
+            <span
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 12 }}
+            >
+              {formatPrice(stop.price)}
+            </span>
+          )}
+          <span className="inline-flex items-center" style={{ gap: 5 }}>
+            <Clock size={12} strokeWidth={1.8} color="#7A8C8B" />
+            {stop.viewing_duration_minutes}m bezichtiging
+          </span>
+          {stop.contact_name && (
+            <span className="inline-flex items-center" style={{ gap: 5 }}>
+              <UserIcon size={12} strokeWidth={1.8} color="#7A8C8B" />
+              {stop.contact_name}
+            </span>
+          )}
+          {stop.listing_url && (
+            <a
+              href={stop.listing_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center transition-colors"
+              style={{ color: '#5F7472', gap: 4, textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#5F7472')}
+            >
+              <ExternalLink size={12} strokeWidth={1.8} /> listing
+            </a>
+          )}
+        </div>
+        {stop.notes && (
+          <div
+            className="font-body italic"
+            style={{ fontSize: 11.5, color: '#7A8C8B', marginTop: 6 }}
+          >
+            {stop.notes}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═════════ Atoms ═════════
+function Card({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={`bg-white ${className ?? ''}`}
+      style={{
+        border: '1px solid rgba(0,75,70,0.12)',
+        borderRadius: 14,
+        padding: 20,
+        marginBottom: 16,
+        boxShadow: '0 1px 2px rgba(7,42,36,0.04)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function CardTitle({
+  icon,
+  noMargin,
+  children,
+}: {
+  icon: React.ReactNode
+  noMargin?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <h2
+      className="font-heading font-bold text-deepsea flex items-center"
+      style={{
+        fontSize: 16,
+        margin: noMargin ? 0 : '0 0 14px',
+        letterSpacing: '-0.005em',
+        gap: 8,
+      }}
+    >
+      {icon}
+      {children}
+    </h2>
+  )
+}
+
+function Field({
+  label,
+  required,
+  colFull,
+  children,
+}: {
+  label: string
+  required?: boolean
+  colFull?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className="flex flex-col min-w-0"
+      style={{ gap: 5, ...(colFull ? { gridColumn: '1 / -1' } : {}) }}
+    >
+      <label
+        className="font-body font-bold uppercase"
+        style={{
+          fontSize: 10.5,
+          color: '#7A8C8B',
+          letterSpacing: '0.1em',
+        }}
+      >
+        {label}
+        {required && (
+          <span style={{ color: '#c24040', marginLeft: 2 }}>*</span>
+        )}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function BzInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full font-body bg-marble outline-none transition-all ${props.className ?? ''}`}
+      style={{
+        boxSizing: 'border-box',
+        padding: '9px 12px',
+        border: '1.5px solid rgba(0,75,70,0.16)',
+        borderRadius: 10,
+        fontSize: 13,
+        color: '#004B46',
+        ...props.style,
+      }}
+      onFocus={e => {
+        e.currentTarget.style.borderColor = '#004B46'
+        e.currentTarget.style.background = '#FFFFFF'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,75,70,0.08)'
+      }}
+      onBlur={e => {
+        e.currentTarget.style.borderColor = 'rgba(0,75,70,0.16)'
+        e.currentTarget.style.background = '#FFFAEF'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    />
+  )
+}
+
+function BzTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`w-full font-body bg-marble outline-none transition-all ${props.className ?? ''}`}
+      style={{
+        boxSizing: 'border-box',
+        padding: '9px 12px',
+        border: '1.5px solid rgba(0,75,70,0.16)',
+        borderRadius: 10,
+        fontSize: 13,
+        color: '#004B46',
+        minHeight: 60,
+        resize: 'vertical',
+        lineHeight: 1.4,
+        ...props.style,
+      }}
+      onFocus={e => {
+        e.currentTarget.style.borderColor = '#004B46'
+        e.currentTarget.style.background = '#FFFFFF'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,75,70,0.08)'
+      }}
+      onBlur={e => {
+        e.currentTarget.style.borderColor = 'rgba(0,75,70,0.16)'
+        e.currentTarget.style.background = '#FFFAEF'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    />
+  )
+}
+
+function BzSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`w-full font-body bg-marble outline-none transition-all cursor-pointer ${props.className ?? ''}`}
+      style={{
+        boxSizing: 'border-box',
+        padding: '9px 12px',
+        border: '1.5px solid rgba(0,75,70,0.16)',
+        borderRadius: 10,
+        fontSize: 13,
+        color: '#004B46',
+        ...props.style,
+      }}
+    />
+  )
+}
+
+function Divider({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="flex items-center"
+      style={{ margin: '10px 4px', gap: 8 }}
+    >
+      <div style={{ flex: 1, height: 1, background: 'rgba(0,75,70,0.1)' }} />
+      <span
+        className="font-body font-bold uppercase"
+        style={{
+          fontSize: 9.5,
+          letterSpacing: '0.16em',
+          color: '#7A8C8B',
+        }}
+      >
+        {children}
+      </span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(0,75,70,0.1)' }} />
     </div>
   )
 }
