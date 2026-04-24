@@ -45,3 +45,29 @@ h1, h2, h3, h4 {
   color: var(--color-deepsea);
 }
 
+/* ─── Woningbot animations ────────────────────────────────────────────── */
+@keyframes wb-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wb-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wb-slide-up-sm {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wb-spin { to { transform: rotate(360deg); } }
+@keyframes wb-blink {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+.wb-anim-panel { animation: wb-slide-down 200ms ease-out; }
+.wb-anim-bar { animation: wb-slide-up 220ms ease-out; }
+.wb-anim-picker { animation: wb-slide-up-sm 180ms ease-out; }
+.wb-spinner { animation: wb-spin 0.8s linear infinite; }
+.wb-dot { animation: wb-blink 1.2s infinite both; }
+.wb-dot:nth-child(2) { animation-delay: 0.2s; }
+.wb-dot:nth-child(3) { animation-delay: 0.4s; }
+

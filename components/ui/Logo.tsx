@@ -16,6 +16,8 @@ type Variant =
   // Square tiles met achtergrond (voor avatars, social, etc.).
   | 'tile-deepsea'
   | 'tile-white'
+  // Square tile met merkteken + "COSTA SELECT" wordmark eronder (sidebar-variant).
+  | 'tile-wordmark-deepsea'
 
 interface VariantInfo {
   src: string
@@ -33,6 +35,7 @@ const VARIANTS: Record<Variant, VariantInfo> = {
   'full-en-deepsea':  { src: '/brand/costa-select-full-en-deepsea.svg', w: 787,  h: 103 },
   'tile-deepsea':     { src: '/brand/costa-select-primary-deepsea.svg', w: 1080, h: 1080 },
   'tile-white':       { src: '/brand/costa-select-icon-white.svg',      w: 1080, h: 1080 },
+  'tile-wordmark-deepsea': { src: '/brand/costa-select-tile-wordmark-deepsea.svg', w: 1080, h: 1080 },
 }
 
 interface LogoProps {

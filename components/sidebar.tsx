@@ -111,16 +111,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         key={href}
         href={href}
         onClick={onClose}
-        className={`flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${
+        className={`flex items-center gap-3 mx-2 px-3 py-[9px] rounded-lg text-[13px] transition-all cursor-pointer ${
           isActive
             ? 'font-semibold text-white bg-white/15'
-            : 'text-white/70 hover:text-white hover:bg-white/10'
+            : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
         }`}
       >
         <Icon size={16} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
         <span className="flex-1">{label}</span>
         {href === '/dashboard/todos' && todoCount > 0 && (
-          <span className="bg-rose-500 text-white text-[10px] font-semibold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+          <span className="bg-[#FF8761] text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-[7px] leading-none">
             {todoCount}
           </span>
         )}
@@ -147,13 +147,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Brand */}
-        <div className="px-4 pt-5 pb-3">
-          <Logo variant="mark" size={28} />
+        <div className="px-3 pt-2 pb-1 flex items-center justify-center">
+          <Logo variant="tile-wordmark-deepsea" size={140} className="rounded-xl" />
         </div>
 
         {/* Platform section */}
-        <div className="px-4 pt-4 pb-1">
-          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">
+        <div className="px-5 pt-2.5 pb-1">
+          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em]">
             Menu
           </span>
         </div>
@@ -167,7 +167,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className="px-4 pt-6 pb-1">
               <button
                 onClick={() => setDashboardOpen(!dashboardOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
               >
                 <span>Financieel</span>
                 {dashboardOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -187,7 +187,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className="px-4 pt-6 pb-1">
               <button
                 onClick={() => setMarketingOpen(!marketingOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
               >
                 <span>Marketing</span>
                 {marketingOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -215,7 +215,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className="px-4 pt-6 pb-1">
               <button
                 onClick={() => setOperationsOpen(!operationsOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-widest cursor-pointer hover:text-white/60 transition-colors"
+                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
               >
                 <span>Operations</span>
                 {operationsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -233,15 +233,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-white/10">
+        <div className="px-5 py-3.5 border-t border-white/10">
           {user && (
-            <div className="text-[11px] text-white/40 mb-2 truncate">
+            <div className="text-[11px] text-white/[0.45] mb-2 truncate">
               {naam ?? user.email}
             </div>
           )}
           <button
             onClick={signOut}
-            className="flex items-center gap-2 text-[12px] text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-[12px] text-white/[0.45] hover:text-white/80 transition-colors cursor-pointer"
           >
             <LogOut size={13} strokeWidth={1.5} />
             <span>Uitloggen</span>
