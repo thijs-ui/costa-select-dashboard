@@ -30,7 +30,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className="ml-0 md:ml-56 min-h-screen bg-marble">
+        <main className="sb-shell-main min-h-screen bg-marble">
           {children}
         </main>
       </div>

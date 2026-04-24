@@ -2,71 +2,142 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
+import { createBrowserClient } from '@/lib/supabase-browser'
 import {
-  LayoutDashboard,
-  MessageSquare,
   BookOpen,
-  GraduationCap,
-  Compass,
-  Handshake,
-  CalendarDays,
-  Receipt,
-  FileText,
-  TrendingUp,
-  CreditCard,
-  Zap,
-  Settings,
-  MapPin,
-  Users,
   Building2,
-  ClipboardList,
-  CheckSquare,
-  Route,
   Calculator,
+  CalendarDays,
+  CheckSquare,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Compass,
+  CreditCard,
+  FileText,
+  GraduationCap,
+  Handshake,
+  LayoutDashboard,
   Layers,
   LogOut,
+  MapPin,
+  MessageSquare,
+  Receipt,
+  Route,
+  Settings,
+  TrendingUp,
+  Users,
   X,
-  ChevronDown,
-  ChevronRight,
+  Zap,
+  type LucideIcon,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@/lib/supabase-browser'
-import { Logo } from '@/components/ui/Logo'
 
-const platformItems = [
-  { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
-  { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
-  { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
-  { href: '/calculators', label: 'Calculators', icon: Calculator },
-  { href: '/samenwerkingen', label: 'Samenwerkingen', icon: Building2 },
-  { href: '/nieuwbouwkaart', label: 'Nieuwbouwkaart', icon: MapPin },
-  { href: '/dossier', label: 'Dossier', icon: FileText },
-  { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
-  { href: '/training', label: 'Training', icon: GraduationCap },
-  { href: '/kompas', label: 'Costa Kompas', icon: Compass },
-  { href: '/kompas-v2', label: 'Costa Kompas v2', icon: Compass },
+interface NavItem {
+  href: string
+  label: string
+  icon: LucideIcon
+  badgeKey?: 'todos'
+}
+
+interface NavSection {
+  key: string
+  label: string
+  items: NavItem[]
+  adminOnly?: boolean
+}
+
+const SECTIONS: NavSection[] = [
+  {
+    key: 'menu',
+    label: 'Menu',
+    items: [
+      { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
+      { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
+      { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
+      { href: '/calculators', label: 'Calculators', icon: Calculator },
+      { href: '/samenwerkingen', label: 'Samenwerkingen', icon: Building2 },
+      { href: '/nieuwbouwkaart', label: 'Nieuwbouwkaart', icon: MapPin },
+      { href: '/dossier', label: 'Dossier', icon: FileText },
+      { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
+      { href: '/training', label: 'Training', icon: GraduationCap },
+      { href: '/kompas-v2', label: 'Costa Kompas', icon: Compass },
+    ],
+  },
+  {
+    key: 'fin',
+    label: 'Financieel',
+    adminOnly: true,
+    items: [
+      { href: '/dashboard', label: 'Overzicht', icon: LayoutDashboard },
+      { href: '/dashboard/regios', label: "Regio's & Funnel", icon: MapPin },
+      { href: '/dashboard/makelaars', label: 'Consultants', icon: Users },
+      { href: '/dashboard/partners', label: 'Partners', icon: Building2 },
+      { href: '/dashboard/deals', label: 'Sales', icon: Handshake },
+      { href: '/dashboard/afspraken', label: 'Afspraken', icon: CalendarDays },
+      { href: '/dashboard/commissies', label: 'Commissies', icon: CreditCard },
+      { href: '/dashboard/pl', label: 'P&L', icon: TrendingUp },
+      { href: '/dashboard/maandkosten', label: 'Maandkosten', icon: Receipt },
+      { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
+      { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
+      { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
+    ],
+  },
+  {
+    key: 'mkt',
+    label: 'Marketing',
+    adminOnly: true,
+    items: [
+      { href: '/marketing/social-media', label: 'Social Media', icon: MessageSquare },
+      { href: '/marketing/advertenties', label: 'Advertenties', icon: Zap },
+      { href: '/marketing/website-blog', label: 'Website & Blog', icon: FileText },
+      { href: '/marketing/email', label: 'Email', icon: Receipt },
+      { href: '/marketing/video', label: 'Video', icon: GraduationCap },
+      { href: '/marketing/brochures', label: 'Brochures', icon: BookOpen },
+      { href: '/marketing/bibliotheek', label: 'Bibliotheek', icon: ClipboardList },
+    ],
+  },
+  {
+    key: 'ops',
+    label: 'Operations',
+    adminOnly: true,
+    items: [
+      { href: '/dashboard/todos', label: 'To-do', icon: CheckSquare, badgeKey: 'todos' },
+      { href: '/projecten', label: 'Projecten', icon: Layers },
+    ],
+  },
 ]
 
-const dashboardItems = [
-  { href: '/dashboard', label: 'Overzicht', icon: LayoutDashboard },
-  { href: '/dashboard/regios', label: "Regio's & Funnel", icon: MapPin },
-  { href: '/dashboard/makelaars', label: 'Consultants', icon: Users },
-  { href: '/dashboard/partners', label: 'Partners', icon: Building2 },
-  { href: '/dashboard/deals', label: 'Sales', icon: Handshake },
-  { href: '/dashboard/afspraken', label: 'Afspraken', icon: CalendarDays },
-  { href: '/dashboard/commissies', label: 'Commissies', icon: CreditCard },
-  { href: '/dashboard/pl', label: 'P&L', icon: TrendingUp },
-  { href: '/dashboard/maandkosten', label: 'Maandkosten', icon: Receipt },
-  { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
-  { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
-  { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
-]
+type OpenSections = Record<string, boolean>
 
-const operationsItems = [
-  { href: '/dashboard/todos', label: 'To-do', icon: CheckSquare },
-  { href: '/projecten', label: 'Projecten', icon: Layers },
-]
+function readOpenSections(): OpenSections {
+  if (typeof window === 'undefined') return { menu: true, fin: true, mkt: true, ops: true }
+  try {
+    const raw = localStorage.getItem('cs_sidebar_sections')
+    if (!raw) return { menu: true, fin: true, mkt: true, ops: true }
+    return JSON.parse(raw) as OpenSections
+  } catch {
+    return { menu: true, fin: true, mkt: true, ops: true }
+  }
+}
+
+function readCollapsed(): boolean {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem('cs_sidebar_collapsed') === '1'
+}
+
+function computeInitials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    if (parts[0]?.length >= 2) return parts[0].slice(0, 2).toUpperCase()
+  }
+  if (email) return email.slice(0, 2).toUpperCase()
+  return '··'
+}
 
 interface SidebarProps {
   isOpen: boolean
@@ -77,56 +148,65 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { role, loading: authLoading, signOut, user, naam } = useAuth()
   const isAdmin = role === 'admin'
-  const [dashboardOpen, setDashboardOpen] = useState(pathname.startsWith('/dashboard'))
-  const [marketingOpen, setMarketingOpen] = useState(pathname.startsWith('/marketing'))
-  const [operationsOpen, setOperationsOpen] = useState(pathname.startsWith('/projecten') || pathname.startsWith('/dashboard/todos'))
-  const [todoCount, setTodoCount] = useState(0)
+  const showAdmin = isAdmin || authLoading
 
+  const [collapsed, setCollapsed] = useState(false)
+  const [openSections, setOpenSections] = useState<OpenSections>({
+    menu: true,
+    fin: true,
+    mkt: true,
+    ops: true,
+  })
+  const [todoCount, setTodoCount] = useState(0)
+  const [mounted, setMounted] = useState(false)
+
+  // Hydrate localStorage on mount
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(readCollapsed())
+    setOpenSections(readOpenSections())
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted) localStorage.setItem('cs_sidebar_collapsed', collapsed ? '1' : '0')
+  }, [collapsed, mounted])
+
+  useEffect(() => {
+    if (mounted) localStorage.setItem('cs_sidebar_sections', JSON.stringify(openSections))
+  }, [openSections, mounted])
+
+  // Todo count polling
   useEffect(() => {
     if (!user) return
     const supabase = createBrowserClient()
-    async function fetchTodoCount() {
+    const fetchCount = async () => {
       const { count } = await supabase
         .from('todos')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'open')
-        .eq('assigned_to', user!.id)
+        .eq('assigned_to', user.id)
       setTodoCount(count ?? 0)
     }
-    fetchTodoCount()
-    // Poll elke 60 seconden voor updates
-    const interval = setInterval(fetchTodoCount, 60000)
+    void fetchCount()
+    const interval = setInterval(() => void fetchCount(), 60000)
     return () => clearInterval(interval)
   }, [user])
 
-  // Show dashboard if admin, or while auth is still loading (prevents flicker)
-  const showDashboard = isAdmin || authLoading
+  const toggleSection = (key: string) =>
+    setOpenSections(s => ({ ...s, [key]: !s[key] }))
 
-  function renderNavItem(item: { href: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> }) {
-    const { href, label, icon: Icon } = item
-    // Exact match, of starts-with + volgend teken is '/' (om /dashboard te matchen tegen /dashboard/x maar niet /dashboard tegen /dashboard/deals als Overzicht ook /dashboard is)
-    const isActive = pathname === href || (href !== '/' && href !== '/dashboard' && pathname.startsWith(href + '/'))
-    return (
-      <Link
-        key={href}
-        href={href}
-        onClick={onClose}
-        className={`flex items-center gap-3 mx-2 px-3 py-[9px] rounded-lg text-[13px] transition-all cursor-pointer ${
-          isActive
-            ? 'font-semibold text-white bg-white/15'
-            : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
-        }`}
-      >
-        <Icon size={16} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
-        <span className="flex-1">{label}</span>
-        {href === '/dashboard/todos' && todoCount > 0 && (
-          <span className="bg-[#FF8761] text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-[7px] leading-none">
-            {todoCount}
-          </span>
-        )}
-      </Link>
-    )
+  const isActive = (href: string): boolean => {
+    if (pathname === href) return true
+    // Special-case: /dashboard should NOT match /dashboard/anything
+    if (href === '/dashboard') return pathname === '/dashboard'
+    return pathname.startsWith(href + '/')
   }
+
+  const visibleSections = SECTIONS.filter(s => !s.adminOnly || showAdmin)
+  const initials = computeInitials(naam, user?.email)
+  const displayName = naam ?? (user?.email?.split('@')[0] ?? 'Gebruiker')
+  const displayEmail = user?.email ?? ''
 
   return (
     <>
@@ -135,116 +215,114 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`w-56 bg-[#004B46] fixed left-0 top-0 bottom-0 z-40 overflow-y-auto flex flex-col transition-transform duration-300
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0`}
+        className={`sidebar ${collapsed ? 'collapsed' : ''} ${isOpen ? 'is-open' : ''}`}
+        aria-label="Hoofdnavigatie"
       >
         {/* Mobile close */}
-        <div className="flex justify-end px-3 pt-3 md:hidden">
-          <button onClick={onClose} className="text-white/40 hover:text-white p-1 cursor-pointer">
-            <X size={18} />
-          </button>
-        </div>
+        <button
+          className="sb-mobile-close"
+          onClick={onClose}
+          aria-label="Sluiten"
+          type="button"
+        >
+          <X size={18} />
+        </button>
 
         {/* Brand */}
-        <div className="px-3 pt-2 pb-1 flex items-center justify-center">
-          <Logo variant="tile-wordmark-deepsea" size={140} className="rounded-xl" />
+        <div className="sb-brand">
+          <div className="sb-brand-inner">
+            <Image
+              src="/brand/beeldmerk-on-deepsea.svg"
+              alt="Costa Select"
+              width={52}
+              height={52}
+              priority
+            />
+          </div>
         </div>
 
-        {/* Platform section */}
-        <div className="px-5 pt-2.5 pb-1">
-          <span className="text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em]">
-            Menu
-          </span>
+        {/* Collapse toggle — desktop only */}
+        <button
+          className="sb-collapse-float"
+          onClick={() => setCollapsed(v => !v)}
+          title={collapsed ? 'Uitklappen' : 'Inklappen'}
+          aria-label={collapsed ? 'Uitklappen' : 'Inklappen'}
+          type="button"
+        >
+          {collapsed ? <ChevronRight /> : <ChevronLeft />}
+        </button>
+
+        {/* Scroll region */}
+        <div className="sb-scroll">
+          {visibleSections.map((section, idx) => {
+            const open = openSections[section.key] ?? true
+            return (
+              <div key={section.key} className="sb-section">
+                {!collapsed ? (
+                  <button
+                    className={`sb-sect-label ${open ? 'open' : ''}`}
+                    onClick={() => toggleSection(section.key)}
+                    aria-expanded={open}
+                    type="button"
+                  >
+                    <span className="sb-sect-text">{section.label}</span>
+                    <span className="sb-sect-count">{section.items.length}</span>
+                    <span className="sb-sect-chev">
+                      <ChevronDown />
+                    </span>
+                  </button>
+                ) : (
+                  idx > 0 && <div className="sb-divider" />
+                )}
+                {(collapsed || open) && (
+                  <nav className="sb-nav" aria-label={section.label}>
+                    {section.items.map(item => {
+                      const active = isActive(item.href)
+                      const Icon = item.icon
+                      const badge =
+                        item.badgeKey === 'todos' && todoCount > 0 ? todoCount : null
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={active ? 'active' : ''}
+                          title={collapsed ? item.label : undefined}
+                          aria-current={active ? 'page' : undefined}
+                          onClick={onClose}
+                        >
+                          <span className="sb-nav-icon">
+                            <Icon />
+                          </span>
+                          <span className="sb-nav-label">{item.label}</span>
+                          {badge != null && <span className="sb-nav-badge">{badge}</span>}
+                          {active && <span className="sb-nav-dot" aria-hidden="true" />}
+                        </Link>
+                      )
+                    })}
+                  </nav>
+                )}
+              </div>
+            )
+          })}
         </div>
-        <nav className="space-y-0.5">
-          {platformItems.map(renderNavItem)}
-        </nav>
 
-        {/* Dashboard section — admin only */}
-        {showDashboard && (
-          <>
-            <div className="px-4 pt-6 pb-1">
-              <button
-                onClick={() => setDashboardOpen(!dashboardOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
-              >
-                <span>Financieel</span>
-                {dashboardOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              </button>
-            </div>
-            {dashboardOpen && (
-              <nav className="space-y-0.5">
-                {dashboardItems.map(renderNavItem)}
-              </nav>
-            )}
-          </>
-        )}
-
-        {/* Marketing section — admin only */}
-        {showDashboard && (
-          <>
-            <div className="px-4 pt-6 pb-1">
-              <button
-                onClick={() => setMarketingOpen(!marketingOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
-              >
-                <span>Marketing</span>
-                {marketingOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              </button>
-            </div>
-            {marketingOpen && (
-              <nav className="space-y-0.5">
-                {[
-                  { href: '/marketing/social-media', label: 'Social Media', icon: MessageSquare },
-                  { href: '/marketing/advertenties', label: 'Advertenties', icon: Zap },
-                  { href: '/marketing/website-blog', label: 'Website & Blog', icon: FileText },
-                  { href: '/marketing/email', label: 'Email', icon: Receipt },
-                  { href: '/marketing/video', label: 'Video', icon: GraduationCap },
-                  { href: '/marketing/brochures', label: 'Brochures', icon: BookOpen },
-                  { href: '/marketing/bibliotheek', label: 'Bibliotheek', icon: ClipboardList },
-                ].map(renderNavItem)}
-              </nav>
-            )}
-          </>
-        )}
-
-        {/* Operations section — admin only */}
-        {showDashboard && (
-          <>
-            <div className="px-4 pt-6 pb-1">
-              <button
-                onClick={() => setOperationsOpen(!operationsOpen)}
-                className="flex items-center justify-between w-full text-[10px] font-semibold text-white/40 uppercase tracking-[0.18em] cursor-pointer hover:text-white/60 transition-colors"
-              >
-                <span>Operations</span>
-                {operationsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              </button>
-            </div>
-            {operationsOpen && (
-              <nav className="space-y-0.5">
-                {operationsItems.map(renderNavItem)}
-              </nav>
-            )}
-          </>
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Footer */}
-        <div className="px-5 py-3.5 border-t border-white/10">
-          {user && (
-            <div className="text-[11px] text-white/[0.45] mb-2 truncate">
-              {naam ?? user.email}
-            </div>
-          )}
+        {/* User block */}
+        <div className="sb-user">
+          <div className="sb-user-avatar" aria-hidden="true">
+            {initials}
+          </div>
+          <div className="sb-user-main">
+            <div className="sb-user-name">{displayName}</div>
+            {displayEmail && <div className="sb-user-mail">{displayEmail}</div>}
+          </div>
           <button
+            className="sb-user-logout"
             onClick={signOut}
-            className="flex items-center gap-2 text-[12px] text-white/[0.45] hover:text-white/80 transition-colors cursor-pointer"
+            title="Uitloggen"
+            aria-label="Uitloggen"
+            type="button"
           >
-            <LogOut size={13} strokeWidth={1.5} />
-            <span>Uitloggen</span>
+            <LogOut />
           </button>
         </div>
       </aside>
