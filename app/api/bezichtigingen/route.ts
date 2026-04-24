@@ -5,7 +5,7 @@ import { createUserClient } from '../../../lib/supabase/user-client'
 import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 import { getUserRole } from '../../../lib/auth/roles'
 
-const TRIP_COLUMNS = 'id, client_name, client_email, client_phone, trip_date, start_time, start_address, lunch_time, lunch_duration_minutes, notes, created_by, created_at'
+const TRIP_COLUMNS = 'id, client_name, client_email, client_phone, trip_date, start_time, start_address, lunch_time, lunch_duration_minutes, notes, status, created_by, created_at'
 
 // GET: alle trips ophalen
 // RLS `owner_or_admin` policy filtert automatisch: admin ziet alles,

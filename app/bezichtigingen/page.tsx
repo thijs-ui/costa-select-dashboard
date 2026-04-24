@@ -317,8 +317,8 @@ function TripRow({
 }
 
 // ───────── Status badge ─────────
-export function StatusBadge({ status }: { status: 'concept' | 'gepland' | 'afgerond' }) {
-  const styles = {
+export function StatusBadge({ status }: { status: 'concept' | 'gepland' | 'afgerond' | null | undefined }) {
+  const palette = {
     concept: {
       bg: '#f5f0e4',
       color: '#70593a',
@@ -337,7 +337,9 @@ export function StatusBadge({ status }: { status: 'concept' | 'gepland' | 'afger
       border: 'rgba(16,185,129,0.3)',
       dot: '#10b981',
     },
-  }[status]
+  } as const
+  const key = (status && status in palette ? status : 'concept') as keyof typeof palette
+  const styles = palette[key]
 
   return (
     <span
@@ -357,7 +359,7 @@ export function StatusBadge({ status }: { status: 'concept' | 'gepland' | 'afger
         className="inline-block"
         style={{ width: 6, height: 6, borderRadius: 999, background: styles.dot }}
       />
-      {status}
+      {key}
     </span>
   )
 }
