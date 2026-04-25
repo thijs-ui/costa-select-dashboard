@@ -1069,7 +1069,7 @@ function ModePicker({ mode, onChange }: { mode: ModeId; onChange: (m: ModeId) =>
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}
+      style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}
     >
       {CALC_MODES.map(m => {
         const Icon = m.icon
