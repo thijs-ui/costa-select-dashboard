@@ -1,36 +1,24 @@
-// ============================================================================
-// DROP-IN for: app/dashboard/deals/page.tsx
-//
-// Restyle van bestaande Deals-pagina met:
-//   - KPI-rij (4 tegels, hergebruikt components/kpi-card.tsx)
-//   - DateFilter, Skeleton, PageLayout patterns hergebruikt
-//   - Sticky commissie preview onderaan form (position: sticky; bottom: 0)
-//   - Consultant + regio filters boven de tabel (lichtgewicht)
-//   - Alle brand-tokens: deepsea / sun / marble / sea / sky — geen slate/amber/blue
-//
-// Berekenlogica: 1:1 ongewijzigd via berekenCommissie() uit lib/calculations.ts
-// Data-layer: bestaande supabase.from('deals'|'makelaars'|'settings') blijft
-// Routes: /dashboard/deals — dit vervangt 1:1 het bestand op dat pad
-// ============================================================================
 'use client'
 
-import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { berekenCommissie, formatEuro, formatPct } from '@/lib/calculations'
-import { DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
-import DateFilter from '@/components/date-filter'
-import KpiCard from '@/components/kpi-card'
-import { PageLayout } from '@/components/page-layout'
-import { Skeleton } from '@/components/skeleton'
-import DealsForm, { emptyForm, OVERDRACHT_SCENARIOS, FormState } from '@/components/deals-form'
+import { berekenCommissie, formatEuro } from '@/lib/calculations'
+import { type DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
+import {
+  FinHeader,
+  FinKpi,
+  FinKpiGrid,
+  FinPeriodPicker,
+  FinSection,
+} from '@/components/financieel/parts'
+import DealsForm, { emptyForm, type FormState } from '@/components/deals-form'
 import DealsTable from '@/components/deals-table'
-import type { Deal, Makelaar, AppSettings } from '@/components/deals-types'
+import type { AppSettings, Deal, Makelaar } from '@/components/deals-types'
 
-// ----------------------------------------------------------------------------
 export default function DealsPageWrapper() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="fin-loading">Laden…</div>}>
       <DealsPage />
     </Suspense>
   )
@@ -57,7 +45,9 @@ function DealsPage() {
   const [search, setSearch] = useState<string>('')
   const formRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    void loadAll()
+  }, [])
 
   useEffect(() => {
     const editId = searchParams.get('edit')
@@ -70,14 +60,19 @@ function DealsPage() {
   async function loadAll() {
     const [dealsRes, makelaarRes, settingsRes] = await Promise.all([
       supabase.from('deals').select('*').order('datum_passering', { ascending: false }),
-      supabase.from('makelaars').select('id, naam, rol, area_manager_id').eq('actief', true),
+      supabase
+        .from('makelaars')
+        .select('id, naam, rol, area_manager_id')
+        .eq('actief', true),
       supabase.from('settings').select('key, value'),
     ])
     setDeals((dealsRes.data ?? []) as Deal[])
     setMakelaars((makelaarRes.data ?? []) as Makelaar[])
     if (settingsRes.data) {
       const map: Record<string, unknown> = {}
-      ;(settingsRes.data as { key: string; value: unknown }[]).forEach((r) => { map[r.key] = r.value })
+      ;(settingsRes.data as { key: string; value: unknown }[]).forEach(r => {
+        map[r.key] = r.value
+      })
       setAppSettings({
         minimum_fee: Number(map.minimum_fee) || 6000,
         commissie_per_type: (map.commissie_per_type as Record<string, number>) || {},
@@ -124,7 +119,10 @@ function DealsPage() {
     if (!form.datum_passering || !form.regio || !form.type_deal || !form.bron || !form.aankoopprijs) return
     setSaving(true)
     const calc = bereken()
-    if (!calc) { setSaving(false); return }
+    if (!calc) {
+      setSaving(false)
+      return
+    }
 
     const areaManager = getAreaManager()
 
@@ -174,7 +172,7 @@ function DealsPage() {
   async function deleteDeal(id: string) {
     if (!confirm('Deal verwijderen?')) return
     await supabase.from('deals').delete().eq('id', id)
-    setDeals(deals.filter((d) => d.id !== id))
+    setDeals(deals.filter(d => d.id !== id))
   }
 
   function startEdit(deal: Deal) {
@@ -209,105 +207,122 @@ function DealsPage() {
     setForm(emptyForm)
   }
 
-  // --------------------------------------------------------------------------
   const preview = bereken()
   const areaManager = getAreaManager()
-  const range = getDateRange(datePreset)
-  const filteredDeals = useMemo(() => {
-    return deals
-      .filter((d) => isInRange(d.datum_passering, range))
-      .filter((d) => !filterConsultant || d.makelaar_id === filterConsultant || d.makelaar2_id === filterConsultant)
-      .filter((d) => !filterRegio || d.regio === filterRegio)
-      .filter((d) => !search || (d.notities ?? '').toLowerCase().includes(search.toLowerCase()) || (d.partner_naam ?? '').toLowerCase().includes(search.toLowerCase()))
-  }, [deals, range, filterConsultant, filterRegio, search])
+  const range = useMemo(() => getDateRange(datePreset), [datePreset])
 
-  // KPI aggregates over gefilterde periode
+  const filteredDeals = useMemo(
+    () =>
+      deals
+        .filter(d => isInRange(d.datum_passering, range))
+        .filter(
+          d =>
+            !filterConsultant ||
+            d.makelaar_id === filterConsultant ||
+            d.makelaar2_id === filterConsultant
+        )
+        .filter(d => !filterRegio || d.regio === filterRegio)
+        .filter(
+          d =>
+            !search ||
+            (d.notities ?? '').toLowerCase().includes(search.toLowerCase()) ||
+            (d.partner_naam ?? '').toLowerCase().includes(search.toLowerCase())
+        ),
+    [deals, range, filterConsultant, filterRegio, search]
+  )
+
   const kpis = useMemo(() => {
     const totaalDeals = filteredDeals.length
     const bruto = filteredDeals.reduce((a, d) => a + (d.bruto_commissie ?? 0), 0)
     const netto = filteredDeals.reduce((a, d) => a + (d.netto_commissie_cs ?? 0), 0)
-    const gemAankoop = filteredDeals.length > 0
-      ? filteredDeals.reduce((a, d) => a + d.aankoopprijs, 0) / filteredDeals.length
-      : 0
-    return { totaalDeals, bruto, netto, gemAankoop }
+    const aankoop = filteredDeals.reduce((a, d) => a + d.aankoopprijs, 0)
+    const gemAankoop = filteredDeals.length > 0 ? aankoop / filteredDeals.length : 0
+    return { totaalDeals, bruto, netto, gemAankoop, aankoop }
   }, [filteredDeals])
 
-  if (loading) {
-    return (
-      <PageLayout title="Sales">
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[88px] rounded-[10px]" />)}
-        </div>
-        <Skeleton className="h-[420px] rounded-[12px] mb-6" />
-        <Skeleton className="h-[280px] rounded-[12px]" />
-      </PageLayout>
-    )
-  }
-
   return (
-    <PageLayout title="Sales">
-      {/* Topbar: DateFilter rechts uitgelijnd */}
-      <div className="flex items-center justify-end -mt-12 mb-6">
-        <DateFilter value={datePreset} onChange={setDatePreset} />
-      </div>
+    <div className="fin-page">
+      <div className="fin-shell">
+        <FinHeader
+          title="Sales"
+          subtitle="Volledige deal-administratie — commissies, partners, area-manager-kpi."
+        >
+          <FinPeriodPicker value={datePreset} onChange={setDatePreset} />
+        </FinHeader>
 
-      {/* KPI-rij */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <KpiCard
-          label="Totaal deals"
-          value={kpis.totaalDeals}
-          sub={range.label}
-        />
-        <KpiCard
-          label="Bruto commissie"
-          value={formatEuro(kpis.bruto)}
-          sub={kpis.totaalDeals > 0 ? `gem. ${formatEuro(kpis.bruto / kpis.totaalDeals)} / deal` : '—'}
-        />
-        <KpiCard
-          label="Netto omzet CS"
-          value={formatEuro(kpis.netto)}
-          sub="na makelaars + partners"
-          color="green"
-        />
-        <KpiCard
-          label="Gem. aankoopprijs"
-          value={formatEuro(kpis.gemAankoop)}
-          sub={`${kpis.totaalDeals} deal${kpis.totaalDeals === 1 ? '' : 's'}`}
-        />
-      </div>
+        {loading ? (
+          <div className="fin-loading">Laden…</div>
+        ) : (
+          <>
+            <FinKpiGrid>
+              <FinKpi
+                label="Totaal sales"
+                value={kpis.totaalDeals}
+                sub={range.label}
+                tone="accent"
+              />
+              <FinKpi
+                label="Bruto commissie"
+                value={formatEuro(kpis.bruto)}
+                sub={
+                  kpis.totaalDeals > 0
+                    ? `gem. ${formatEuro(kpis.bruto / kpis.totaalDeals)} / sale`
+                    : '—'
+                }
+              />
+              <FinKpi
+                label="Netto omzet CS"
+                value={formatEuro(kpis.netto)}
+                sub="na consultant + partner"
+                tone="positive"
+              />
+              <FinKpi
+                label="Aankoopwaarde"
+                value={formatEuro(kpis.aankoop)}
+                sub={`gem. ${formatEuro(kpis.gemAankoop)} / sale`}
+              />
+            </FinKpiGrid>
 
-      {/* Form + sticky preview */}
-      <div ref={formRef}>
-        <DealsForm
-          form={form}
-          setForm={setForm}
-          editingDealId={editingDealId}
-          onCancel={cancelEdit}
-          onSave={saveDeal}
-          saving={saving}
-          makelaars={makelaars}
-          appSettings={appSettings}
-          areaManager={areaManager}
-          preview={preview}
-        />
-      </div>
+            <FinSection
+              title={editingDealId ? 'Sale bewerken' : 'Nieuwe sale toevoegen'}
+              meta={editingDealId ? `#${editingDealId.slice(-4)}` : 'commissie wordt automatisch berekend'}
+            >
+              <div ref={formRef}>
+                <DealsForm
+                  form={form}
+                  setForm={setForm}
+                  editingDealId={editingDealId}
+                  onCancel={cancelEdit}
+                  onSave={saveDeal}
+                  saving={saving}
+                  makelaars={makelaars}
+                  appSettings={appSettings}
+                  areaManager={areaManager}
+                  preview={preview}
+                />
+              </div>
+            </FinSection>
 
-      {/* Tabel */}
-      <DealsTable
-        deals={filteredDeals}
-        makelaars={makelaars}
-        editingDealId={editingDealId}
-        onEdit={startEdit}
-        onDelete={deleteDeal}
-        range={range}
-        filterConsultant={filterConsultant}
-        setFilterConsultant={setFilterConsultant}
-        filterRegio={filterRegio}
-        setFilterRegio={setFilterRegio}
-        search={search}
-        setSearch={setSearch}
-        regios={appSettings.regios}
-      />
-    </PageLayout>
+            <DealsTable
+              deals={filteredDeals}
+              makelaars={makelaars}
+              editingDealId={editingDealId}
+              onEdit={startEdit}
+              onDelete={deleteDeal}
+              range={range}
+              filterConsultant={filterConsultant}
+              setFilterConsultant={setFilterConsultant}
+              filterRegio={filterRegio}
+              setFilterRegio={setFilterRegio}
+              search={search}
+              setSearch={setSearch}
+              regios={appSettings.regios}
+            />
+
+            <div style={{ height: 60 }} />
+          </>
+        )}
+      </div>
+    </div>
   )
 }

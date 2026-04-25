@@ -3175,6 +3175,91 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
   .fin-bonus-form { grid-template-columns: 1fr; }
 }
 
+/* Deals table chrome (filter-bar + header) */
+.fin-deals-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.fin-deals-title {
+  font-family: var(--font-heading); font-weight: 700; font-size: 16px;
+  color: var(--deepsea); letter-spacing: -0.005em; margin: 0;
+}
+.fin-deals-count {
+  display: inline-block;
+  margin-left: 8px;
+  font-family: var(--font-body); font-size: 11px; font-weight: 700;
+  color: var(--fg-muted);
+  background: var(--deepsea-lighter);
+  padding: 1px 8px; border-radius: 999px;
+}
+.fin-deals-period {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--fg-subtle);
+}
+.fin-deals-filters {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--marble);
+  border-bottom: 1px solid var(--border);
+}
+.fin-deals-filter-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+.fin-deals-search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: white;
+  border: 1px solid var(--border); border-radius: 9px;
+  margin-left: auto;
+  min-width: 200px;
+}
+.fin-deals-search svg { color: var(--fg-subtle); }
+.fin-deals-search input {
+  flex: 1; border: none; outline: none;
+  background: transparent;
+  font-family: var(--font-body); font-size: 12.5px;
+  color: var(--fg);
+}
+.fin-deals-search input::placeholder { color: var(--fg-subtle); }
+
+/* Soft pill (regio in deals-tabel) */
+.fin-pill-soft {
+  display: inline-flex; align-items: center;
+  padding: 2px 9px; border-radius: 7px;
+  background: var(--deepsea-lighter); color: var(--deepsea);
+  font-size: 11px; font-weight: 600;
+}
+
+/* Pill mini (EN/OD/PD-tags in deals-tabel) */
+.fin-pill-mini {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px; border-radius: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+}
+.fin-pill-mini.en { background: rgba(212,146,26,0.18); color: var(--sun-dark); }
+.fin-pill-mini.od { background: rgba(0,75,70,0.10); color: var(--deepsea); }
+.fin-pill-mini.pd { background: var(--deepsea-lighter); color: var(--deepsea); }
+
+/* Row hover als 'in editing' */
+.fin-table tr.fin-row-editing { background: var(--sun-subtle); }
+.fin-table tr.fin-row-editing:hover { background: var(--sun-subtle); }
+
+/* Row action-buttons in tabel */
+.fin-row-action {
+  background: transparent; border: none; padding: 5px;
+  border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--fg-subtle);
+  transition: background .12s, color .12s;
+}
+.fin-row-action:hover { background: var(--sun-subtle); color: var(--sun-dark); }
+.fin-row-action.editing { color: var(--sun-dark); background: var(--sun-subtle); }
+.fin-row-action.danger:hover { background: rgba(194,64,64,0.13); color: var(--negative-text); }
+
 /* Avatar (consultants tabel) */
 .fin-avatar {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3233,6 +3318,101 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
 .fin-loading {
   padding: 60px 0; text-align: center;
   color: var(--fg-subtle); font-size: 13px;
+}
+
+/* Modal */
+.fin-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(7,42,36,0.42);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 24px;
+  animation: finFadeIn .18s ease-out;
+}
+@keyframes finFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fin-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%; max-width: 560px;
+  max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(7,42,36,0.32);
+  overflow: hidden;
+  animation: finModalIn .22s cubic-bezier(.4,0,.2,1);
+  font-family: var(--font-body);
+  color: var(--fg);
+}
+.fin-modal.lg { max-width: 760px; }
+@keyframes finModalIn {
+  from { opacity: 0; transform: translateY(12px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+.fin-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--marble);
+}
+.fin-modal-title {
+  font-family: var(--font-heading); font-weight: 700; font-size: 18px;
+  color: var(--deepsea); letter-spacing: -0.005em; margin: 0;
+}
+.fin-modal-close {
+  background: transparent; border: none;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: pointer;
+  color: var(--fg-muted);
+  transition: background .12s, color .12s;
+}
+.fin-modal-close:hover { background: var(--deepsea-lighter); color: var(--deepsea); }
+.fin-modal-body {
+  padding: 20px 22px;
+  overflow-y: auto; flex: 1;
+}
+.fin-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--marble);
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+
+/* Form-stijl helpers (binnen modal of section) */
+.fin-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+.fin-form-grid .full { grid-column: 1 / -1; }
+.fin-field {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.fin-field label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+.fin-input,
+.fin-select,
+.fin-textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: white;
+  font-family: var(--font-body); font-size: 13px;
+  color: var(--fg);
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fin-input:focus,
+.fin-select:focus,
+.fin-textarea:focus {
+  border-color: var(--deepsea);
+  box-shadow: 0 0 0 3px rgba(0,75,70,0.10);
+}
+.fin-textarea { resize: vertical; min-height: 80px; }
+@media (max-width: 720px) {
+  .fin-form-grid { grid-template-columns: 1fr; }
 }
 
 /* Responsive */

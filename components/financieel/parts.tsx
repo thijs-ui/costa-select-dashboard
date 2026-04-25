@@ -1,7 +1,7 @@
 'use client'
 
-import { ArrowDownRight, ArrowUpRight, Download, type LucideIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ArrowDownRight, ArrowUpRight, Download, X, type LucideIcon } from 'lucide-react'
+import { useEffect, type ReactNode } from 'react'
 import { DATE_PRESETS, type DatePreset } from '@/lib/date-utils'
 import { ENTITY_LABELS, type Entity } from '@/lib/entity'
 
@@ -454,4 +454,58 @@ export function FinCountChip({
   tone?: 'deepsea' | 'sun' | 'positive' | 'mid'
 }) {
   return <span className={`fin-count-chip ${tone}`}>{value}</span>
+}
+
+/* ── Modal (voor edit/add forms) ───────────────────────── */
+export function FinModal({
+  open,
+  onClose,
+  title,
+  size = 'md',
+  footer,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  size?: 'md' | 'lg'
+  footer?: ReactNode
+  children: ReactNode
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div className="fin-modal-overlay" onClick={onClose}>
+      <div
+        className={`fin-modal ${size === 'lg' ? 'lg' : ''}`}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className="fin-modal-head">
+          <h2 className="fin-modal-title">{title}</h2>
+          <button
+            type="button"
+            className="fin-modal-close"
+            onClick={onClose}
+            aria-label="Sluiten"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="fin-modal-body">{children}</div>
+        {footer && <div className="fin-modal-footer">{footer}</div>}
+      </div>
+    </div>
+  )
 }
