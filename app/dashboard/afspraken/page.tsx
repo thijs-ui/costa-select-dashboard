@@ -1,13 +1,20 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatEuro } from '@/lib/calculations'
-import DateFilter from '@/components/date-filter'
-import { DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
-import { useEntity, matchesEntity } from '@/lib/entity'
-import EntitySwitch from '@/components/entity-switch'
-import { Pencil, Trash2 } from 'lucide-react'
+import { type DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
+import { matchesEntiteit, matchesEntity, useEntity } from '@/lib/entity'
+import {
+  FinEntitySwitch,
+  FinHeader,
+  FinKpi,
+  FinKpiGrid,
+  FinPctBadge,
+  FinPeriodPicker,
+  FinSection,
+} from '@/components/financieel/parts'
 
 interface Makelaar { id: string; naam: string }
 interface Partner { id: string; naam: string }
@@ -24,25 +31,14 @@ interface Afspraak {
   notities: string | null
   pipedrive_activiteit_id: number | null
 }
-
 interface AdPost {
   bedrag: number
   entiteit: string | null
   kosten_posten: { naam: string } | null
 }
 
-const statusColors: Record<string, string> = {
-  Gepland: 'bg-blue-100 text-blue-700',
-  Uitgevoerd: 'bg-green-100 text-green-700',
-  'No-show': 'bg-red-100 text-red-600',
-  Geannuleerd: 'bg-slate-100 text-slate-500',
-}
-const resultaatColors: Record<string, string> = {
-  Interesse: 'bg-amber-100 text-amber-700',
-  'Bod gedaan': 'bg-purple-100 text-purple-700',
-  'Deal gewonnen': 'bg-green-100 text-green-700',
-  Afgewezen: 'bg-red-100 text-red-600',
-}
+const STATUSES = ['Gepland', 'Uitgevoerd', 'No-show', 'Geannuleerd'] as const
+const RESULTATEN = ['Interesse', 'Bod gedaan', 'Deal gewonnen', 'Afgewezen'] as const
 
 const emptyForm = {
   datum: new Date().toISOString().split('T')[0],
@@ -61,6 +57,8 @@ const AD_POSTEN = ['Google Ads', 'Meta Ads (Facebook/Instagram)', 'LinkedIn Ads'
 
 export default function AfsprakenPage() {
   const { entity, setEntity } = useEntity()
+  const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
+
   const [afspraken, setAfspraken] = useState<Afspraak[]>([])
   const [makelaars, setMakelaars] = useState<Makelaar[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
@@ -69,44 +67,57 @@ export default function AfsprakenPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
   const [settings, setSettings] = useState({
     regios: ['CBN', 'CBZ', 'CDS', 'CD', 'CB', 'Valencia'],
-    bronnen: ['Website CS', 'Website CSV', 'Google Ads', 'Meta Ads', 'LinkedIn Ads', 'Referentie van partner', 'Referentie'],
+    bronnen: [
+      'Website CS',
+      'Website CSV',
+      'Google Ads',
+      'Meta Ads',
+      'LinkedIn Ads',
+      'Referentie van partner',
+      'Referentie',
+    ],
     afspraak_types: ['Bezichtiging', 'Kennismaking', 'Follow-up', 'Notaris'],
   })
   const formRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadAll() }, [])
-
-  async function loadAll() {
-    const [aRes, mRes, sRes, kRes, pRes] = await Promise.all([
-      supabase.from('afspraken').select('*').order('datum', { ascending: false }),
-      supabase.from('makelaars').select('id, naam').eq('actief', true),
-      supabase.from('settings').select('key, value'),
-      supabase.from('maandkosten')
-        .select('bedrag, entiteit, kosten_posten(naam)')
-        .eq('jaar', new Date().getFullYear()),
-      supabase.from('partners').select('id, naam').eq('actief', true).order('naam'),
-    ])
-
-    setAfspraken((aRes.data ?? []) as Afspraak[])
-    setMakelaars((mRes.data ?? []) as Makelaar[])
-    setPartners((pRes.data ?? []) as Partner[])
-    setAllAdPosten((kRes.data ?? []) as unknown as AdPost[])
-
-    if (sRes.data) {
-      const map: Record<string, unknown> = {}
-      ;(sRes.data as { key: string; value: unknown }[]).forEach((r) => { map[r.key] = r.value })
-      setSettings({
-        regios: (map.regios as string[]) || settings.regios,
-        bronnen: (map.bronnen as string[]) || settings.bronnen,
-        afspraak_types: (map.afspraak_types as string[]) || settings.afspraak_types,
-      })
+  useEffect(() => {
+    let cancelled = false
+    async function run() {
+      const [aRes, mRes, sRes, kRes, pRes] = await Promise.all([
+        supabase.from('afspraken').select('*').order('datum', { ascending: false }),
+        supabase.from('makelaars').select('id, naam').eq('actief', true),
+        supabase.from('settings').select('key, value'),
+        supabase
+          .from('maandkosten')
+          .select('bedrag, entiteit, kosten_posten(naam)')
+          .eq('jaar', new Date().getFullYear()),
+        supabase.from('partners').select('id, naam').eq('actief', true).order('naam'),
+      ])
+      if (cancelled) return
+      setAfspraken((aRes.data ?? []) as Afspraak[])
+      setMakelaars((mRes.data ?? []) as Makelaar[])
+      setPartners((pRes.data ?? []) as Partner[])
+      setAllAdPosten((kRes.data ?? []) as unknown as AdPost[])
+      if (sRes.data) {
+        const map: Record<string, unknown> = {}
+        ;(sRes.data as { key: string; value: unknown }[]).forEach(r => {
+          map[r.key] = r.value
+        })
+        setSettings(prev => ({
+          regios: (map.regios as string[]) ?? prev.regios,
+          bronnen: (map.bronnen as string[]) ?? prev.bronnen,
+          afspraak_types: (map.afspraak_types as string[]) ?? prev.afspraak_types,
+        }))
+      }
+      setLoading(false)
     }
-
-    setLoading(false)
-  }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function startEdit(a: Afspraak) {
     setEditingId(a.id)
@@ -139,7 +150,7 @@ export default function AfsprakenPage() {
       bron: form.bron || null,
       regio: form.regio || null,
       makelaar_id: form.makelaar_id || null,
-      partner_id: form.bron === 'Referentie van partner' ? (form.partner_id || null) : null,
+      partner_id: form.bron === 'Referentie van partner' ? form.partner_id || null : null,
       type: form.type,
       status: form.status,
       resultaat: form.resultaat || null,
@@ -147,7 +158,9 @@ export default function AfsprakenPage() {
     }
     if (editingId) {
       await supabase.from('afspraken').update(payload).eq('id', editingId)
-      setAfspraken((prev) => prev.map((a) => a.id === editingId ? { ...a, ...payload } as Afspraak : a))
+      setAfspraken(prev =>
+        prev.map(a => (a.id === editingId ? ({ ...a, ...payload } as Afspraak) : a))
+      )
       setEditingId(null)
     } else {
       const { data } = await supabase.from('afspraken').insert(payload).select().single()
@@ -159,320 +172,494 @@ export default function AfsprakenPage() {
 
   async function updateStatus(id: string, status: string) {
     await supabase.from('afspraken').update({ status }).eq('id', id)
-    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, status } : a))
+    setAfspraken(prev => prev.map(a => (a.id === id ? { ...a, status } : a)))
   }
 
   async function updateResultaat(id: string, resultaat: string) {
     await supabase.from('afspraken').update({ resultaat: resultaat || null }).eq('id', id)
-    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, resultaat: resultaat || null } : a))
+    setAfspraken(prev =>
+      prev.map(a => (a.id === id ? { ...a, resultaat: resultaat || null } : a))
+    )
   }
 
   async function deleteAfspraak(id: string, naam: string) {
     if (!confirm(`Afspraak met ${naam} verwijderen?`)) return
     await supabase.from('afspraken').delete().eq('id', id)
-    setAfspraken((prev) => prev.filter((a) => a.id !== id))
+    setAfspraken(prev => prev.filter(a => a.id !== id))
   }
 
-  if (loading) return <div className="text-slate-400 text-sm p-8">Laden...</div>
+  const range = useMemo(() => getDateRange(datePreset), [datePreset])
 
-  const range = getDateRange(datePreset)
-  const gefilterd = afspraken
-    .filter((a) => matchesEntity(a.regio, entity))
-    .filter((a) => isInRange(a.datum, range))
+  const gefilterd = useMemo(
+    () =>
+      afspraken
+        .filter(a => matchesEntity(a.regio, entity))
+        .filter(a => isInRange(a.datum, range)),
+    [afspraken, entity, range]
+  )
 
-  // Ad spend voor huidige entiteit
-  const totaalAdSpend = allAdPosten
-    .filter((k) => (k.entiteit ?? 'overig') === entity)
-    .filter((k) => k.kosten_posten?.naam && AD_POSTEN.includes(k.kosten_posten.naam))
-    .reduce((s, k) => s + Number(k.bedrag), 0)
+  const totaalAdSpend = useMemo(
+    () =>
+      allAdPosten
+        .filter(k => matchesEntiteit(k.entiteit, entity))
+        .filter(k => k.kosten_posten?.naam && AD_POSTEN.includes(k.kosten_posten.naam))
+        .reduce((s, k) => s + Number(k.bedrag), 0),
+    [allAdPosten, entity]
+  )
 
-  // Analytics berekeningen
-  const uitgevoerd = gefilterd.filter((a) => a.status === 'Uitgevoerd')
-  const deals = gefilterd.filter((a) => a.resultaat === 'Deal gewonnen')
+  const uitgevoerd = gefilterd.filter(a => a.status === 'Uitgevoerd')
+  const deals = gefilterd.filter(a => a.resultaat === 'Deal gewonnen')
   const kostenPerAfspraak = uitgevoerd.length > 0 ? totaalAdSpend / uitgevoerd.length : 0
   const kostenPerDeal = deals.length > 0 ? totaalAdSpend / deals.length : 0
 
-  // Per bron analytics
-  const bronStats = settings.bronnen.map((bron) => {
-    const bronAfspraken = gefilterd.filter((a) => a.bron === bron)
-    const bronUitgevoerd = bronAfspraken.filter((a) => a.status === 'Uitgevoerd')
-    const bronDeals = bronAfspraken.filter((a) => a.resultaat === 'Deal gewonnen')
-    return {
-      bron,
-      afspraken: bronAfspraken.length,
-      uitgevoerd: bronUitgevoerd.length,
-      deals: bronDeals.length,
-      conversie: bronUitgevoerd.length > 0 ? ((bronDeals.length / bronUitgevoerd.length) * 100).toFixed(0) + '%' : '—',
-    }
-  }).filter((b) => b.afspraken > 0)
+  const bronStats = useMemo(
+    () =>
+      settings.bronnen
+        .map(bron => {
+          const bronAfspraken = gefilterd.filter(a => a.bron === bron)
+          const bronUitgevoerd = bronAfspraken.filter(a => a.status === 'Uitgevoerd')
+          const bronDeals = bronAfspraken.filter(a => a.resultaat === 'Deal gewonnen')
+          const conversie =
+            bronUitgevoerd.length > 0
+              ? Math.round((bronDeals.length / bronUitgevoerd.length) * 100)
+              : null
+          return {
+            bron,
+            afspraken: bronAfspraken.length,
+            uitgevoerd: bronUitgevoerd.length,
+            deals: bronDeals.length,
+            conversie,
+          }
+        })
+        .filter(b => b.afspraken > 0),
+    [gefilterd, settings.bronnen]
+  )
 
-  // Per makelaar analytics
-  const makelaarStats = makelaars.map((m) => {
-    const mAfspraken = gefilterd.filter((a) => a.makelaar_id === m.id)
-    const mUitgevoerd = mAfspraken.filter((a) => a.status === 'Uitgevoerd')
-    const mDeals = mAfspraken.filter((a) => a.resultaat === 'Deal gewonnen')
-    return {
-      naam: m.naam,
-      afspraken: mAfspraken.length,
-      deals: mDeals.length,
-      closePct: mUitgevoerd.length > 0 ? ((mDeals.length / mUitgevoerd.length) * 100).toFixed(0) + '%' : '—',
-    }
-  }).filter((m) => m.afspraken > 0)
+  const makelaarStats = useMemo(
+    () =>
+      makelaars
+        .map(m => {
+          const mAfspraken = gefilterd.filter(a => a.makelaar_id === m.id)
+          const mUitgevoerd = mAfspraken.filter(a => a.status === 'Uitgevoerd')
+          const mDeals = mAfspraken.filter(a => a.resultaat === 'Deal gewonnen')
+          const closePct =
+            mUitgevoerd.length > 0
+              ? Math.round((mDeals.length / mUitgevoerd.length) * 100)
+              : null
+          return {
+            naam: m.naam,
+            afspraken: mAfspraken.length,
+            deals: mDeals.length,
+            closePct,
+          }
+        })
+        .filter(m => m.afspraken > 0),
+    [makelaars, gefilterd]
+  )
 
   return (
-    <div className="px-8 py-8 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <h1 className="text-xl font-semibold text-slate-900">Afspraken</h1>
-        <div className="flex items-center gap-3 flex-wrap">
-          <EntitySwitch value={entity} onChange={setEntity} />
-          <DateFilter value={datePreset} onChange={setDatePreset} />
-        </div>
-      </div>
+    <div className="fin-page">
+      <div className="fin-shell">
+        <FinHeader
+          title="Afspraken"
+          subtitle="Bezichtigingen, kennismakingen en follow-ups — incl. ROI per bron en consultant."
+        >
+          <FinEntitySwitch value={entity} onChange={setEntity} />
+          <FinPeriodPicker value={datePreset} onChange={setDatePreset} />
+        </FinHeader>
 
-      {/* Funnel KPI cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Totaal afspraken" value={gefilterd.length} sub={`${range.label}`} />
-        <KpiCard label="Uitgevoerd" value={uitgevoerd.length}
-          sub={gefilterd.length > 0 ? `${((uitgevoerd.length / gefilterd.length) * 100).toFixed(0)}% van totaal` : '—'} />
-        <KpiCard label="Deal gewonnen" value={deals.length}
-          sub={uitgevoerd.length > 0 ? `${((deals.length / uitgevoerd.length) * 100).toFixed(0)}% conversie` : '—'}
-          color="green" />
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Kosten per afspraak" value={kostenPerAfspraak > 0 ? formatEuro(kostenPerAfspraak) : '—'}
-          sub="ad spend / afspraken" />
-        <KpiCard label="Kosten per deal" value={kostenPerDeal > 0 ? formatEuro(kostenPerDeal) : '—'}
-          sub="ad spend / deals" />
-        <KpiCard label="Totale ad spend YTD" value={formatEuro(totaalAdSpend)} sub="Google + Meta + LinkedIn" />
-      </div>
+        {loading ? (
+          <div className="fin-loading">Laden…</div>
+        ) : (
+          <>
+            <FinKpiGrid cols={3}>
+              <FinKpi
+                label="Totaal afspraken"
+                value={gefilterd.length}
+                sub={range.label}
+              />
+              <FinKpi
+                label="Uitgevoerd"
+                value={uitgevoerd.length}
+                sub={
+                  gefilterd.length > 0
+                    ? `${Math.round((uitgevoerd.length / gefilterd.length) * 100)}% van totaal`
+                    : '—'
+                }
+              />
+              <FinKpi
+                label="Deal gewonnen"
+                value={deals.length}
+                sub={
+                  uitgevoerd.length > 0
+                    ? `${Math.round((deals.length / uitgevoerd.length) * 100)}% conversie`
+                    : '—'
+                }
+                tone="positive"
+              />
+            </FinKpiGrid>
+            <FinKpiGrid cols={3}>
+              <FinKpi
+                label="Kosten per afspraak"
+                value={kostenPerAfspraak > 0 ? formatEuro(kostenPerAfspraak) : '—'}
+                sub="ad spend / afspraken"
+              />
+              <FinKpi
+                label="Kosten per deal"
+                value={kostenPerDeal > 0 ? formatEuro(kostenPerDeal) : '—'}
+                sub="ad spend / deals"
+              />
+              <FinKpi
+                label="Totale ad spend YTD"
+                value={formatEuro(totaalAdSpend)}
+                sub="Google + Meta + LinkedIn"
+                tone="accent"
+              />
+            </FinKpiGrid>
 
-      {/* Analytics per bron */}
-      {bronStats.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">Per bron</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                {['Bron', 'Afspraken', 'Uitgevoerd', 'Deals', 'Conversie'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2 text-xs uppercase tracking-wide text-slate-500 font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {bronStats.map((b) => (
-                <tr key={b.bron} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-2 text-slate-700">{b.bron}</td>
-                  <td className="px-4 py-2 text-slate-600">{b.afspraken}</td>
-                  <td className="px-4 py-2 text-slate-600">{b.uitgevoerd}</td>
-                  <td className="px-4 py-2 text-slate-600">{b.deals}</td>
-                  <td className="px-4 py-2 font-medium text-slate-700">{b.conversie}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            {bronStats.length > 0 && (
+              <FinSection title="Per bron">
+                <div className="fin-table-wrap" style={{ borderRadius: 10 }}>
+                  <table className="fin-table">
+                    <thead>
+                      <tr>
+                        <th>Bron</th>
+                        <th className="num">Afspraken</th>
+                        <th className="num">Uitgevoerd</th>
+                        <th className="num">Deals</th>
+                        <th className="num">Conversie</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bronStats.map(b => (
+                        <tr key={b.bron}>
+                          <td>{b.bron}</td>
+                          <td className="num">{b.afspraken}</td>
+                          <td className="num">{b.uitgevoerd}</td>
+                          <td className="num">{b.deals}</td>
+                          <td className="num">
+                            <FinPctBadge value={b.conversie} good={20} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </FinSection>
+            )}
 
-      {/* Analytics per makelaar */}
-      {makelaarStats.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">Per consultant</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                {['Consultant', 'Afspraken', 'Deals', 'Close %'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2 text-xs uppercase tracking-wide text-slate-500 font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {makelaarStats.map((m) => (
-                <tr key={m.naam} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-2 text-slate-700">{m.naam}</td>
-                  <td className="px-4 py-2 text-slate-600">{m.afspraken}</td>
-                  <td className="px-4 py-2 text-slate-600">{m.deals}</td>
-                  <td className="px-4 py-2 font-medium text-slate-700">{m.closePct}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            {makelaarStats.length > 0 && (
+              <FinSection title="Per consultant">
+                <div className="fin-table-wrap" style={{ borderRadius: 10 }}>
+                  <table className="fin-table">
+                    <thead>
+                      <tr>
+                        <th>Consultant</th>
+                        <th className="num">Afspraken</th>
+                        <th className="num">Deals</th>
+                        <th className="num">Close %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {makelaarStats.map(m => (
+                        <tr key={m.naam}>
+                          <td>{m.naam}</td>
+                          <td className="num">{m.afspraken}</td>
+                          <td className="num">{m.deals}</td>
+                          <td className="num">
+                            <FinPctBadge value={m.closePct} good={30} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </FinSection>
+            )}
 
-      {/* Invoer / Bewerken formulier */}
-      <div ref={formRef} className="bg-white rounded-lg border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-slate-700">
-            {editingId ? 'Afspraak bewerken' : 'Nieuwe afspraak'}
-          </h2>
-          {editingId && (
-            <button onClick={cancelEdit} className="text-xs text-slate-400 hover:text-slate-600">
-              Annuleren
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Datum *">
-            <input type="date" value={form.datum}
-              onChange={(e) => setForm({ ...form, datum: e.target.value })} className={inp} />
-          </Field>
-          <Field label="Lead / klantnaam *">
-            <input type="text" placeholder="Naam" value={form.lead_naam}
-              onChange={(e) => setForm({ ...form, lead_naam: e.target.value })} className={inp} />
-          </Field>
-          <Field label="Bron">
-            <select value={form.bron} onChange={(e) => setForm({ ...form, bron: e.target.value, partner_id: '' })} className={inp}>
-              <option value="">Kies bron</option>
-              {settings.bronnen.map((b) => <option key={b}>{b}</option>)}
-            </select>
-          </Field>
-          {form.bron === 'Referentie van partner' && (
-            <Field label="Partner">
-              <select value={form.partner_id} onChange={(e) => setForm({ ...form, partner_id: e.target.value })} className={inp}>
-                <option value="">Kies partner</option>
-                {partners.map((p) => <option key={p.id} value={p.id}>{p.naam}</option>)}
-              </select>
-            </Field>
-          )}
-          <Field label="Regio">
-            <select value={form.regio} onChange={(e) => setForm({ ...form, regio: e.target.value })} className={inp}>
-              <option value="">Kies regio</option>
-              {settings.regios.map((r) => <option key={r}>{r}</option>)}
-            </select>
-          </Field>
-          <Field label="Consultant">
-            <select value={form.makelaar_id} onChange={(e) => setForm({ ...form, makelaar_id: e.target.value })} className={inp}>
-              <option value="">Geen</option>
-              {makelaars.map((m) => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
-          </Field>
-          <Field label="Type">
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inp}>
-              {settings.afspraak_types.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inp}>
-              {['Gepland', 'Uitgevoerd', 'No-show', 'Geannuleerd'].map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </Field>
-          <Field label="Resultaat">
-            <select value={form.resultaat} onChange={(e) => setForm({ ...form, resultaat: e.target.value })} className={inp}>
-              <option value="">—</option>
-              {['Interesse', 'Bod gedaan', 'Deal gewonnen', 'Afgewezen'].map((r) => <option key={r}>{r}</option>)}
-            </select>
-          </Field>
-          <Field label="Notities">
-            <input type="text" value={form.notities}
-              onChange={(e) => setForm({ ...form, notities: e.target.value })} className={inp} />
-          </Field>
-        </div>
-        <div className="mt-4">
-          <button onClick={saveAfspraak} disabled={saving || !form.lead_naam}
-            className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
-            {saving ? 'Opslaan...' : editingId ? 'Wijzigingen opslaan' : 'Afspraak opslaan'}
-          </button>
-        </div>
-      </div>
-
-      {/* Afspraken tabel */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">Afspraken ({gefilterd.length})</h2>
-          <span className="text-xs text-slate-400">{range.label}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                {['Datum', 'Naam', 'Bron', 'Regio', 'Type', 'Status', 'Resultaat', 'Notities', ''].map((h) => (
-                  <th key={h} className="text-left px-3 py-2 text-xs uppercase tracking-wide text-slate-500 font-medium whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {gefilterd.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-6 text-center text-slate-400 text-sm">Geen afspraken in deze periode</td></tr>
-              )}
-              {gefilterd.map((a) => (
-                <tr key={a.id} className={`border-b border-slate-50 hover:bg-slate-50 group ${editingId === a.id ? 'bg-amber-50' : ''}`}>
-                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                    {new Date(a.datum).toLocaleDateString('nl-NL')}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-slate-800">
-                    {a.lead_naam}
-                    {a.pipedrive_activiteit_id && (
-                      <span className="ml-1.5 text-[10px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-medium">PD</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-slate-500 text-xs">{a.bron ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    {a.regio && <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded">{a.regio}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-slate-500 text-xs">{a.type}</td>
-                  <td className="px-3 py-2">
+            {/* Form */}
+            <div ref={formRef}>
+              <FinSection
+                title={editingId ? 'Afspraak bewerken' : 'Nieuwe afspraak'}
+                meta={
+                  editingId ? (
+                    <button type="button" className="fin-link" onClick={cancelEdit}>
+                      Annuleren
+                    </button>
+                  ) : undefined
+                }
+              >
+                <div className="fin-form-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                  <div className="fin-field">
+                    <label>Datum *</label>
+                    <input
+                      type="date"
+                      className="fin-input"
+                      value={form.datum}
+                      onChange={e => setForm({ ...form, datum: e.target.value })}
+                    />
+                  </div>
+                  <div className="fin-field">
+                    <label>Lead / klantnaam *</label>
+                    <input
+                      type="text"
+                      className="fin-input"
+                      placeholder="Naam"
+                      value={form.lead_naam}
+                      onChange={e => setForm({ ...form, lead_naam: e.target.value })}
+                    />
+                  </div>
+                  <div className="fin-field">
+                    <label>Bron</label>
                     <select
-                      value={a.status}
-                      onChange={(e) => updateStatus(a.id, e.target.value)}
-                      className={`text-xs px-2 py-0.5 rounded font-medium border-0 cursor-pointer ${statusColors[a.status] ?? 'bg-slate-100 text-slate-600'}`}
+                      className="fin-select"
+                      value={form.bron}
+                      onChange={e =>
+                        setForm({ ...form, bron: e.target.value, partner_id: '' })
+                      }
                     >
-                      {['Gepland', 'Uitgevoerd', 'No-show', 'Geannuleerd'].map((s) => <option key={s}>{s}</option>)}
+                      <option value="">Kies bron</option>
+                      {settings.bronnen.map(b => (
+                        <option key={b}>{b}</option>
+                      ))}
                     </select>
-                  </td>
-                  <td className="px-3 py-2">
+                  </div>
+                  {form.bron === 'Referentie van partner' && (
+                    <div className="fin-field">
+                      <label>Partner</label>
+                      <select
+                        className="fin-select"
+                        value={form.partner_id}
+                        onChange={e => setForm({ ...form, partner_id: e.target.value })}
+                      >
+                        <option value="">Kies partner</option>
+                        {partners.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.naam}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="fin-field">
+                    <label>Regio</label>
                     <select
-                      value={a.resultaat ?? ''}
-                      onChange={(e) => updateResultaat(a.id, e.target.value)}
-                      className={`text-xs px-2 py-0.5 rounded font-medium border-0 cursor-pointer ${a.resultaat ? (resultaatColors[a.resultaat] ?? 'bg-slate-100 text-slate-600') : 'text-slate-300'}`}
+                      className="fin-select"
+                      value={form.regio}
+                      onChange={e => setForm({ ...form, regio: e.target.value })}
+                    >
+                      <option value="">Kies regio</option>
+                      {settings.regios.map(r => (
+                        <option key={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fin-field">
+                    <label>Consultant</label>
+                    <select
+                      className="fin-select"
+                      value={form.makelaar_id}
+                      onChange={e => setForm({ ...form, makelaar_id: e.target.value })}
+                    >
+                      <option value="">Geen</option>
+                      {makelaars.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.naam}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fin-field">
+                    <label>Type</label>
+                    <select
+                      className="fin-select"
+                      value={form.type}
+                      onChange={e => setForm({ ...form, type: e.target.value })}
+                    >
+                      {settings.afspraak_types.map(t => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fin-field">
+                    <label>Status</label>
+                    <select
+                      className="fin-select"
+                      value={form.status}
+                      onChange={e => setForm({ ...form, status: e.target.value })}
+                    >
+                      {STATUSES.map(s => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fin-field">
+                    <label>Resultaat</label>
+                    <select
+                      className="fin-select"
+                      value={form.resultaat}
+                      onChange={e => setForm({ ...form, resultaat: e.target.value })}
                     >
                       <option value="">—</option>
-                      {['Interesse', 'Bod gedaan', 'Deal gewonnen', 'Afgewezen'].map((r) => <option key={r}>{r}</option>)}
+                      {RESULTATEN.map(r => (
+                        <option key={r}>{r}</option>
+                      ))}
                     </select>
-                  </td>
-                  <td className="px-3 py-2 text-slate-400 text-xs max-w-[150px] truncate">{a.notities ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEdit(a)}
-                        className={`p-1 ${editingId === a.id ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`}>
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => deleteAfspraak(a.id, a.lead_naam)}
-                        className="p-1 text-slate-300 hover:text-red-500">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                  <div className="fin-field full">
+                    <label>Notities</label>
+                    <input
+                      type="text"
+                      className="fin-input"
+                      value={form.notities}
+                      onChange={e => setForm({ ...form, notities: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="fin-btn primary"
+                    onClick={() => void saveAfspraak()}
+                    disabled={saving || !form.lead_naam}
+                  >
+                    {saving
+                      ? 'Opslaan…'
+                      : editingId
+                        ? 'Wijzigingen opslaan'
+                        : 'Afspraak opslaan'}
+                  </button>
+                </div>
+              </FinSection>
+            </div>
+
+            {/* Tabel */}
+            <FinSection title={`Afspraken (${gefilterd.length})`} meta={range.label}>
+              <div className="fin-table-wrap" style={{ borderRadius: 10 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="fin-table">
+                    <thead>
+                      <tr>
+                        <th>Datum</th>
+                        <th>Naam</th>
+                        <th>Bron</th>
+                        <th>Regio</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Resultaat</th>
+                        <th>Notities</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gefilterd.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={9}
+                            className="muted"
+                            style={{ textAlign: 'center', padding: '24px' }}
+                          >
+                            Geen afspraken in deze periode
+                          </td>
+                        </tr>
+                      )}
+                      {gefilterd.map(a => (
+                        <tr
+                          key={a.id}
+                          className={editingId === a.id ? 'fin-row-editing' : ''}
+                        >
+                          <td>{new Date(a.datum).toLocaleDateString('nl-NL')}</td>
+                          <td style={{ fontWeight: 600 }}>
+                            {a.lead_naam}
+                            {a.pipedrive_activiteit_id && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  background: 'rgba(212,146,26,0.18)',
+                                  color: 'var(--sun-dark)',
+                                  padding: '1px 5px',
+                                  borderRadius: 5,
+                                }}
+                              >
+                                PD
+                              </span>
+                            )}
+                          </td>
+                          <td className="muted">{a.bron ?? '—'}</td>
+                          <td>{a.regio && <span className="fin-pill-soft">{a.regio}</span>}</td>
+                          <td className="muted">{a.type}</td>
+                          <td>
+                            <select
+                              value={a.status}
+                              onChange={e => void updateStatus(a.id, e.target.value)}
+                              className={`fin-status-select status-${a.status.toLowerCase().replace('-', '')}`}
+                            >
+                              {STATUSES.map(s => (
+                                <option key={s}>{s}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              value={a.resultaat ?? ''}
+                              onChange={e => void updateResultaat(a.id, e.target.value)}
+                              className={`fin-status-select ${
+                                a.resultaat
+                                  ? `result-${a.resultaat.toLowerCase().replace(/\s/g, '')}`
+                                  : 'result-empty'
+                              }`}
+                            >
+                              <option value="">—</option>
+                              {RESULTATEN.map(r => (
+                                <option key={r}>{r}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td
+                            className="muted"
+                            style={{
+                              maxWidth: 160,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {a.notities ?? '—'}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              <button
+                                type="button"
+                                className={`fin-row-action ${editingId === a.id ? 'editing' : ''}`}
+                                onClick={() => startEdit(a)}
+                                aria-label="Bewerken"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="fin-row-action danger"
+                                onClick={() => void deleteAfspraak(a.id, a.lead_naam)}
+                                aria-label="Verwijderen"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </FinSection>
+
+            <div style={{ height: 60 }} />
+          </>
+        )}
       </div>
-    </div>
-  )
-}
-
-const inp = 'w-full border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-slate-400 bg-white'
-
-function KpiCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="bg-white rounded-lg border border-slate-200 p-4">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">{label}</div>
-      <div className={`text-2xl font-semibold ${color === 'green' ? 'text-green-600' : 'text-slate-900'}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-slate-500 mb-1">{label}</label>
-      {children}
     </div>
   )
 }

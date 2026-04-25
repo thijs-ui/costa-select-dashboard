@@ -3260,6 +3260,39 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
 .fin-row-action.editing { color: var(--sun-dark); background: var(--sun-subtle); }
 .fin-row-action.danger:hover { background: rgba(194,64,64,0.13); color: var(--negative-text); }
 
+/* Toggle-line (checkbox + label, gebruikt op todos) */
+.fin-toggle-line {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-body); font-size: 12.5px;
+  color: var(--fg-muted); cursor: pointer;
+}
+.fin-toggle-line input[type='checkbox'] {
+  accent-color: var(--deepsea);
+  width: 14px; height: 14px;
+}
+
+/* Inline status select (afspraken tabel) */
+.fin-status-select {
+  border: none; outline: none;
+  font-family: var(--font-body);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 999px;
+  cursor: pointer;
+  background: var(--deepsea-lighter);
+  color: var(--fg-muted);
+  appearance: none; -webkit-appearance: none;
+}
+.fin-status-select.status-gepland     { background: var(--deepsea-lighter); color: var(--deepsea); }
+.fin-status-select.status-uitgevoerd  { background: rgba(16,185,129,0.13); color: var(--positive-text); }
+.fin-status-select.status-noshow      { background: rgba(194,64,64,0.13); color: var(--negative-text); }
+.fin-status-select.status-geannuleerd { background: var(--deepsea-lighter); color: var(--fg-subtle); }
+
+.fin-status-select.result-empty       { background: transparent; color: var(--fg-subtle); }
+.fin-status-select.result-interesse   { background: rgba(212,146,26,0.14); color: var(--sun-dark); }
+.fin-status-select.result-bodgedaan   { background: rgba(0,75,70,0.10); color: var(--deepsea); }
+.fin-status-select.result-dealgewonnen { background: rgba(16,185,129,0.13); color: var(--positive-text); }
+.fin-status-select.result-afgewezen   { background: rgba(194,64,64,0.13); color: var(--negative-text); }
+
 /* Avatar (consultants tabel) */
 .fin-avatar {
   display: inline-flex; align-items: center; justify-content: center;
