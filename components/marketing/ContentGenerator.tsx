@@ -1,279 +1,264 @@
 'use client'
 
-import { useState } from 'react'
-import { useAuth } from '@/lib/auth-context'
-import { Loader2, Copy, RefreshCw, Star, Check } from 'lucide-react'
-import { createBrowserClient } from '@/lib/supabase-browser'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  McCatNav, McGenerateBand, McHero, McOutput, McPanel, McPlatformCards,
+  McPromptArea, McToast, McToggles,
+  type McVersion,
+} from './parts'
+import {
+  MC_CATEGORIES, MC_LANGUAGES, MC_LENGTHS,
+  type McCategory, type McIconName, type McLanguage, type McLength, type McRewriteTarget,
+} from '@/lib/marketing-config'
 
-interface PlatformOption {
-  key: string
-  label: string
-  instructions: string
-  maxChars?: number
+function nowLabel() {
+  return new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
 }
 
-interface Props {
-  category: string
-  platforms: PlatformOption[]
-  placeholder?: string
-  extraFields?: React.ReactNode
-  showLengthSelector?: boolean
+function rid() {
+  return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-export default function ContentGenerator({ category, platforms, placeholder, extraFields, showLengthSelector }: Props) {
-  const { user } = useAuth()
-  const supabase = createBrowserClient()
-
-  const [platform, setPlatform] = useState(platforms[0]?.key ?? '')
-  const [language, setLanguage] = useState<'nl' | 'en' | 'es'>('nl')
-  const [lengthOpt, setLengthOpt] = useState<'kort' | 'middel' | 'lang'>('middel')
+export default function ContentGenerator({ category }: { category: McCategory }) {
+  const [platformId, setPlatformId] = useState(category.platforms[0].id)
+  const [language, setLanguage] = useState<McLanguage['id']>('nl')
+  const [length, setLength] = useState<McLength['id']>('middel')
   const [prompt, setPrompt] = useState('')
-  const [extraContext, setExtraContext] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const [versions, setVersions] = useState<string[]>([])
-  const [editIndex, setEditIndex] = useState(0)
-  const [editContent, setEditContent] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [extra, setExtra] = useState('')
+
+  const [versions, setVersions] = useState<McVersion[]>([])
+  const [activeIdx, setActiveIdx] = useState(0)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isRewriting, setIsRewriting] = useState(false)
   const [autoTitle, setAutoTitle] = useState('')
-  const [rewriting, setRewriting] = useState(false)
-  const [rewriteTarget, setRewriteTarget] = useState('')
 
-  const selectedPlatform = platforms.find(p => p.key === platform)
+  const [toast, setToast] = useState<{ visible: boolean; message: string; icon: McIconName }>({
+    visible: false, message: '', icon: 'check-circle',
+  })
+  const [copyState, setCopyState] = useState<'idle' | 'success'>('idle')
+  const [saveState, setSaveState] = useState<'idle' | 'success'>('idle')
 
-  async function generate() {
-    if (!prompt.trim()) return
-    setGenerating(true)
+  useEffect(() => {
+    setPlatformId(category.platforms[0].id)
+    setVersions([])
+    setActiveIdx(0)
+    setPrompt('')
+    setExtra('')
+    setLength('middel')
+    setAutoTitle('')
+  }, [category.id, category.platforms])
+
+  const platform = useMemo(
+    () => category.platforms.find(p => p.id === platformId) || category.platforms[0],
+    [category.platforms, platformId],
+  )
+
+  const showToast = useCallback((message: string, icon: McIconName = 'check-circle') => {
+    setToast({ visible: true, message, icon })
+    setTimeout(() => setToast(t => ({ ...t, visible: false })), 1900)
+  }, [])
+
+  const pushVersion = useCallback((text: string, opts: Partial<McVersion> = {}) => {
+    setVersions(prev => {
+      const v: McVersion = {
+        id: rid(),
+        text,
+        platformLabel: opts.platformLabel || platform.label,
+        language: opts.language || language,
+        lengthLabel: category.showLengthSelector ? (opts.lengthLabel || length) : null,
+        maxChars: opts.maxChars !== undefined ? opts.maxChars : (platform.maxChars ?? null),
+        favorite: false,
+        timeLabel: nowLabel(),
+      }
+      const next = [...prev, v]
+      while (next.length > 3) next.shift()
+      setActiveIdx(next.length - 1)
+      return next
+    })
+  }, [platform, language, length, category])
+
+  const canGenerate = prompt.trim().length > 4 && !isGenerating
+
+  const generate = useCallback(async () => {
+    if (!canGenerate) return
+    setIsGenerating(true)
     try {
       const res = await fetch('/api/marketing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category,
-          subcategory: platform,
+          category: category.apiCategory,
+          subcategory: platform.apiSubcategory,
           language,
           prompt: prompt.trim(),
-          extra_context: extraContext.trim() || undefined,
-          content_type_instructions: selectedPlatform?.instructions || '',
-          ...(showLengthSelector ? { length: lengthOpt } : {}),
+          extra_context: extra.trim() || undefined,
+          content_type_instructions: platform.promptInstructions,
+          ...(category.showLengthSelector ? { length } : {}),
         }),
       })
       if (res.ok) {
-        const { content, title: genTitle } = await res.json()
-        if (genTitle) setAutoTitle(genTitle)
-        if (versions.length === 0) {
-          setVersions([content])
-          setEditContent(content)
-          setEditIndex(0)
-        } else if (versions.length < 3) {
-          setVersions([...versions, content])
-          setEditContent(content)
-          setEditIndex(versions.length)
-        } else {
-          setVersions([...versions.slice(1), content])
-          setEditContent(content)
-          setEditIndex(2)
-        }
+        const { content, title } = await res.json()
+        if (title) setAutoTitle(title)
+        pushVersion(content)
+      } else {
+        showToast('Genereren mislukt', 'rotate')
       }
-    } catch { /* ignore */ }
-    setGenerating(false)
-  }
+    } catch {
+      showToast('Genereren mislukt', 'rotate')
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [canGenerate, category, platform, language, length, prompt, extra, pushVersion, showToast])
 
-  async function copyToClipboard() {
-    await navigator.clipboard.writeText(editContent)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const onEditText = useCallback((idx: number, newText: string) => {
+    setVersions(prev => prev.map((v, i) => (i === idx ? { ...v, text: newText } : v)))
+  }, [])
 
-  const [saveError, setSaveError] = useState('')
+  const onCopy = useCallback(async (text: string) => {
+    try { await navigator.clipboard.writeText(text) } catch { /* ignore */ }
+    setCopyState('success')
+    showToast('Tekst gekopieerd naar klembord', 'copy')
+    setTimeout(() => setCopyState('idle'), 1700)
+  }, [showToast])
 
-  async function rewriteForPlatform(target: string) {
-    if (!editContent || !target) return
-    setRewriting(true)
-    try {
-      const res = await fetch('/api/marketing/rewrite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editContent, sourcePlatform: platform, targetPlatform: target }),
-      })
-      if (res.ok) {
-        const { content } = await res.json()
-        if (versions.length < 3) {
-          setVersions([...versions, content])
-          setEditContent(content)
-          setEditIndex(versions.length)
-        } else {
-          setVersions([...versions.slice(1), content])
-          setEditContent(content)
-          setEditIndex(2)
-        }
-      }
-    } catch { /* ignore */ }
-    setRewriting(false)
-    setRewriteTarget('')
-  }
-
-  async function saveToLibrary(favorite = false) {
-    setSaveError('')
-    const title = autoTitle || prompt.trim().substring(0, 80) || 'Zonder titel'
+  const onSave = useCallback(async (idx: number, favorite = false) => {
+    const v = versions[idx]
+    if (!v) return
+    const title = autoTitle || prompt.trim().slice(0, 80) || 'Zonder titel'
     try {
       const res = await fetch('/api/marketing/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category,
-          subcategory: platform,
-          language,
+          category: category.apiCategory,
+          subcategory: platform.apiSubcategory,
+          language: v.language,
           title,
           prompt_used: prompt,
-          content: editContent,
+          content: v.text,
           is_favorite: favorite,
         }),
       })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Opslaan mislukt') }
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Opslaan mislukt')
-      setTimeout(() => setSaveError(''), 4000)
+      if (!res.ok) throw new Error('save failed')
+      setSaveState('success')
+      showToast('Opgeslagen in bibliotheek', 'save')
+      setTimeout(() => setSaveState('idle'), 1700)
+    } catch {
+      showToast('Opslaan mislukt', 'save')
     }
-  }
+  }, [versions, autoTitle, prompt, category, platform, showToast])
 
-  const charCount = editContent.length
-  const maxChars = selectedPlatform?.maxChars
+  const onToggleFav = useCallback((idx: number) => {
+    const v = versions[idx]
+    if (!v) return
+    setVersions(prev => prev.map((vv, i) => (i === idx ? { ...vv, favorite: !vv.favorite } : vv)))
+    if (!v.favorite) {
+      void onSave(idx, true)
+    } else {
+      showToast('Favoriet uit', 'star')
+    }
+  }, [versions, onSave, showToast])
+
+  const onRewrite = useCallback(async (idx: number, target: McRewriteTarget) => {
+    const src = versions[idx]
+    if (!src) return
+    setIsRewriting(true)
+    try {
+      const res = await fetch('/api/marketing/rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: src.text,
+          sourcePlatform: platform.apiSubcategory,
+          targetPlatform: target.id,
+        }),
+      })
+      if (res.ok) {
+        const { content } = await res.json()
+        pushVersion(content, {
+          platformLabel: target.label,
+          language: src.language,
+          maxChars: null,
+        })
+        showToast(`Herschreven voor ${target.label}`, 'wand-rewrite')
+      } else {
+        showToast('Herschrijven mislukt', 'wand-rewrite')
+      }
+    } catch {
+      showToast('Herschrijven mislukt', 'wand-rewrite')
+    } finally {
+      setIsRewriting(false)
+    }
+  }, [versions, platform, pushVersion, showToast])
 
   return (
-    <div className="space-y-6">
-      {/* Platform selector */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {platforms.map(p => (
-          <button key={p.key} onClick={() => setPlatform(p.key)}
-            className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
-              platform === p.key ? 'border-[#004B46] bg-[#004B46]/5' : 'border-gray-200 bg-white hover:border-gray-300'
-            }`}>
-            <span className={`text-sm font-semibold ${platform === p.key ? 'text-[#004B46]' : 'text-gray-700'}`}>{p.label}</span>
-            {p.maxChars && <span className="text-[10px] text-gray-400 block">max {p.maxChars} tekens</span>}
-          </button>
-        ))}
-      </div>
+    <div className="mc-page">
+      <div className="mc-shell">
+        <McCatNav categories={MC_CATEGORIES} activeId={category.id} />
+        <McHero category={category} />
 
-      {/* Taal + Lengte selector */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div>
-          <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Taal</div>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-            {(['nl', 'en', 'es'] as const).map(l => (
-              <button key={l} onClick={() => setLanguage(l)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
-                  language === l ? 'bg-white text-[#004B46] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}>
-                {l.toUpperCase()}
-              </button>
-            ))}
+        <div className="mc-grid">
+          <div className="mc-col-input">
+            <McPanel step={1} title="Kies platform" meta={`${category.platforms.length} opties`}>
+              <McPlatformCards
+                platforms={category.platforms}
+                value={platformId}
+                onChange={setPlatformId}
+              />
+            </McPanel>
+
+            <McPanel step={2} title={category.showLengthSelector ? 'Taal & lengte' : 'Taal'}>
+              <McToggles
+                language={language} onLanguage={setLanguage}
+                length={length} onLength={setLength}
+                showLength={category.showLengthSelector}
+              />
+            </McPanel>
+
+            <McPanel step={3} title="Briefing">
+              <McPromptArea
+                prompt={prompt} onPrompt={setPrompt}
+                extra={extra} onExtra={setExtra}
+                placeholder={category.promptPlaceholder}
+              />
+            </McPanel>
+
+            <McGenerateBand
+              platform={platform}
+              language={language}
+              length={length}
+              showLength={category.showLengthSelector}
+              onGenerate={generate}
+              isLoading={isGenerating}
+              canGenerate={canGenerate}
+            />
+          </div>
+
+          <div className="mc-col-output">
+            <McOutput
+              versions={versions}
+              activeIdx={activeIdx}
+              onPickVersion={setActiveIdx}
+              onEditText={onEditText}
+              isGenerating={isGenerating}
+              generatingPlatformLabel={platform.label}
+              onCopy={onCopy}
+              onRegenerate={generate}
+              onSave={(i) => onSave(i, false)}
+              onToggleFav={onToggleFav}
+              onRewrite={onRewrite}
+              isRewriting={isRewriting}
+              copyState={copyState}
+              saveState={saveState}
+            />
           </div>
         </div>
 
-        {showLengthSelector && platform !== 'google_ads' && (
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide font-medium mb-1">Lengte</div>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-              {(['kort', 'middel', 'lang'] as const).map(l => (
-                <button key={l} onClick={() => setLengthOpt(l)}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all cursor-pointer capitalize ${
-                    lengthOpt === l ? 'bg-white text-[#004B46] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <McToast message={toast.message} visible={toast.visible} icon={toast.icon} />
       </div>
-
-      {extraFields}
-
-      {/* Prompt invoer */}
-      <div>
-        <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-          placeholder={placeholder || 'Waar moet de content over gaan?'}
-          rows={3} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-none" />
-      </div>
-
-      <div>
-        <textarea value={extraContext} onChange={e => setExtraContext(e.target.value)}
-          placeholder="Extra instructies (optioneel)..."
-          rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#004B46] focus:ring-1 focus:ring-[#004B46]/20 resize-none text-gray-500" />
-      </div>
-
-      <button onClick={generate} disabled={generating || !prompt.trim()}
-        className="bg-[#004B46] text-[#FFFAEF] font-semibold px-6 py-3 rounded-xl hover:bg-[#0A6B63] transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 text-sm">
-        {generating ? <><Loader2 size={16} className="animate-spin" /> Content wordt gegenereerd...</> : 'Genereer content'}
-      </button>
-
-      {/* Output */}
-      {versions.length > 0 && (
-        <div className="space-y-4">
-          {/* Versie tabs */}
-          {versions.length > 1 && (
-            <div className="flex gap-1">
-              {versions.map((_, i) => (
-                <button key={i} onClick={() => { setEditIndex(i); setEditContent(versions[i]) }}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                    editIndex === i ? 'bg-[#004B46] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>
-                  Versie {i + 1}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-              <span className="text-[10px] bg-[#004B46]/10 text-[#004B46] px-2 py-0.5 rounded font-semibold">{language.toUpperCase()}</span>
-              <span className={`text-[10px] tabular-nums ${maxChars && charCount > maxChars ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                {charCount}{maxChars ? ` / ${maxChars}` : ''} tekens
-              </span>
-            </div>
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-              rows={12} className="w-full px-4 py-3 text-sm text-gray-800 leading-relaxed focus:outline-none resize-y border-none" />
-          </div>
-
-          {/* Acties */}
-          <div className="flex items-center gap-2">
-            <button onClick={copyToClipboard}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#004B46] text-white text-sm font-medium rounded-xl hover:bg-[#0A6B63] cursor-pointer">
-              {copied ? <><Check size={14} /> Gekopieerd!</> : <><Copy size={14} /> Kopiëren</>}
-            </button>
-            <button onClick={generate} disabled={generating}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 cursor-pointer disabled:opacity-50">
-              <RefreshCw size={14} className={generating ? 'animate-spin' : ''} /> Opnieuw genereren
-            </button>
-            <button onClick={() => saveToLibrary(false)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 cursor-pointer">
-              {saved ? <><Check size={14} /> Opgeslagen!</> : 'Opslaan'}
-            </button>
-            <button onClick={() => saveToLibrary(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-[#F5AF40] hover:text-[#E09B20] cursor-pointer">
-              <Star size={16} fill="currentColor" />
-            </button>
-            <select value={rewriteTarget} onChange={e => { setRewriteTarget(e.target.value); if (e.target.value) rewriteForPlatform(e.target.value) }}
-              disabled={rewriting}
-              className="ml-auto text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#004B46] cursor-pointer disabled:opacity-50">
-              <option value="">{rewriting ? 'Herschrijven...' : 'Herschrijf voor...'}</option>
-              <option value="linkedin">LinkedIn post</option>
-              <option value="instagram">Instagram caption</option>
-              <option value="facebook">Facebook post</option>
-              <option value="meta_ads">Meta Ads</option>
-              <option value="linkedin_ads">LinkedIn Ads</option>
-              <option value="email">Email / nieuwsbrief</option>
-              <option value="blog">Blogartikel</option>
-              <option value="brochure">Brochure</option>
-            </select>
-            {saveError && <span className="text-xs text-red-500 ml-2">{saveError}</span>}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
+
+// Re-export for usage convenience.
+export { MC_LANGUAGES, MC_LENGTHS }
