@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   categories,
   docs,
@@ -24,7 +25,24 @@ const SUGGESTIONS = [
   'Wat staat er standaard in een arras-contract?',
 ]
 
-export default function KennisbankPage() {
+export default function KennisbankPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="kb-page">
+          <div className="kb-shell" style={{ padding: '60px 0', textAlign: 'center', color: 'var(--fg-subtle)' }}>
+            Laden…
+          </div>
+        </div>
+      }
+    >
+      <KennisbankPage />
+    </Suspense>
+  )
+}
+
+function KennisbankPage() {
+  const searchParams = useSearchParams()
   const [aiQuery, setAiQuery] = useState('')
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
@@ -73,6 +91,14 @@ export default function KennisbankPage() {
     setAnswerOpen(false)
     setAiQuery('')
   }
+
+  // Auto-submit als URL ?ask=<query> bevat (binnenkomend vanuit homepage)
+  useEffect(() => {
+    const ask = searchParams.get('ask')
+    if (!ask) return
+    setAiQuery(ask)
+    void handleAsk(ask)
+  }, [searchParams])
 
   // Filter docs by search + active category
   const filtered = useMemo(() => {
