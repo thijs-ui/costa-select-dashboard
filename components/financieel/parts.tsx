@@ -348,3 +348,110 @@ export function FinChartCard({
     </div>
   )
 }
+
+/* ── Funnel bars (gebruikt door funnel + regios pages) ─ */
+export interface FinFunnelStep {
+  label: string
+  value: number
+  variant?: 'deepsea' | 'sun' | 'mid'
+  conversionFromPrev?: number | null
+}
+
+export function FinFunnelBars({ steps, max }: { steps: FinFunnelStep[]; max: number }) {
+  return (
+    <div className="fin-funnel">
+      {steps.map((step, i) => {
+        const width =
+          max > 0 ? Math.max((step.value / max) * 100, step.value > 0 ? 4 : 0) : 0
+        return (
+          <div key={step.label}>
+            {i > 0 && step.conversionFromPrev != null && (
+              <div className="fin-funnel-conv">
+                <span className="rule" />
+                <span className="lbl">
+                  conversie:{' '}
+                  <strong
+                    className={
+                      step.conversionFromPrev >= 20
+                        ? 'pos'
+                        : step.conversionFromPrev >= 10
+                          ? 'warn'
+                          : 'neg'
+                    }
+                  >
+                    {step.conversionFromPrev}%
+                  </strong>
+                </span>
+              </div>
+            )}
+            <div className="fin-funnel-row">
+              <div className="fin-funnel-label">{step.label}</div>
+              <div className="fin-funnel-bar">
+                <div
+                  className={`fin-funnel-fill ${step.variant ?? 'deepsea'}`}
+                  style={{ width: `${width}%` }}
+                >
+                  {step.value > 0 && <span>{step.value}</span>}
+                </div>
+                {step.value === 0 && <span className="fin-funnel-zero">0</span>}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── Bar list (kosten-categorieën, regio-omzet etc.) ─── */
+export interface FinBarRow {
+  label: string
+  value: number
+  rightLabel?: ReactNode
+  variant?: 'deepsea' | 'sun'
+}
+
+export function FinBarList({ rows, max }: { rows: FinBarRow[]; max: number }) {
+  return (
+    <div className="fin-bar-list">
+      {rows.map((row, i) => (
+        <div className="fin-bar-row" key={i}>
+          <div className="fin-bar-row-head">
+            <span>{row.label}</span>
+            <span>{row.rightLabel}</span>
+          </div>
+          <div className="fin-bar-row-bar">
+            <div
+              className={`fin-bar-row-fill ${row.variant ?? (i % 2 === 1 ? 'sun' : 'deepsea')}`}
+              style={{ width: max > 0 ? `${(row.value / max) * 100}%` : '0%' }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Pct badge (voor funnel-conversie cells) ──────────── */
+export function FinPctBadge({
+  value,
+  good = 20,
+}: {
+  value: number | null
+  good?: number
+}) {
+  if (value == null) return <span className="fin-pct-empty">—</span>
+  const cls = value >= good ? 'good' : value >= good / 2 ? 'mid' : 'bad'
+  return <span className={`fin-pct-badge ${cls}`}>{value}%</span>
+}
+
+/* ── Numerieke chip (gekleurde count-pill) ─────────────── */
+export function FinCountChip({
+  value,
+  tone = 'deepsea',
+}: {
+  value: number | string
+  tone?: 'deepsea' | 'sun' | 'positive' | 'mid'
+}) {
+  return <span className={`fin-count-chip ${tone}`}>{value}</span>
+}

@@ -1,17 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { formatEuro } from '@/lib/calculations'
 
 interface AfhandelingDeal {
   id: number
   title: string
   value: number
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 export default function AfhandelingSection({ deals }: { deals: AfhandelingDeal[] }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -51,70 +49,71 @@ export default function AfhandelingSection({ deals }: { deals: AfhandelingDeal[]
     .reduce((s, [, v]) => s + v, 0)
 
   return (
-    <div className="rounded-xl border border-amber-200 overflow-hidden shadow-sm mb-6">
-      {/* Header */}
+    <div className="fin-section fin-afh">
       <button
+        type="button"
         onClick={() => setCollapsed(c => !c)}
-        className="w-full px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between hover:bg-amber-100/60 transition-colors"
+        className="fin-afh-head"
       >
-        <div className="text-left">
-          <div className="flex items-center gap-2">
-            {collapsed ? <ChevronRight size={14} className="text-amber-600" /> : <ChevronDown size={14} className="text-amber-600" />}
-            <h2 className="text-sm font-semibold text-amber-700">In afhandeling</h2>
-          </div>
-          <p className="text-xs text-amber-500 mt-0.5 ml-5">Alle huidige deals — akkoord gegeven, notaris nog niet gepasseerd</p>
-        </div>
+        <span className="fin-afh-chev">
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </span>
+        <span className="fin-afh-title">
+          In afhandeling <span className="fin-afh-count">{deals.length}</span>
+        </span>
+        <span className="fin-afh-sub">
+          Akkoord gegeven, notaris nog niet gepasseerd
+        </span>
       </button>
 
       {!collapsed && (
-        deals.length === 0 ? (
-          <div className="px-4 py-6 text-center text-gray-400 text-sm">Geen deals in afhandeling.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-amber-50/60 border-b border-amber-100 text-xs uppercase tracking-wide text-gray-500">
-                <th className="text-left px-4 py-2.5 font-semibold">Deal</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-amber-600">Waarde</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-green-600">Commissie</th>
-              </tr>
-            </thead>
-            <tbody>
-              {deals.map((d, i) => (
-                <tr key={d.id} className={`border-b border-amber-50 hover:bg-amber-50/40 ${i % 2 === 0 ? 'bg-white' : 'bg-amber-50/20'}`}>
-                  <td className="px-4 py-2.5 text-gray-700">{d.title}</td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-gray-900">
-                    {d.value > 0 ? fmt(d.value) : '—'}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-gray-400 text-xs">€</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="100"
-                        defaultValue={commissies[d.id] || ''}
-                        key={commissies[d.id]}
-                        onBlur={e => saveCommissie(d.id, e.target.value)}
-                        placeholder="0"
-                        className="w-28 text-right px-2 py-1 text-sm rounded border border-transparent hover:border-slate-200 focus:border-green-400 focus:outline-none bg-transparent focus:bg-white"
-                      />
-                      {saving[d.id] && <span className="text-xs text-gray-300">...</span>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-amber-50 border-t-2 border-amber-200 font-semibold">
-                <td className="px-4 py-3 text-amber-700">Totaal ({deals.length})</td>
-                <td className="px-4 py-3 text-right text-amber-700">{fmt(totaalWaarde)}</td>
-                <td className="px-4 py-3 text-right text-green-700">
-                  {totaalCommissie > 0 ? fmt(totaalCommissie) : '—'}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        )
+        <>
+          {deals.length === 0 ? (
+            <div className="fin-afh-empty">Geen deals in afhandeling.</div>
+          ) : (
+            <div className="fin-table-wrap" style={{ marginTop: 12, borderRadius: 10 }}>
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th>
+                    <th className="num">Waarde</th>
+                    <th className="num">Commissie</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deals.map(d => (
+                    <tr key={d.id}>
+                      <td>{d.title}</td>
+                      <td className="num">{d.value > 0 ? formatEuro(d.value) : '—'}</td>
+                      <td className="num">
+                        <span className="fin-afh-input">
+                          <span className="prefix">€</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            defaultValue={commissies[d.id] || ''}
+                            key={commissies[d.id]}
+                            onBlur={e => void saveCommissie(d.id, e.target.value)}
+                            placeholder="0"
+                          />
+                          {saving[d.id] && <span className="saving">…</span>}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Totaal ({deals.length})</td>
+                    <td className="num">{formatEuro(totaalWaarde)}</td>
+                    <td className="num">{totaalCommissie > 0 ? formatEuro(totaalCommissie) : '—'}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
