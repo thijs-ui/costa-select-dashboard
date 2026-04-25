@@ -108,9 +108,10 @@ export function FinSparkline({
   return (
     <svg
       className="fin-spark"
+      width="100%"
+      height={height}
       viewBox={`0 0 ${w} ${h}`}
       preserveAspectRatio="none"
-      style={{ height, width: '100%' }}
     >
       <path d={area} fill={areaColor} />
       <path
