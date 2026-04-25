@@ -3260,6 +3260,137 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
 .fin-row-action.editing { color: var(--sun-dark); background: var(--sun-subtle); }
 .fin-row-action.danger:hover { background: rgba(194,64,64,0.13); color: var(--negative-text); }
 
+/* Year pill (in maandkosten header) */
+.fin-year-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid var(--border); border-radius: 10px;
+  font-family: var(--font-body); font-size: 12px;
+  color: var(--fg-muted);
+}
+.fin-year-pill strong {
+  color: var(--deepsea); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Banner (info-strip op locked entiteit) */
+.fin-banner {
+  background: var(--sun-subtle);
+  border: 1px solid rgba(212,146,26,0.32);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+  color: var(--deepsea);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.fin-banner strong { color: var(--sun-dark); font-weight: 700; }
+.fin-banner em { font-weight: 600; font-style: normal; color: var(--deepsea); }
+
+/* Spreadsheet (inline-edit grid) */
+.fin-spreadsheet tbody tr.fin-spread-cat td {
+  background: var(--marble);
+  color: var(--deepsea);
+  font-weight: 700; font-size: 10.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-strong);
+}
+.fin-spreadsheet tbody tr.fin-spread-cat td.sticky {
+  position: sticky; left: 0;
+  background: var(--marble);
+}
+.fin-spreadsheet tbody tr.fin-spread-cat td.num { font-weight: 600; font-size: 12px; }
+.fin-spreadsheet tbody tr.fin-spread-cat td.total { color: var(--deepsea); font-weight: 700; }
+
+.fin-spreadsheet tbody tr.fin-spread-post td {
+  padding: 4px 8px;
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+.fin-spreadsheet tbody tr.fin-spread-post td.sticky {
+  position: sticky; left: 0;
+  background: white;
+  border-right: 1px solid var(--border);
+  font-weight: 500;
+}
+.fin-spreadsheet tbody tr.fin-spread-post:hover td:not(.sticky) { background: var(--deepsea-lighter); }
+.fin-spreadsheet tbody tr.fin-spread-post:hover td.sticky { background: var(--deepsea-lighter); }
+.fin-spreadsheet tbody tr.fin-spread-post td.fin-spread-cell { padding: 2px 4px; position: relative; }
+
+.fin-cell-input {
+  width: 100%; box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent;
+  font-family: var(--font-body); font-size: 12.5px;
+  color: var(--fg);
+  text-align: right; font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color .12s, background .12s, box-shadow .12s;
+  -moz-appearance: textfield;
+}
+.fin-cell-input::-webkit-outer-spin-button,
+.fin-cell-input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.fin-cell-input::placeholder { color: rgba(0,75,70,0.20); }
+.fin-cell-input:hover { border-color: var(--border); background: white; }
+.fin-cell-input:focus {
+  border-color: var(--deepsea); background: white;
+  box-shadow: 0 0 0 2px rgba(0,75,70,0.10);
+}
+
+.fin-cell-saved {
+  position: absolute;
+  right: 6px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--positive);
+  pointer-events: none;
+}
+
+.fin-spread-add td {
+  padding: 6px 8px;
+  background: rgba(0,75,70,0.02);
+}
+.fin-spread-add td.sticky {
+  position: sticky; left: 0;
+  background: rgba(0,75,70,0.02);
+  border-right: 1px solid var(--border);
+}
+
+.fin-spread-totaal td {
+  background: var(--marble);
+  font-weight: 700;
+  color: var(--deepsea);
+  border-top: 2px solid var(--border-strong);
+  padding: 10px 10px;
+}
+.fin-spread-totaal td.sticky {
+  position: sticky; left: 0;
+  background: var(--marble);
+}
+.fin-spread-totaal td.num { font-variant-numeric: tabular-nums; }
+
+/* Vaste-last button (per kostenpost) */
+.fin-vaste-btn {
+  background: none; border: none;
+  padding: 3px;
+  cursor: pointer;
+  color: rgba(0,75,70,0.20);
+  display: inline-flex; align-items: center;
+  border-radius: 5px;
+  opacity: 0;
+  transition: opacity .12s, color .12s, background .12s;
+}
+tr.fin-spread-post:hover .fin-vaste-btn { opacity: 1; }
+.fin-vaste-btn:hover { color: var(--deepsea); background: var(--deepsea-lighter); }
+.fin-vaste-btn.is-set {
+  opacity: 1;
+  color: var(--sun-dark);
+}
+
 /* Toggle-line (checkbox + label, gebruikt op todos) */
 .fin-toggle-line {
   display: inline-flex; align-items: center; gap: 8px;
