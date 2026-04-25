@@ -1,149 +1,192 @@
 'use client'
 
-import { Play } from 'lucide-react'
-import { PageLayout } from '@/components/page-layout'
-import { useState } from 'react'
-
-interface TrainingVideo {
-  id: string
-  title: string
-  youtubeId: string
-  category: string
-}
-
-const trainingCategories = [
-  'Onboarding',
-  'Tools',
-  'Opvolging',
-  'Aankoopproces',
-  'Processen',
-  'Afhandeling',
-] as const
-
-// Video's — voeg hier nieuwe video's toe
-const videos: TrainingVideo[] = [
-  { id: '1', title: 'Test video', youtubeId: '9q5ojtkqsBs', category: 'Onboarding' },
-]
-
-function getVideosByCategory(): Record<string, TrainingVideo[]> {
-  const grouped: Record<string, TrainingVideo[]> = {}
-  for (const cat of trainingCategories) {
-    grouped[cat] = videos.filter(v => v.category === cat)
-  }
-  return grouped
-}
+import { useEffect, useMemo, useState } from 'react'
+import {
+  TR_CATEGORIES,
+  TR_VIDEOS,
+  trFmtTimeRemaining,
+  trIsVideoNew,
+  type TrCategory,
+  type TrCategoryKey,
+  type TrainingVideo,
+} from '@/lib/training/data'
+import { useTrainingState } from '@/lib/training/storage'
+import {
+  TrEmpty,
+  TrHero,
+  TrPageHead,
+  TrSection,
+  TrStats,
+  TrToolbar,
+  type TrFilter,
+  type TrSort,
+  type TrStatsData,
+  type TrView,
+} from '@/components/training/parts'
 
 export default function TrainingPage() {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [playingVideo, setPlayingVideo] = useState<string | null>(null)
-  const grouped = getVideosByCategory()
+  const {
+    hydrated,
+    watchedMap,
+    skipped,
+    lastActivity,
+    skipOnboarding,
+  } = useTrainingState()
 
-  const displayCategories = activeCategory
-    ? [activeCategory]
-    : [...trainingCategories]
+  const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<TrFilter>('all')
+  const [sort, setSort] = useState<TrSort>('order')
+  const [view, setView] = useState<TrView>('grid')
+
+  // Restore view from localStorage (cosmetic, geen sync naar backend)
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('cs_tr_view')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v === 'grid' || v === 'list') setView(v)
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => {
+    try { localStorage.setItem('cs_tr_view', view) } catch { /* ignore */ }
+  }, [view])
+
+  const onboardingVideos = useMemo(
+    () =>
+      TR_VIDEOS.filter(v => v.is_required).sort(
+        (a, b) => (a.order_in_category ?? 0) - (b.order_in_category ?? 0)
+      ),
+    []
+  )
+  const onboardingDone = onboardingVideos.filter(v => watchedMap[v.id]?.watched).length
+  const onboardingTotal = onboardingVideos.length
+  const nextOnboardingVideo = onboardingVideos.find(v => !watchedMap[v.id]?.watched) ?? null
+  const onboardingStarted = onboardingDone > 0
+  const showHero = hydrated && !skipped && nextOnboardingVideo !== null && onboardingDone < onboardingTotal
+
+  const filtered = useMemo(() => {
+    let out: TrainingVideo[] = TR_VIDEOS
+    if (activeFilter !== 'all') {
+      if (activeFilter === 'required') out = out.filter(v => v.is_required)
+      else if (activeFilter === 'new') out = out.filter(trIsVideoNew)
+      else out = out.filter(v => v.category === (activeFilter as TrCategoryKey))
+    }
+    const q = search.trim().toLowerCase()
+    if (q) {
+      out = out.filter(
+        v =>
+          v.title.toLowerCase().includes(q) ||
+          (v.description ?? '').toLowerCase().includes(q)
+      )
+    }
+    const sorted = [...out]
+    if (sort === 'recent') {
+      sorted.sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+    } else if (sort === 'duration') {
+      sorted.sort((a, b) => (a.duration_seconds ?? 0) - (b.duration_seconds ?? 0))
+    } else {
+      sorted.sort((a, b) => (a.order_in_category ?? 99) - (b.order_in_category ?? 99))
+    }
+    return sorted
+  }, [activeFilter, search, sort])
+
+  const filterCounts = useMemo(() => {
+    const counts: Partial<Record<TrFilter, number>> = {
+      all: TR_VIDEOS.length,
+      required: 0,
+      new: 0,
+    }
+    TR_CATEGORIES.forEach(c => {
+      counts[c.key] = 0
+    })
+    TR_VIDEOS.forEach(v => {
+      counts[v.category] = (counts[v.category] ?? 0) + 1
+      if (v.is_required) counts.required = (counts.required ?? 0) + 1
+      if (trIsVideoNew(v)) counts.new = (counts.new ?? 0) + 1
+    })
+    return counts
+  }, [])
+
+  const stats: TrStatsData = useMemo(() => {
+    const total = TR_VIDEOS.length
+    const totalSeconds = TR_VIDEOS.reduce((s, v) => s + (v.duration_seconds ?? 0), 0)
+    const watched = TR_VIDEOS.filter(v => watchedMap[v.id]?.watched).length
+    const watchedPct = total > 0 ? Math.round((watched / total) * 100) : 0
+    const remainingSeconds = TR_VIDEOS.filter(v => !watchedMap[v.id]?.watched).reduce(
+      (s, v) => s + (v.duration_seconds ?? 0),
+      0
+    )
+    let lastActivityLabel = '—'
+    let lastActivityVideo = ''
+    if (lastActivity?.date) {
+      const d = new Date(lastActivity.date)
+      lastActivityLabel = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+      lastActivityVideo = lastActivity.videoTitle ?? ''
+    }
+    return {
+      total,
+      watched,
+      watchedPct,
+      totalDurationLabel: trFmtTimeRemaining(totalSeconds),
+      remainingLabel: trFmtTimeRemaining(remainingSeconds),
+      lastActivityLabel,
+      lastActivityVideo,
+    }
+  }, [watchedMap, lastActivity])
+
+  const sections = useMemo(
+    () =>
+      TR_CATEGORIES.map(cat => ({
+        category: cat as TrCategory,
+        videos: filtered.filter(v => v.category === cat.key),
+      })).filter(s => s.videos.length > 0),
+    [filtered]
+  )
 
   return (
-    <PageLayout title="Training" subtitle="Onboarding en trainingsmateriaal voor consultants">
+    <div className="tr-page">
+      <TrPageHead totalCount={TR_VIDEOS.length} />
+      <div className="tr-shell">
+        {showHero && nextOnboardingVideo && (
+          <TrHero
+            onboardingDone={onboardingDone}
+            onboardingTotal={onboardingTotal}
+            nextVideo={nextOnboardingVideo}
+            started={onboardingStarted}
+            onSkip={skipOnboarding}
+          />
+        )}
 
-      {/* Category filters */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <button
-          onClick={() => setActiveCategory(null)}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-          style={{
-            backgroundColor: !activeCategory ? '#004B46' : '#F5F5F5',
-            color: !activeCategory ? '#FFFFFF' : '#7A8C8B',
-          }}
-        >
-          Alles
-        </button>
-        {trainingCategories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-            style={{
-              backgroundColor: activeCategory === cat ? '#004B46' : '#F5F5F5',
-              color: activeCategory === cat ? '#FFFFFF' : '#7A8C8B',
-            }}
-          >
-            {cat}
-          </button>
-        ))}
+        <TrStats stats={stats} />
+
+        <TrToolbar
+          search={search}
+          onSearch={setSearch}
+          activeFilter={activeFilter}
+          onFilter={setActiveFilter}
+          filterCounts={filterCounts}
+          categories={TR_CATEGORIES}
+          sort={sort}
+          onSort={setSort}
+          view={view}
+          onView={setView}
+        />
+
+        {filtered.length === 0 ? (
+          <TrEmpty search={search} />
+        ) : (
+          sections.map(s => (
+            <TrSection
+              key={s.category.key}
+              category={s.category}
+              videos={s.videos}
+              watchedMap={watchedMap}
+              view={view}
+            />
+          ))
+        )}
+
+        <div style={{ height: 60 }} />
       </div>
-
-      {/* Video grid per category */}
-      <div className="space-y-8">
-        {displayCategories.map(cat => {
-          const catVideos = grouped[cat]
-          return (
-            <div key={cat}>
-              <h2
-                className="text-sm font-semibold mb-3"
-                style={{ color: '#004B46', fontFamily: 'var(--font-heading, sans-serif)' }}
-              >
-                {cat}
-                <span className="ml-2 text-xs font-normal" style={{ color: '#7A8C8B' }}>
-                  ({catVideos.length} {catVideos.length === 1 ? 'video' : "video's"})
-                </span>
-              </h2>
-
-              {catVideos.length === 0 ? (
-                <div className="flex items-center gap-2 px-4 py-3 bg-white/50 rounded-xl border border-dashed border-gray-200">
-                  <span className="text-sm text-gray-400 italic">
-                    Nog geen video&apos;s in deze categorie
-                  </span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {catVideos.map(video => (
-                    <div
-                      key={video.id}
-                      className="bg-white rounded-xl border border-gray-100 overflow-hidden"
-                    >
-                      {playingVideo === video.id ? (
-                        <div className="aspect-video">
-                          <iframe
-                            src={`https://www.youtube.com/embed/${video.youtubeId}?autoplay=1`}
-                            title={video.title}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            className="w-full h-full"
-                          />
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setPlayingVideo(video.id)}
-                          className="relative w-full aspect-video cursor-pointer group"
-                        >
-                          <img
-                            src={`https://img.youtube.com/vi/${video.youtubeId}/maxresdefault.jpg`}
-                            alt={video.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                            <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
-                              <Play size={20} style={{ color: '#004B46' }} className="ml-0.5" />
-                            </div>
-                          </div>
-                        </button>
-                      )}
-                      <div className="p-3">
-                        <h3
-                          className="text-sm font-medium"
-                          style={{ color: '#004B46' }}
-                        >
-                          {video.title}
-                        </h3>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </PageLayout>
+    </div>
   )
 }
