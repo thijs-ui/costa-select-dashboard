@@ -411,22 +411,36 @@ export default function AannamensPage() {
     }
   }
 
-  if (loading) return <div className="text-slate-400 text-sm p-8">Laden...</div>
+  if (loading) return (
+    <div className="fin-page">
+      <div className="fin-shell">
+        <div className="fin-loading">Laden…</div>
+      </div>
+    </div>
+  )
 
   const areaManagers = makelaars.filter(m => m.rol === 'area_manager' && m.id)
 
   return (
-    <div className="px-8 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">Aannames</h1>
-        <button onClick={saveAll} disabled={saving}
-          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 disabled:opacity-50">
-          <Save size={14} />
-          {saving ? 'Opslaan...' : saved ? 'Opgeslagen!' : 'Alles opslaan'}
-        </button>
-      </div>
+    <div className="fin-page">
+      <div className="fin-shell">
+        <div className="fin-header">
+          <div className="titles">
+            <div className="eyebrow">Costa Select · Financieel</div>
+            <h1>Aannames</h1>
+            <p className="subtitle">
+              Configuratie van gebruikers, makelaars, kostenposten, regio-instellingen en commissie-percentages.
+            </p>
+          </div>
+          <div className="fin-header-right">
+            <button onClick={saveAll} disabled={saving} className="fin-btn primary">
+              <Save />
+              {saving ? 'Opslaan…' : saved ? 'Opgeslagen!' : 'Alles opslaan'}
+            </button>
+          </div>
+        </div>
 
-      <div className="space-y-6">
+        <div className="space-y-6">
         {/* Gebruikers */}
         <div className="bg-white rounded-lg border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -915,6 +929,9 @@ export default function AannamensPage() {
             <Plus size={14} /> Toevoegen
           </button>
         </div>
+        </div>
+
+        <div style={{ height: 60 }} />
       </div>
     </div>
   )
@@ -922,8 +939,8 @@ export default function AannamensPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-5">
-      <h2 className="text-sm font-semibold text-slate-700 mb-4">{title}</h2>
+    <div className="fin-section" style={{ marginBottom: 0 }}>
+      <h2 className="fin-section-title" style={{ marginBottom: 14 }}>{title}</h2>
       {children}
     </div>
   )
