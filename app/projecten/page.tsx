@@ -1,49 +1,39 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { PageLayout } from '@/components/page-layout'
-import { useAuth } from '@/lib/auth-context'
-import { Plus, Layers, CheckSquare, Pin, Loader2 } from 'lucide-react'
-import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-interface Project {
-  id: string
-  name: string
-  description: string | null
-  owner_id: string | null
-  target_date: string | null
-  status: string
-  color: string
-  done: number
-  total: number
-  weekFocus: number
-  currentPhase: string | null
-  estimatedDate: string | null
-  velocityPerWeek: number | null
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  actief: 'bg-emerald-500',
-  'on hold': 'bg-blue-400',
-  afgerond: 'bg-slate-400',
-}
+import { useAuth } from '@/lib/auth-context'
+import {
+  PjHeader, PjStats, PjFilters, PjProjectCard, PjProjectRow,
+  PjAttention, PjArchive, PjEmpty,
+  computeProject,
+  type PjProjectComputed, type PjProjectDetail, type PjUser,
+  type PjFilter, type PjView, type PjSort, type PjStatTile,
+} from '@/components/projecten/parts'
 
 export default function ProjectenPage() {
-  const { user, naam } = useAuth()
   const router = useRouter()
-  const [projects, setProjects] = useState<Project[]>([])
+  const { user } = useAuth()
+  const [projects, setProjects] = useState<PjProjectComputed[]>([])
+  const [users, setUsers] = useState<PjUser[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [users, setUsers] = useState<Array<{ id: string; naam: string | null; email: string }>>([])
+  const [filter, setFilter] = useState<PjFilter>('alles')
+  const [view, setView] = useState<PjView>('kanban')
+  const [sort, setSort] = useState<PjSort>('deadline')
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       const [projRes, usersRes] = await Promise.all([
         fetch('/api/projecten'),
         fetch('/api/todos/users'),
       ])
-      if (projRes.ok) setProjects(await projRes.json())
+      if (cancelled) return
+      if (projRes.ok) {
+        const raw: PjProjectDetail[] = await projRes.json()
+        setProjects(raw.map(computeProject))
+      }
       if (usersRes.ok) {
         const data = await usersRes.json()
         setUsers(data.users ?? [])
@@ -51,9 +41,19 @@ export default function ProjectenPage() {
       setLoading(false)
     }
     load()
+    return () => { cancelled = true }
   }, [])
 
-  async function createProject() {
+  function open(id: string) {
+    router.push(`/projecten/${id}`)
+  }
+
+  function getOwner(id: string | null) {
+    if (!id) return null
+    return users.find(u => u.id === id) || null
+  }
+
+  async function onAdd() {
     setCreating(true)
     const res = await fetch('/api/projecten', {
       method: 'POST',
@@ -67,128 +67,147 @@ export default function ProjectenPage() {
     setCreating(false)
   }
 
-  function getUserName(id: string | null) {
-    if (!id) return '—'
-    const u = users.find(u => u.id === id)
-    return u?.naam ?? u?.email ?? '—'
+  const counts = useMemo<Record<PjFilter, number>>(() => ({
+    alles: projects.length,
+    actief: projects.filter(p => p.status === 'actief').length,
+    'on hold': projects.filter(p => p.status === 'on hold').length,
+    afgerond: projects.filter(p => p.status === 'afgerond').length,
+  }), [projects])
+
+  const totalActief = counts.actief
+  const weekFocusTotal = projects.reduce((s, p) => s + p.weekFocus, 0)
+  const lateCount = projects.filter(p => p.status === 'actief' && p.health === 'late').length
+
+  const monthStart = useMemo(() => {
+    const d = new Date()
+    d.setDate(1)
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+
+  const doneThisMonth = projects.reduce((s, p) =>
+    s + p.todos.filter(t => t.status === 'afgerond' && t.completed_at && new Date(t.completed_at) >= monthStart).length
+  , 0)
+
+  const monthLabel = new Date().toLocaleDateString('nl-NL', { month: 'long' })
+  const focusProjectCount = projects.filter(p => p.weekFocus > 0).length
+
+  const tiles: PjStatTile[] = [
+    {
+      label: 'Actieve projecten',
+      value: totalActief,
+      sub: `van ${projects.length} totaal`,
+      variant: 'accent',
+    },
+    {
+      label: 'Week-focus taken',
+      value: weekFocusTotal,
+      sub: focusProjectCount === 1 ? 'verdeeld over 1 project' : `verdeeld over ${focusProjectCount} projecten`,
+    },
+    {
+      label: `Afgerond ${monthLabel}`,
+      value: doneThisMonth,
+      sub: 'taken deze maand',
+    },
+    {
+      label: 'Loopt achter',
+      value: lateCount,
+      sub: lateCount === 1 ? 'project over deadline' : 'projecten over deadline',
+      variant: 'warn',
+    },
+  ]
+
+  const filtered = useMemo(() => {
+    let list = projects.slice()
+    if (filter === 'actief') list = list.filter(p => p.status === 'actief')
+    if (filter === 'on hold') list = list.filter(p => p.status === 'on hold')
+    if (filter === 'afgerond') list = list.filter(p => p.status === 'afgerond')
+    if (sort === 'deadline') list.sort((a, b) => {
+      const av = a.target_date ? new Date(a.target_date).getTime() : Number.POSITIVE_INFINITY
+      const bv = b.target_date ? new Date(b.target_date).getTime() : Number.POSITIVE_INFINITY
+      return av - bv
+    })
+    if (sort === 'naam') list.sort((a, b) => a.name.localeCompare(b.name))
+    if (sort === 'voortgang') list.sort((a, b) => {
+      const ap = a.total > 0 ? a.done / a.total : 0
+      const bp = b.total > 0 ? b.done / b.total : 0
+      return bp - ap
+    })
+    return list
+  }, [filter, sort, projects])
+
+  const showArchiveSplit = filter === 'alles'
+  const activeList = showArchiveSplit ? filtered.filter(p => p.status === 'actief') : filtered
+  const archiveList = showArchiveSplit ? filtered.filter(p => p.status !== 'actief') : []
+  const attention = activeList.filter(p => p.health === 'late' || p.health === 'at_risk')
+  const onTrack = activeList.filter(p => !attention.includes(p))
+
+  if (loading) {
+    return (
+      <div className="pj-page">
+        <div className="pj-shell">
+          <div style={{ color: 'var(--pj-fg-subtle)', fontSize: 13 }}>Laden…</div>
+        </div>
+      </div>
+    )
   }
 
-  function getStatusInfo(p: Project) {
-    if (p.status === 'on hold') return { label: 'On hold', color: 'text-blue-600' }
-    if (p.status === 'afgerond') return { label: 'Afgerond', color: 'text-slate-500' }
-    if (!p.target_date) return { label: p.estimatedDate ? `Geschat: ${fmtDate(p.estimatedDate)}` : '', color: 'text-slate-500' }
-    const deadline = new Date(p.target_date)
-    const now = new Date()
-    if (deadline < now && p.done < p.total) return { label: 'Deadline verstreken', color: 'text-red-600' }
-    if (p.estimatedDate && new Date(p.estimatedDate) > deadline) return { label: 'Loopt achter', color: 'text-amber-600' }
-    return { label: 'Op schema', color: 'text-emerald-600' }
+  if (projects.length === 0) {
+    return (
+      <div className="pj-page">
+        <div className="pj-shell">
+          <PjHeader activeCount={0} weekFocus={0} lateCount={0} onAdd={onAdd} creating={creating} />
+          <PjEmpty onAdd={onAdd} />
+        </div>
+      </div>
+    )
   }
-
-  const active = projects.filter(p => p.status === 'actief')
-  const other = projects.filter(p => p.status !== 'actief')
-  const weekFocusTotal = projects.reduce((sum, p) => sum + p.weekFocus, 0)
-
-  if (loading) return <PageLayout title="Projecten"><div className="text-slate-400 text-sm">Laden...</div></PageLayout>
 
   return (
-    <PageLayout title="Projecten" subtitle="Strategisch overzicht van alle projecten">
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center"><Layers size={18} className="text-emerald-500" /></div>
-            <div><div className="text-2xl font-bold text-slate-900">{active.length}</div><div className="text-xs text-slate-500">Actieve projecten</div></div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center"><Pin size={18} className="text-amber-500" /></div>
-            <div><div className="text-2xl font-bold text-slate-900">{weekFocusTotal}</div><div className="text-xs text-slate-500">Focus deze week</div></div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center"><CheckSquare size={18} className="text-blue-500" /></div>
-            <div><div className="text-2xl font-bold text-slate-900">{projects.reduce((s, p) => s + p.done, 0)}</div><div className="text-xs text-slate-500">Taken afgerond</div></div>
-          </div>
-        </div>
-      </div>
+    <div className="pj-page">
+      <div className="pj-shell">
+        <PjHeader activeCount={totalActief} weekFocus={weekFocusTotal} lateCount={lateCount} onAdd={onAdd} creating={creating} />
+        <PjStats tiles={tiles} />
+        <PjFilters
+          filter={filter} onFilter={setFilter}
+          view={view} onView={setView}
+          sort={sort} onSort={setSort}
+          counts={counts}
+        />
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-slate-700">Actieve projecten</h2>
-        <button onClick={createProject} disabled={creating}
-          className="bg-[#004B46] text-[#FFFAEF] font-medium px-4 py-2.5 rounded-xl hover:bg-[#0A6B63] flex items-center gap-2 text-sm cursor-pointer disabled:opacity-50">
-          {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Project toevoegen
-        </button>
-      </div>
-
-      {/* Project cards */}
-      <div className="space-y-4">
-        {active.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-            <Layers size={32} className="mx-auto mb-2 text-slate-300" />
-            <p className="text-slate-400 text-sm">Nog geen actieve projecten</p>
-          </div>
+        {showArchiveSplit && attention.length > 0 && (
+          <PjAttention projects={attention} getOwner={getOwner} onOpen={open} />
         )}
-        {active.map(p => {
-          const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
-          const statusInfo = getStatusInfo(p)
-          return (
-            <Link key={p.id} href={`/projecten/${p.id}`}
-              className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all"
-              style={{ borderLeftWidth: 4, borderLeftColor: p.color }}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[p.status]}`} />
-                    <h3 className="text-base font-bold text-[#004B46]">{p.name}</h3>
-                  </div>
-                  {p.description && <p className="text-sm text-slate-500 mt-0.5">{p.description}</p>}
-                </div>
-                <span className="text-xs text-slate-400 whitespace-nowrap">{getUserName(p.owner_id)}</span>
-              </div>
 
-              {p.currentPhase && <p className="text-xs text-slate-500 mb-2">Huidige fase: <span className="font-medium text-[#004B46]">{p.currentPhase}</span></p>}
-
-              {/* Voortgangsbalk */}
-              <div className="flex items-center gap-3 mb-2">
-                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: p.color }} />
-                </div>
-                <span className="text-xs font-semibold text-slate-600 tabular-nums w-10 text-right">{pct}%</span>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span>{p.done} afgerond · {p.total - p.done} open</span>
-                {p.weekFocus > 0 && <span className="text-amber-600">{p.weekFocus} deze week</span>}
-                {p.target_date && <span>Deadline: {fmtDate(p.target_date)}</span>}
-                {statusInfo.label && <span className={`font-medium ${statusInfo.color}`}>{statusInfo.label}</span>}
-              </div>
-            </Link>
-          )
-        })}
-
-        {/* Andere projecten */}
-        {other.length > 0 && (
+        {showArchiveSplit ? (
           <>
-            <h2 className="text-sm font-semibold text-slate-500 mt-6">Overige projecten</h2>
-            {other.map(p => (
-              <Link key={p.id} href={`/projecten/${p.id}`}
-                className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-4 opacity-60 hover:opacity-80 transition-all">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[p.status]}`} />
-                  <span className="text-sm font-medium text-slate-700">{p.name}</span>
-                  <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{p.status}</span>
-                </div>
-              </Link>
-            ))}
+            <div className="pj-section-head">
+              <h2 className="pj-section-title">Op koers</h2>
+              <span className="pj-section-meta">{onTrack.length} projecten</span>
+            </div>
+            {view === 'kanban' ? (
+              <div className="pj-grid">
+                {onTrack.map(p => <PjProjectCard key={p.id} p={p} owner={getOwner(p.owner_id)} onOpen={open} />)}
+              </div>
+            ) : (
+              <div className="pj-grid pj-grid--compact">
+                {onTrack.map(p => <PjProjectRow key={p.id} p={p} owner={getOwner(p.owner_id)} onOpen={open} />)}
+              </div>
+            )}
+            <PjArchive projects={archiveList} getOwner={getOwner} onOpen={open} />
           </>
+        ) : (
+          view === 'kanban' ? (
+            <div className="pj-grid">
+              {filtered.map(p => <PjProjectCard key={p.id} p={p} owner={getOwner(p.owner_id)} onOpen={open} />)}
+            </div>
+          ) : (
+            <div className="pj-grid pj-grid--compact">
+              {filtered.map(p => <PjProjectRow key={p.id} p={p} owner={getOwner(p.owner_id)} onOpen={open} />)}
+            </div>
+          )
         )}
       </div>
-    </PageLayout>
+    </div>
   )
-}
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
 }

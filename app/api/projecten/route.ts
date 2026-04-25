@@ -28,14 +28,12 @@ export async function GET(request: Request) {
   const { data: projects, error } = await supabase.from('projects').select(PROJECT_COLUMNS).order('sort_order')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Haal todos counts per project
   const projectIds = (projects ?? []).map(p => p.id)
-  const { data: allTodos } = await supabase
+  const todosFull = await supabase
     .from('todos')
-    .select('id, project_id, phase_id, status, completed_at, is_week_focus')
+    .select('id, project_id, phase_id, title, status, completed_at, is_week_focus, assigned_to, due_date, created_at')
     .in('project_id', projectIds.length > 0 ? projectIds : ['none'])
 
-  // Haal fases op
   const { data: allPhases } = await supabase
     .from('project_phases')
     .select('id, project_id, name, sort_order')
@@ -43,13 +41,12 @@ export async function GET(request: Request) {
     .order('sort_order')
 
   const enriched = (projects ?? []).map(p => {
-    const todos = (allTodos ?? []).filter(t => t.project_id === p.id)
+    const todos = (todosFull.data ?? []).filter(t => t.project_id === p.id)
     const phases = (allPhases ?? []).filter(ph => ph.project_id === p.id)
     const done = todos.filter(t => t.status === 'afgerond').length
     const total = todos.length
     const weekFocus = todos.filter(t => t.is_week_focus && t.status === 'open').length
 
-    // Huidige fase: eerste fase die niet 100% af is
     let currentPhase = null
     for (const phase of phases) {
       const phaseTodos = todos.filter(t => t.phase_id === phase.id)
@@ -60,7 +57,6 @@ export async function GET(request: Request) {
       }
     }
 
-    // Velocity: afgeronde todos in laatste 14 dagen
     const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
     const recentDone = todos.filter(t => t.status === 'afgerond' && t.completed_at && t.completed_at > twoWeeksAgo).length
     const velocityPerWeek = recentDone / 2
@@ -68,7 +64,7 @@ export async function GET(request: Request) {
     const estimatedWeeks = velocityPerWeek > 0 ? remaining / velocityPerWeek : null
     const estimatedDate = estimatedWeeks ? new Date(Date.now() + estimatedWeeks * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null
 
-    return { ...p, done, total, weekFocus, currentPhase, estimatedDate, velocityPerWeek }
+    return { ...p, phases, todos, done, total, weekFocus, currentPhase, estimatedDate, velocityPerWeek }
   })
 
   return NextResponse.json(enriched)
