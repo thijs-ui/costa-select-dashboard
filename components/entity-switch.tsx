@@ -5,6 +5,7 @@ import { Entity, ENTITY_LABELS } from '@/lib/entity'
 const SUBLABELS: Record<Entity, string> = {
   cbn: 'Costa Blanca Noord',
   overig: 'CBZ, CDS, CD, CB & Valencia',
+  beide: 'Beide entiteiten',
 }
 
 interface Props {

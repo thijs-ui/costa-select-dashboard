@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 
-export type Entity = 'cbn' | 'overig'
+export type Entity = 'cbn' | 'overig' | 'beide'
 
 export const ENTITY_LABELS: Record<Entity, string> = {
   cbn: 'CS',
   overig: 'CSV',
+  beide: 'Beide',
 }
 
 export function isCBNRegio(regio: string | null | undefined): boolean {
@@ -14,7 +15,16 @@ export function isCBNRegio(regio: string | null | undefined): boolean {
 }
 
 export function matchesEntity(regio: string | null | undefined, entity: Entity): boolean {
+  if (entity === 'beide') return true
   return entity === 'cbn' ? isCBNRegio(regio) : !isCBNRegio(regio)
+}
+
+// Voor kosten/settings rows die een expliciete entiteit-kolom hebben.
+// 'beide' matcht alles.
+export function matchesEntiteit(entiteit: string | undefined | null, entity: Entity): boolean {
+  if (entity === 'beide') return true
+  const value = (entiteit ?? 'overig') as string
+  return value === entity
 }
 
 export function useEntity(): { entity: Entity; setEntity: (e: Entity) => void } {
@@ -22,7 +32,8 @@ export function useEntity(): { entity: Entity; setEntity: (e: Entity) => void } 
 
   useEffect(() => {
     const stored = localStorage.getItem('cs_entity') as Entity | null
-    if (stored === 'cbn' || stored === 'overig') setEntityState(stored)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (stored === 'cbn' || stored === 'overig' || stored === 'beide') setEntityState(stored)
   }, [])
 
   const setEntity = useCallback((e: Entity) => {
