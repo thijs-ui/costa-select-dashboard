@@ -105,6 +105,7 @@ const SECTIONS: NavSection[] = [
         children: [
           { href: '/dashboard/aannames', label: 'Aannames' },
           { href: '/dashboard/pipedrive', label: 'Pipedrive' },
+          { href: '/dashboard/woningbot-logs', label: 'Woningbot logs' },
         ],
       },
     ],
