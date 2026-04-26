@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/permissions'
 import { checkRateLimit } from '@/lib/rate-limit'
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 const WONINGBOT_API_URL = process.env.WONINGBOT_API_URL || 'http://localhost:3001'
 const WONINGBOT_API_KEY = process.env.WONINGBOT_API_KEY || ''
