@@ -1624,6 +1624,50 @@ aside.sidebar:not(.collapsed) .sb-brand-inner:hover img { transform: rotate(20de
   line-height: 1.4;
 }
 
+/* Group expansion (parent → children in fin section) */
+.sb-nav a.is-group-active {
+  background: rgba(7,42,36,0.28);
+  color: var(--marble);
+}
+.sb-nav a.is-group-active .sb-nav-icon { color: rgba(245,175,64,0.7); }
+.sb-nav-chev {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: transparent;
+  border: 0;
+  color: rgba(255,250,239,0.5);
+  cursor: pointer;
+  transition: all .15s;
+  padding: 0;
+}
+.sb-nav-chev svg { width: 13px; height: 13px; stroke-width: 2; }
+.sb-nav-chev:hover { background: rgba(255,250,239,0.1); color: var(--marble); }
+.sb-nav-chev.is-open svg { transform: rotate(0deg); }
+.sb-nav-chev.is-closed svg { transform: rotate(-90deg); }
+.sb-nav a.sb-nav-child {
+  padding-left: 38px;
+  font-size: 12px;
+  color: rgba(255,250,239,0.55);
+  min-height: 26px;
+}
+.sb-nav a.sb-nav-child:hover {
+  background: rgba(255,250,239,0.04);
+  color: var(--marble);
+}
+.sb-nav a.sb-nav-child.active {
+  color: var(--marble);
+  font-weight: 600;
+  background: rgba(7,42,36,0.5);
+}
+aside.sidebar.collapsed .sb-nav-chev,
+aside.sidebar.collapsed .sb-nav a.sb-nav-child { display: none; }
+
 /* User block */
 .sb-user {
   flex-shrink: 0;

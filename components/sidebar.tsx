@@ -10,14 +10,12 @@ import {
   BookOpen,
   Building2,
   Calculator,
-  CalendarDays,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   Compass,
-  CreditCard,
   FileText,
   GraduationCap,
   Handshake,
@@ -31,17 +29,21 @@ import {
   Route,
   Settings,
   TrendingUp,
-  Users,
   X,
-  Zap,
   type LucideIcon,
 } from 'lucide-react'
+
+interface NavChild {
+  href: string
+  label: string
+}
 
 interface NavItem {
   href: string
   label: string
   icon: LucideIcon
   badgeKey?: 'todos'
+  children?: NavChild[]
 }
 
 interface NavSection {
@@ -74,17 +76,37 @@ const SECTIONS: NavSection[] = [
     adminOnly: true,
     items: [
       { href: '/dashboard', label: 'Overzicht', icon: LayoutDashboard },
-      { href: '/dashboard/regios', label: "Regio's & Funnel", icon: MapPin },
-      { href: '/dashboard/makelaars', label: 'Consultants', icon: Users },
-      { href: '/dashboard/partners', label: 'Partners', icon: Building2 },
-      { href: '/dashboard/deals', label: 'Sales', icon: Handshake },
-      { href: '/dashboard/afspraken', label: 'Afspraken', icon: CalendarDays },
-      { href: '/dashboard/commissies', label: 'Commissies', icon: CreditCard },
-      { href: '/dashboard/pl', label: 'P&L', icon: TrendingUp },
-      { href: '/dashboard/maandkosten', label: 'Maandkosten', icon: Receipt },
-      { href: '/dashboard/bonnen', label: 'Bonnen & facturen', icon: FileText },
-      { href: '/dashboard/pipedrive', label: 'Pipedrive', icon: Zap },
-      { href: '/dashboard/aannames', label: 'Aannames', icon: Settings },
+      {
+        href: '/dashboard/deals', label: 'Sales', icon: Handshake,
+        children: [
+          { href: '/dashboard/deals', label: 'Deals' },
+          { href: '/dashboard/afspraken', label: 'Afspraken' },
+        ],
+      },
+      {
+        href: '/dashboard/regios', label: 'Performance', icon: TrendingUp,
+        children: [
+          { href: '/dashboard/regios', label: "Regio's & Funnel" },
+          { href: '/dashboard/makelaars', label: 'Consultants' },
+          { href: '/dashboard/partners', label: 'Partners' },
+          { href: '/dashboard/commissies', label: 'Commissies' },
+        ],
+      },
+      {
+        href: '/dashboard/pl', label: 'Boekhouding', icon: Receipt,
+        children: [
+          { href: '/dashboard/pl', label: 'P&L' },
+          { href: '/dashboard/maandkosten', label: 'Maandkosten' },
+          { href: '/dashboard/bonnen', label: 'Bonnen & facturen' },
+        ],
+      },
+      {
+        href: '/dashboard/aannames', label: 'Setup', icon: Settings,
+        children: [
+          { href: '/dashboard/aannames', label: 'Aannames' },
+          { href: '/dashboard/pipedrive', label: 'Pipedrive' },
+        ],
+      },
     ],
   },
   {
@@ -108,6 +130,7 @@ const SECTIONS: NavSection[] = [
 ]
 
 type OpenSections = Record<string, boolean>
+type GroupExpanded = Record<string, boolean>
 
 function readOpenSections(): OpenSections {
   if (typeof window === 'undefined') return { menu: true, fin: true, mkt: true, ops: true }
@@ -117,6 +140,17 @@ function readOpenSections(): OpenSections {
     return JSON.parse(raw) as OpenSections
   } catch {
     return { menu: true, fin: true, mkt: true, ops: true }
+  }
+}
+
+function readGroupExpanded(): GroupExpanded {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem('cs_sidebar_groups')
+    if (!raw) return {}
+    return JSON.parse(raw) as GroupExpanded
+  } catch {
+    return {}
   }
 }
 
@@ -153,6 +187,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     mkt: true,
     ops: true,
   })
+  const [groupExpanded, setGroupExpanded] = useState<GroupExpanded>({})
   const [todoCount, setTodoCount] = useState(0)
   const [mounted, setMounted] = useState(false)
 
@@ -161,6 +196,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCollapsed(readCollapsed())
     setOpenSections(readOpenSections())
+    setGroupExpanded(readGroupExpanded())
     setMounted(true)
   }, [])
 
@@ -171,6 +207,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   useEffect(() => {
     if (mounted) localStorage.setItem('cs_sidebar_sections', JSON.stringify(openSections))
   }, [openSections, mounted])
+
+  useEffect(() => {
+    if (mounted) localStorage.setItem('cs_sidebar_groups', JSON.stringify(groupExpanded))
+  }, [groupExpanded, mounted])
 
   // Todo count polling
   useEffect(() => {
@@ -192,6 +232,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const toggleSection = (key: string) =>
     setOpenSections(s => ({ ...s, [key]: !s[key] }))
 
+  const toggleGroup = (key: string) =>
+    setGroupExpanded(g => ({ ...g, [key]: !g[key] }))
+
   const isActive = (href: string): boolean => {
     if (pathname === href) return true
     // Special-case: /dashboard should NOT match /dashboard/anything
@@ -201,6 +244,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       return /^\/marketing\/(advertenties|email|social-media|brochures|video|website-blog)(\/|$)/.test(pathname)
     }
     return pathname.startsWith(href + '/')
+  }
+
+  const isGroupActive = (item: NavItem): boolean => {
+    if (!item.children) return false
+    if (isActive(item.href)) return true
+    return item.children.some(c => isActive(c.href))
+  }
+
+  const isGroupOpen = (item: NavItem): boolean => {
+    if (!item.children) return false
+    // Auto-expand if this group contains the active page
+    if (isGroupActive(item)) return true
+    return groupExpanded[item.href] ?? false
   }
 
   const visibleSections = SECTIONS.filter(s => !s.adminOnly || showAdmin)
@@ -276,18 +332,27 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 )}
                 {(collapsed || open) && (
                   <nav className="sb-nav" aria-label={section.label}>
-                    {section.items.map(item => {
-                      const active = isActive(item.href)
+                    {section.items.flatMap(item => {
                       const Icon = item.icon
+                      const exactActive = isActive(item.href)
+                      const groupActive = isGroupActive(item)
+                      const hasChildren = !!item.children && item.children.length > 0
+                      const showAsGroup = hasChildren && !collapsed
+                      const groupOpen = showAsGroup && isGroupOpen(item)
                       const badge =
                         item.badgeKey === 'todos' && todoCount > 0 ? todoCount : null
-                      return (
+
+                      const parentClass = exactActive
+                        ? 'active'
+                        : (groupActive ? 'is-group-active' : '')
+
+                      const parentEl = (
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={active ? 'active' : ''}
+                          className={parentClass}
                           title={collapsed ? item.label : undefined}
-                          aria-current={active ? 'page' : undefined}
+                          aria-current={exactActive ? 'page' : undefined}
                           onClick={onClose}
                         >
                           <span className="sb-nav-icon">
@@ -295,9 +360,39 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           </span>
                           <span className="sb-nav-label">{item.label}</span>
                           {badge != null && <span className="sb-nav-badge">{badge}</span>}
-                          {active && <span className="sb-nav-dot" aria-hidden="true" />}
+                          {showAsGroup && (
+                            <button
+                              type="button"
+                              className={`sb-nav-chev ${groupOpen ? 'is-open' : 'is-closed'}`}
+                              onClick={e => { e.preventDefault(); e.stopPropagation(); toggleGroup(item.href) }}
+                              aria-label={groupOpen ? `Klap ${item.label} in` : `Klap ${item.label} uit`}
+                              aria-expanded={groupOpen}
+                            >
+                              <ChevronDown />
+                            </button>
+                          )}
+                          {exactActive && <span className="sb-nav-dot" aria-hidden="true" />}
                         </Link>
                       )
+
+                      if (!showAsGroup || !groupOpen) return [parentEl]
+
+                      const childEls = item.children!.map(child => {
+                        const childActive = pathname === child.href
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className={`sb-nav-child${childActive ? ' active' : ''}`}
+                            aria-current={childActive ? 'page' : undefined}
+                            onClick={onClose}
+                          >
+                            <span className="sb-nav-label">{child.label}</span>
+                            {childActive && <span className="sb-nav-dot" aria-hidden="true" />}
+                          </Link>
+                        )
+                      })
+                      return [parentEl, ...childEls]
                     })}
                   </nav>
                 )}
