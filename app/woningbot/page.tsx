@@ -218,9 +218,22 @@ export default function WoningbotPage() {
       const data = await res.json()
       if (data.sessionId) setSessionId(data.sessionId)
 
+      let content: string
+      if (data.response) {
+        content = data.response
+      } else if (res.status === 429) {
+        content = 'Even rustig — je hebt te veel zoekopdrachten gedaan. Wacht een minuutje en probeer opnieuw.'
+      } else if (data.error && !res.ok) {
+        content = `De woningbot kon je vraag niet verwerken: ${data.error}. Probeer eenvoudiger te formuleren, bv. "appartement Marbella 600k 3 slaapkamers".`
+      } else if (!res.ok) {
+        content = 'Er ging iets mis op de server. Probeer eenvoudiger te formuleren, bv. "appartement Marbella 600k 3 slaapkamers" (gebruik geen € of M).'
+      } else {
+        content = 'Geen antwoord ontvangen. Probeer je zoekopdracht te herformuleren.'
+      }
+
       const botMsg: ChatMessage = {
         role: 'bot',
-        content: data.response || 'Geen antwoord ontvangen.',
+        content,
         properties: data.properties,
         stats: data.stats,
       }
