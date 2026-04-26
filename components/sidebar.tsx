@@ -346,9 +346,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         ? 'active'
                         : (groupActive ? 'is-group-active' : '')
 
-                      const parentEl = (
+                      const linkEl = (
                         <Link
-                          key={item.href}
                           href={item.href}
                           className={parentClass}
                           title={collapsed ? item.label : undefined}
@@ -360,19 +359,27 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                           </span>
                           <span className="sb-nav-label">{item.label}</span>
                           {badge != null && <span className="sb-nav-badge">{badge}</span>}
-                          {showAsGroup && (
-                            <button
-                              type="button"
-                              className={`sb-nav-chev ${groupOpen ? 'is-open' : 'is-closed'}`}
-                              onClick={e => { e.preventDefault(); e.stopPropagation(); toggleGroup(item.href) }}
-                              aria-label={groupOpen ? `Klap ${item.label} in` : `Klap ${item.label} uit`}
-                              aria-expanded={groupOpen}
-                            >
-                              <ChevronDown />
-                            </button>
-                          )}
                           {exactActive && <span className="sb-nav-dot" aria-hidden="true" />}
                         </Link>
+                      )
+
+                      const parentEl = showAsGroup ? (
+                        <div key={item.href} className="sb-nav-grouprow">
+                          {linkEl}
+                          <button
+                            type="button"
+                            className={`sb-nav-chev ${groupOpen ? 'is-open' : 'is-closed'}`}
+                            onClick={() => toggleGroup(item.href)}
+                            aria-label={groupOpen ? `Klap ${item.label} in` : `Klap ${item.label} uit`}
+                            aria-expanded={groupOpen}
+                          >
+                            <ChevronDown />
+                          </button>
+                        </div>
+                      ) : (
+                        <div key={item.href} className="sb-nav-grouprow sb-nav-grouprow--single">
+                          {linkEl}
+                        </div>
                       )
 
                       if (!showAsGroup || !groupOpen) return [parentEl]

@@ -1630,15 +1630,20 @@ aside.sidebar:not(.collapsed) .sb-brand-inner:hover img { transform: rotate(20de
   color: var(--marble);
 }
 .sb-nav a.is-group-active .sb-nav-icon { color: rgba(245,175,64,0.7); }
+.sb-nav-grouprow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sb-nav-grouprow > a { flex: 1; min-width: 0; }
 .sb-nav-chev {
-  margin-left: auto;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   background: transparent;
   border: 0;
   color: rgba(255,250,239,0.5);
