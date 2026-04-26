@@ -88,9 +88,12 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     console.error('PDF generation failed:', err)
-    return new Response(JSON.stringify({ error: 'PDF generatie mislukt' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    // TEMPORARY DEBUG (verwijder zodra root cause gevonden): geef stack mee
+    const message = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
+    return new Response(
+      JSON.stringify({ error: 'PDF generatie mislukt', detail: message, stack }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 }
