@@ -2744,7 +2744,7 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
 .fin-spark { height: 38px; margin-top: 6px; display: block; }
 
 /* Hero KPI variant — deepsea card met sun-glow, span-2 cols */
-.fin-kpi.hero {
+.fin-kpi--hero {
   background: var(--deepsea);
   background-image:
     radial-gradient(ellipse 70% 90% at 100% 110%, rgba(245,175,64,0.16) 0%, transparent 60%);
@@ -2753,11 +2753,11 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
   grid-column: span 2;
   padding: 22px 26px;
 }
-.fin-kpi.hero::before { display: none; }
-.fin-kpi.hero .fin-kpi-label { color: var(--sun); }
-.fin-kpi.hero .fin-kpi-value { font-size: 38px; color: var(--marble); }
-.fin-kpi.hero .fin-kpi-sub { color: rgba(255,250,239,0.7); }
-.fin-kpi.hero:hover {
+.fin-kpi--hero::before { display: none; }
+.fin-kpi--hero .fin-kpi-label { color: var(--sun); }
+.fin-kpi--hero .fin-kpi-value { font-size: 38px; color: var(--marble); }
+.fin-kpi--hero .fin-kpi-sub { color: rgba(255,250,239,0.7); }
+.fin-kpi--hero:hover {
   border-color: var(--deepsea-deep);
   box-shadow: 0 14px 32px rgba(7,42,36,0.18);
 }
@@ -2775,9 +2775,9 @@ aside.sidebar.collapsed .sb-user-logout { display: none; }
 .fin-delta.neg { background: rgba(194,64,64,0.13); color: var(--negative-text); }
 .fin-delta.neu { background: rgba(0,75,70,0.08); color: var(--fg-muted); }
 .fin-delta svg { width: 11px; height: 11px; }
-.fin-kpi.hero .fin-delta { background: rgba(255,250,239,0.14); color: var(--marble); }
-.fin-kpi.hero .fin-delta.pos { background: rgba(16,185,129,0.28); color: #6fefcb; }
-.fin-kpi.hero .fin-delta.neg { background: rgba(194,64,64,0.28); color: #ffb1b1; }
+.fin-kpi--hero .fin-delta { background: rgba(255,250,239,0.14); color: var(--marble); }
+.fin-kpi--hero .fin-delta.pos { background: rgba(16,185,129,0.28); color: #6fefcb; }
+.fin-kpi--hero .fin-delta.neg { background: rgba(194,64,64,0.28); color: #ffb1b1; }
 
 /* Section card */
 .fin-section {

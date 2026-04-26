@@ -212,7 +212,7 @@ export function FinKpiHero({
   deltaPositive?: boolean
 }) {
   return (
-    <div className="fin-kpi hero">
+    <div className="fin-kpi fin-kpi--hero">
       <span className="fin-kpi-label">{label}</span>
       <span className="fin-kpi-value">{value}</span>
       {spark && spark.length > 1 && (
