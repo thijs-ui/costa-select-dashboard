@@ -388,7 +388,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         const childActive = pathname === child.href
                         return (
                           <Link
-                            key={child.href}
+                            key={`${item.href}::${child.href}`}
                             href={child.href}
                             className={`sb-nav-child${childActive ? ' active' : ''}`}
                             aria-current={childActive ? 'page' : undefined}
