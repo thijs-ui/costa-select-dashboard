@@ -26,6 +26,7 @@ import {
   LogOut,
   MapPin,
   MessageSquare,
+  PenSquare,
   Receipt,
   Route,
   Settings,
@@ -91,12 +92,7 @@ const SECTIONS: NavSection[] = [
     label: 'Marketing',
     adminOnly: true,
     items: [
-      { href: '/marketing/social-media', label: 'Social Media', icon: MessageSquare },
-      { href: '/marketing/advertenties', label: 'Advertenties', icon: Zap },
-      { href: '/marketing/website-blog', label: 'Website & Blog', icon: FileText },
-      { href: '/marketing/email', label: 'Email', icon: Receipt },
-      { href: '/marketing/video', label: 'Video', icon: GraduationCap },
-      { href: '/marketing/brochures', label: 'Brochures', icon: BookOpen },
+      { href: '/marketing/advertenties', label: 'Copywriting', icon: PenSquare },
       { href: '/marketing/bibliotheek', label: 'Bibliotheek', icon: ClipboardList },
     ],
   },
@@ -200,6 +196,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (pathname === href) return true
     // Special-case: /dashboard should NOT match /dashboard/anything
     if (href === '/dashboard') return pathname === '/dashboard'
+    // Special-case: Copywriting (advertenties) should match all 6 form routes
+    if (href === '/marketing/advertenties') {
+      return /^\/marketing\/(advertenties|email|social-media|brochures|video|website-blog)(\/|$)/.test(pathname)
+    }
     return pathname.startsWith(href + '/')
   }
 
