@@ -42,6 +42,10 @@ interface Property {
   source: string
   motivation: string
   score: number | null
+  reasons_for?: string[]
+  reasons_against?: string[]
+  highlights?: string[]
+  also_on?: string[]
 }
 
 interface ChatStats {
@@ -1200,6 +1204,86 @@ function PropertyCard({
             >
               {prop.motivation}
             </p>
+          </div>
+        )}
+
+        {/* Sprint 1: structured reasons */}
+        {(prop.reasons_for?.length || prop.reasons_against?.length) ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: prop.reasons_against?.length ? '1fr 1fr' : '1fr',
+              gap: 12,
+              marginTop: 4,
+              paddingTop: 12,
+              borderTop: '1px solid rgba(0,75,70,0.08)',
+            }}
+          >
+            {!!prop.reasons_for?.length && (
+              <div>
+                <div
+                  className="font-body"
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', color: '#076B5C', marginBottom: 6,
+                  }}
+                >
+                  Sterke punten
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 14, listStyle: 'disc' }}>
+                  {prop.reasons_for.map((r, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        fontSize: 12, lineHeight: 1.5, color: '#5F7472',
+                        marginBottom: 3,
+                      }}
+                    >
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!!prop.reasons_against?.length && (
+              <div>
+                <div
+                  className="font-body"
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', color: '#b03434', marginBottom: 6,
+                  }}
+                >
+                  Aandachtspunten
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 14, listStyle: 'disc' }}>
+                  {prop.reasons_against.map((r, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        fontSize: 12, lineHeight: 1.5, color: '#5F7472',
+                        marginBottom: 3,
+                      }}
+                    >
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Cross-portal — als woning ook op andere portals staat */}
+        {!!prop.also_on?.length && (
+          <div
+            style={{
+              fontSize: 11, color: '#7A8C8B',
+              marginTop: 8, paddingTop: 8,
+              borderTop: '1px dashed rgba(0,75,70,0.10)',
+            }}
+          >
+            Ook gevonden op: <strong>{prop.also_on.join(', ')}</strong>
           </div>
         )}
       </div>
