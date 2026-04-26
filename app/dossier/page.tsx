@@ -161,7 +161,9 @@ function sourceLabel(s: string | null | undefined): string {
 // ───────── Page ─────────
 export default function DossierPage() {
   const [tab, setTab] = useState<Tab>('new')
-  const [brochure, setBrochure] = useState<BrochureType>('pitch')
+  // Pitch is tijdelijk uitgeschakeld in de creatie-flow — alleen presentatie.
+  // History toont nog wel oude pitches (filter onder Geschiedenis-tab).
+  const [brochure] = useState<BrochureType>('presentatie')
   const [mode, setMode] = useState<InputMode>('url')
   const [urlValue, setUrlValue] = useState('')
   const [manualForm, setManualForm] = useState<ManualForm>(EMPTY_MANUAL)
@@ -440,8 +442,6 @@ export default function DossierPage() {
           {tab === 'new' ? (
             <>
               <ConfigCard
-                brochure={brochure}
-                onBrochure={setBrochure}
                 mode={mode}
                 onMode={setMode}
                 urlValue={urlValue}
@@ -619,8 +619,6 @@ function TabButton({
 
 // ═══════════ CONFIG CARD ═══════════
 function ConfigCard({
-  brochure,
-  onBrochure,
   mode,
   onMode,
   urlValue,
@@ -630,8 +628,6 @@ function ConfigCard({
   onGenerate,
   busy,
 }: {
-  brochure: BrochureType
-  onBrochure: (b: BrochureType) => void
   mode: InputMode
   onMode: (m: InputMode) => void
   urlValue: string
@@ -645,25 +641,7 @@ function ConfigCard({
 
   return (
     <Card>
-      <ConfigLabel>Stap 1 · Type dossier</ConfigLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12, marginBottom: 18 }}>
-        <ModeCard
-          icon={<Eye size={18} strokeWidth={1.8} />}
-          title="Presenteren"
-          desc="Feitelijke woningpresentatie — geen mening, puur informatief."
-          selected={brochure === 'presentatie'}
-          onClick={() => onBrochure('presentatie')}
-        />
-        <ModeCard
-          icon={<Megaphone size={18} strokeWidth={1.8} />}
-          title="Pitchen"
-          desc="Met advies, voordelen, nadelen en buurtcontext van Costa Select."
-          selected={brochure === 'pitch'}
-          onClick={() => onBrochure('pitch')}
-        />
-      </div>
-
-      <ConfigLabel>Stap 2 · Woning-input</ConfigLabel>
+      <ConfigLabel>Woning-input</ConfigLabel>
       <div
         className="inline-flex items-center"
         style={{
@@ -783,17 +761,10 @@ function ConfigCard({
         style={{ gap: 12, marginTop: 18, flexWrap: 'wrap' }}
       >
         <DsButton variant="primary" disabled={!canGenerate} onClick={onGenerate}>
-          {brochure === 'pitch' ? (
-            <Megaphone size={14} strokeWidth={2} />
-          ) : (
-            <Eye size={14} strokeWidth={2} />
-          )}{' '}
-          {brochure === 'pitch' ? 'Pitch genereren' : 'Presentatie genereren'}
+          <Eye size={14} strokeWidth={2} /> Presentatie genereren
         </DsButton>
         <span className="font-body" style={{ fontSize: 12, color: '#7A8C8B' }}>
-          {brochure === 'pitch'
-            ? 'Claude Sonnet 4 · scrape + kennisbank · 30–60 s'
-            : 'Scrape + kennisbank · 10–30 s'}
+          Scrape + kennisbank · 10–30 s
         </span>
       </div>
     </Card>
@@ -832,65 +803,6 @@ function InputToggleBtn({
       }}
     >
       {children}
-    </button>
-  )
-}
-
-function ModeCard({
-  icon,
-  title,
-  desc,
-  selected,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc: string
-  selected: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left cursor-pointer transition-all relative"
-      style={{
-        padding: '18px 20px',
-        background: selected ? '#E6F0EF' : '#FFFFFF',
-        border: selected ? '1.5px solid #004B46' : '1.5px solid rgba(0,75,70,0.14)',
-        borderRadius: 12,
-        boxShadow: selected ? '0 0 0 3px rgba(0,75,70,0.08)' : 'none',
-      }}
-      onMouseEnter={e => {
-        if (!selected) e.currentTarget.style.borderColor = 'rgba(0,75,70,0.3)'
-      }}
-      onMouseLeave={e => {
-        if (!selected) e.currentTarget.style.borderColor = 'rgba(0,75,70,0.14)'
-      }}
-    >
-      <div
-        className="flex items-center justify-center"
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: selected ? '#004B46' : '#FEF6E4',
-          color: selected ? '#F5AF40' : '#D4921A',
-          marginBottom: 10,
-          border: selected ? '1px solid #004B46' : '1px solid transparent',
-        }}
-      >
-        {icon}
-      </div>
-      <div
-        className="font-heading font-bold text-deepsea"
-        style={{ fontSize: 15, letterSpacing: '-0.005em', marginBottom: 4 }}
-      >
-        {title}
-      </div>
-      <div className="font-body" style={{ fontSize: 12, color: '#5F7472', lineHeight: 1.4 }}>
-        {desc}
-      </div>
     </button>
   )
 }
