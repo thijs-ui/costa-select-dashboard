@@ -123,11 +123,9 @@ export default function HomePage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    async function load() {
-      const todayIso = new Date().toISOString().split('T')[0]
+    const loadData = async () => {
       try {
+        const todayIso = new Date().toISOString().split('T')[0]
         const results = await Promise.allSettled([
           supabase
             .from('todos')
@@ -148,7 +146,7 @@ export default function HomePage() {
             .order('trip_date', { ascending: true })
             .limit(1),
         ])
-        if (cancelled) return
+
         const [todosRes, dossiersRes, tripsRes] = results
         const todosData = todosRes.status === 'fulfilled' ? (todosRes.value.data ?? []) : []
         const dossiersData = dossiersRes.status === 'fulfilled' ? (dossiersRes.value.data ?? []) : []
@@ -156,15 +154,16 @@ export default function HomePage() {
         setTodos(todosData as TodoRow[])
         setDossiers(dossiersData as DossierRow[])
         setNextTrip((tripsData as TripRow[])[0] ?? null)
+      } catch (error) {
+        console.error('Homepage load error:', error)
       } finally {
         setDataLoading(false)
       }
     }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [user, supabase])
+
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (loading || dataLoading) {
     return (
