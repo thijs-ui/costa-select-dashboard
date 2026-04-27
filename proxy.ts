@@ -93,7 +93,7 @@ export async function proxy(request: NextRequest) {
   return response
 }
 
-export const proxyConfig = {
+export const config = {
   matcher: [
     // Alles behalve Next.js static assets en bekende publieke bestanden.
     // /login en /api/auth worden binnen de functie doorgelaten.

@@ -127,32 +127,38 @@ export default function HomePage() {
     let cancelled = false
     async function load() {
       const todayIso = new Date().toISOString().split('T')[0]
-      const [todosRes, dossiersRes, tripsRes] = await Promise.all([
-        supabase
-          .from('todos')
-          .select('id, description, deadline, status, created_by, created_at')
-          .eq('status', 'open')
-          .eq('assigned_to', user!.id)
-          .order('deadline', { ascending: true, nullsFirst: false })
-          .limit(8),
-        supabase
-          .from('dossier_history')
-          .select('id, adres, regio, vraagprijs, created_at')
-          .order('created_at', { ascending: false })
-          .limit(5),
-        supabase
-          .from('viewing_trips')
-          .select('id, client_name, trip_date, start_time, status, viewing_stops(id)')
-          .gte('trip_date', todayIso)
-          .order('trip_date', { ascending: true })
-          .limit(1),
-      ])
-      if (cancelled) return
-      setTodos((todosRes.data ?? []) as TodoRow[])
-      setDossiers((dossiersRes.data ?? []) as DossierRow[])
-      const trips = (tripsRes.data ?? []) as TripRow[]
-      setNextTrip(trips[0] ?? null)
-      setDataLoading(false)
+      try {
+        const results = await Promise.allSettled([
+          supabase
+            .from('todos')
+            .select('id, description, deadline, status, created_by, created_at')
+            .eq('status', 'open')
+            .eq('assigned_to', user!.id)
+            .order('deadline', { ascending: true, nullsFirst: false })
+            .limit(8),
+          supabase
+            .from('dossier_history')
+            .select('id, adres, regio, vraagprijs, created_at')
+            .order('created_at', { ascending: false })
+            .limit(5),
+          supabase
+            .from('viewing_trips')
+            .select('id, client_name, trip_date, start_time, status, viewing_stops(id)')
+            .gte('trip_date', todayIso)
+            .order('trip_date', { ascending: true })
+            .limit(1),
+        ])
+        if (cancelled) return
+        const [todosRes, dossiersRes, tripsRes] = results
+        const todosData = todosRes.status === 'fulfilled' ? (todosRes.value.data ?? []) : []
+        const dossiersData = dossiersRes.status === 'fulfilled' ? (dossiersRes.value.data ?? []) : []
+        const tripsData = tripsRes.status === 'fulfilled' ? (tripsRes.value.data ?? []) : []
+        setTodos(todosData as TodoRow[])
+        setDossiers(dossiersData as DossierRow[])
+        setNextTrip((tripsData as TripRow[])[0] ?? null)
+      } finally {
+        setDataLoading(false)
+      }
     }
     void load()
     return () => {
