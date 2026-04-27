@@ -119,7 +119,15 @@ export default function WoninglijstPage() {
   const [alertQueryText, setAlertQueryText] = useState('')
   const [alertSaving, setAlertSaving] = useState(false)
   const [alertError, setAlertError] = useState<string | null>(null)
-  const [activeAlerts, setActiveAlerts] = useState<Array<{ id: string; query_text: string; created_at: string }>>([])
+  const [activeAlerts, setActiveAlerts] = useState<Array<{
+    id: string
+    query_text: string
+    created_at: string
+    last_checked_at: string | null
+    location: string | null
+    max_price: number | null
+    min_rooms: number | null
+  }>>([])
   const [alertToast, setAlertToast] = useState<string | null>(null)
 
   // ─── Load overview ─────────────────────────────────────────
@@ -718,7 +726,15 @@ function DetailView({
   onDownloadPdf: () => void
   pdfLoading: boolean
   onOpenDossier: (item: DossierModalItem) => void
-  activeAlerts: Array<{ id: string; query_text: string; created_at: string }>
+  activeAlerts: Array<{
+    id: string
+    query_text: string
+    created_at: string
+    last_checked_at: string | null
+    location: string | null
+    max_price: number | null
+    min_rooms: number | null
+  }>
   showAlertModal: boolean
   setShowAlertModal: (v: boolean) => void
   alertQueryText: string
@@ -1136,32 +1152,67 @@ function DetailView({
                 >
                   ACTIEVE ALERT{activeAlerts.length > 1 ? 'S' : ''}
                 </div>
-                {activeAlerts.map(a => (
-                  <div
-                    key={a.id}
-                    className="flex items-start justify-between"
-                    style={{ gap: 10, marginBottom: 6 }}
-                  >
-                    <div className="font-body" style={{ fontSize: 13, color: '#1A2E2C', flex: 1 }}>
-                      &ldquo;{a.query_text}&rdquo;
-                    </div>
-                    <button
-                      onClick={() => onDeactivateAlert(a.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: '#B14747',
-                        fontSize: 12,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
+                {activeAlerts.map(a => {
+                  const filterParts: string[] = []
+                  if (a.location) filterParts.push(a.location)
+                  if (a.max_price)
+                    filterParts.push(`max €${Number(a.max_price).toLocaleString('nl-NL')}`)
+                  if (a.min_rooms) filterParts.push(`${a.min_rooms}+ slpk`)
+
+                  const lastCheckText = a.last_checked_at
+                    ? `Laatst gecheckt: ${new Date(a.last_checked_at).toLocaleDateString('nl-NL', {
+                        day: '2-digit',
+                        month: 'short',
+                      })}`
+                    : 'Nog niet gecheckt — eerste run komende ochtend'
+
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-start justify-between"
+                      style={{ gap: 10, marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #E8EEED' }}
                     >
-                      <BellOff size={12} strokeWidth={2} /> stoppen
-                    </button>
-                  </div>
-                ))}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          className="font-body"
+                          style={{ fontSize: 13, color: '#1A2E2C', marginBottom: 2 }}
+                        >
+                          &ldquo;{a.query_text}&rdquo;
+                        </div>
+                        {filterParts.length > 0 && (
+                          <div
+                            className="font-body"
+                            style={{ fontSize: 11, color: '#7A8C8B', marginBottom: 2 }}
+                          >
+                            {filterParts.join(' • ')}
+                          </div>
+                        )}
+                        <div
+                          className="font-body"
+                          style={{ fontSize: 10, color: '#9CA9A8' }}
+                        >
+                          {lastCheckText}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onDeactivateAlert(a.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#B14747',
+                          fontSize: 12,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <BellOff size={12} strokeWidth={2} /> stoppen
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
