@@ -112,24 +112,16 @@ const s = StyleSheet.create({
   page: { backgroundColor: MARBLE, fontFamily: 'Raleway', padding: 0 },
   darkPage: { backgroundColor: DEEPSEA, fontFamily: 'Raleway', padding: 0, color: MARBLE },
 
-  // Header bar (content pages)
+  // Header bar (content pages) — beeldmerk centered
   headerBar: {
     backgroundColor: DEEPSEA,
     paddingHorizontal: 36,
     paddingVertical: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  headerLogo: { height: 18, width: 252 },
-  headerLabel: {
-    fontSize: 9,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SUN,
-    letterSpacing: 2.2,
-    textTransform: 'uppercase',
-  },
+  headerLogo: { height: 24, width: 24 },
 
   // Body container
   contentBody: { flex: 1, paddingHorizontal: 36, paddingTop: 22, paddingBottom: 40 },
@@ -731,27 +723,17 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function fmtDateNL(iso: string): string {
-  if (!iso) return ''
-  return new Date(iso).toLocaleDateString('nl-NL', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
 // ─── Sub-components ──────────────────────────────────────────────────────
-function HeaderBar({ logoSrc, label }: { logoSrc?: string; label: string }) {
+function HeaderBar({ iconSrc }: { iconSrc?: string }) {
   return (
     <View style={s.headerBar}>
-      {logoSrc ? (
-        <Image src={logoSrc} style={s.headerLogo} />
+      {iconSrc ? (
+        <Image src={iconSrc} style={s.headerLogo} />
       ) : (
         <Text style={{ fontFamily: 'Bricolage Grotesque', fontWeight: 700, fontSize: 12, color: WHITE, letterSpacing: 2 }}>
-          COSTA SELECT
+          CS
         </Text>
       )}
-      <Text style={s.headerLabel}>{label}</Text>
     </View>
   )
 }
@@ -759,7 +741,7 @@ function HeaderBar({ logoSrc, label }: { logoSrc?: string; label: string }) {
 function PageFooter({ pageLabel, onDark }: { pageLabel: string; onDark?: boolean }) {
   return (
     <View style={[s.footer, onDark ? s.footerOnDark : {}]} fixed>
-      <Text>Costa Select · Premium Aankoopmakelaar Spanje</Text>
+      <Text> </Text>
       <Text style={s.footerPagenum}>{pageLabel}</Text>
     </View>
   )
@@ -795,12 +777,14 @@ function BulletItem({ text, color }: { text: string; color: string }) {
 // ─── MAIN ────────────────────────────────────────────────────────────────
 export function DossierPDF({
   data,
-  logoSrc,
+  wordmarkSrc,
+  iconSrc,
 }: {
   data: DossierData
-  logoSrc?: string
+  wordmarkSrc?: string
+  iconSrc?: string
 }) {
-  const { property, regioInfo, analyse, pitch_content, generatedAt, financial_data, units_data } = data
+  const { property, regioInfo, analyse, pitch_content, financial_data, units_data } = data
   const isPitch = data.brochure_type === 'pitch'
   const fotos = property.fotos || []
 
@@ -815,7 +799,6 @@ export function DossierPDF({
   const verhuur = analyse?.verhuurpotentieel ?? ''
 
   const prijsFormatted = property.vraagprijs ? fmtEuro(property.vraagprijs) : 'Prijs op aanvraag'
-  const datumFormatted = fmtDateNL(generatedAt)
 
   // Page numbering: count pages to build '01/07' labels
   const pageLabels: string[] = []
@@ -831,13 +814,14 @@ export function DossierPDF({
   if (units_data && units_data.length > 0) {
     pageLabels.push('Units')
   }
+  // Photo pages: hero-mosaic (3) + up to 3× 2x2 grid (12) = 15 gallery + 1 cover hero = 16 max
   const photoSlices: string[][] = []
   if (fotos.length > 1) {
     const gallery = fotos.slice(1)
-    // Page A: hero (1) + 2 secondary = 3 photos
     if (gallery.length > 0) photoSlices.push(gallery.slice(0, 3))
-    // Page B: 2×2 grid of next 4
     if (gallery.length > 3) photoSlices.push(gallery.slice(3, 7))
+    if (gallery.length > 7) photoSlices.push(gallery.slice(7, 11))
+    if (gallery.length > 11) photoSlices.push(gallery.slice(11, 15))
   }
   photoSlices.forEach((_, i) => pageLabels.push(`Foto's ${String.fromCharCode(65 + i)}`))
   const totalPages = pageLabels.length
@@ -852,8 +836,8 @@ export function DossierPDF({
       <Page size="A4" orientation="landscape" style={s.darkPage}>
         <View style={s.coverContainer}>
           <View style={s.coverLeft}>
-            {logoSrc ? (
-              <Image src={logoSrc} style={s.coverLogo} />
+            {wordmarkSrc ? (
+              <Image src={wordmarkSrc} style={s.coverLogo} />
             ) : (
               <Text
                 style={{
@@ -903,7 +887,6 @@ export function DossierPDF({
               )}
             </View>
 
-            <Text style={s.coverFooter}>Gegenereerd {datumFormatted}</Text>
           </View>
           <View style={s.coverRight}>
             {fotos[0] ? (
@@ -911,13 +894,6 @@ export function DossierPDF({
             ) : (
               <View style={{ width: '100%', height: '100%', backgroundColor: DEEPSEA_LIGHT }} />
             )}
-            <View style={s.coverGradient} />
-            <View style={s.coverCaption}>
-              <Text style={s.coverCaptionEye}>Costa Select</Text>
-              <Text style={s.coverCaptionText}>
-                Jouw aankoopmakelaar in Spanje — van search tot sleutel.
-              </Text>
-            </View>
           </View>
         </View>
       </Page>
@@ -925,7 +901,7 @@ export function DossierPDF({
       {/* ─── 02 ANALYSE A (pitch) / DETAILS (presentatie) ──────── */}
       {isPitch ? (
         <Page size="A4" orientation="landscape" style={s.page} wrap>
-          <HeaderBar logoSrc={logoSrc} label="Analyse" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <SectionTitle eyebrow="Overzicht" title="Samenvatting & voordelen" />
 
@@ -973,7 +949,7 @@ export function DossierPDF({
         </Page>
       ) : (
         <Page size="A4" orientation="landscape" style={s.page}>
-          <HeaderBar logoSrc={logoSrc} label="Woningdetails" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <SectionTitle eyebrow="Kenmerken" title={property.adres} />
 
@@ -1034,7 +1010,7 @@ export function DossierPDF({
       {/* ─── 03 ANALYSE B (pitch only) ──────────────────────────── */}
       {isPitch && (
         <Page size="A4" orientation="landscape" style={s.page} wrap>
-          <HeaderBar logoSrc={logoSrc} label="Advies" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <SectionTitle eyebrow="Ons perspectief" title="Costa Select advies" />
 
@@ -1106,7 +1082,7 @@ export function DossierPDF({
       {(financial_data?.totale_investering ||
         financial_data?.hypotheek?.hypotheekbedrag) && (
         <Page size="A4" orientation="landscape" style={s.page}>
-          <HeaderBar logoSrc={logoSrc} label="Financieel" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <SectionTitle eyebrow="Investering" title="Financieel overzicht" />
 
@@ -1119,7 +1095,7 @@ export function DossierPDF({
       {/* ─── 05 UNITS ──────────────────────────────────────────── */}
       {units_data && units_data.length > 0 && (
         <Page size="A4" orientation="landscape" style={s.page} wrap>
-          <HeaderBar logoSrc={logoSrc} label="Beschikbare units" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <SectionTitle
               eyebrow="Aanbod"
@@ -1187,7 +1163,7 @@ export function DossierPDF({
       {/* ─── FOTO'S A — hero mosaic ─────────────────────────── */}
       {photoSlices[0] && (
         <Page size="A4" orientation="landscape" style={s.page}>
-          <HeaderBar logoSrc={logoSrc} label="Impressie" />
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <View style={s.photoHeroLayout}>
               <View style={s.photoHeroLeft}>
@@ -1213,13 +1189,13 @@ export function DossierPDF({
         </Page>
       )}
 
-      {/* ─── FOTO'S B — 2×2 grid ─────────────────────────── */}
-      {photoSlices[1] && (
-        <Page size="A4" orientation="landscape" style={s.page}>
-          <HeaderBar logoSrc={logoSrc} label="Galerij" />
+      {/* ─── FOTO'S B/C/D — 2×2 grids ─────────────────────────── */}
+      {[1, 2, 3].map(idx => photoSlices[idx] ? (
+        <Page key={`photos-${idx}`} size="A4" orientation="landscape" style={s.page}>
+          <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <View style={s.photoGrid2x2}>
-              {photoSlices[1].map((url, i) => (
+              {photoSlices[idx].map((url, i) => (
                 <View key={i} style={s.photoCell}>
                   <Image src={url} style={s.photoImg} />
                 </View>
@@ -1228,7 +1204,7 @@ export function DossierPDF({
           </View>
           <PageFooter pageLabel={pageLabel(++pageIdx)} />
         </Page>
-      )}
+      ) : null)}
     </Document>
   )
 }

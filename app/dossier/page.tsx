@@ -172,6 +172,7 @@ export default function DossierPage() {
   const [dossier, setDossier] = useState<DossierResult | null>(null)
   const [editAnalyse, setEditAnalyse] = useState<DossierAnalyse | null>(null)
   const [editPitch, setEditPitch] = useState<PitchContent | null>(null)
+  const [editProperty, setEditProperty] = useState<DossierResult['property'] | null>(null)
   const [error, setError] = useState('')
   const [aiBusyKey, setAiBusyKey] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
@@ -258,6 +259,7 @@ export default function DossierPage() {
     setDossier(null)
     setEditAnalyse(null)
     setEditPitch(null)
+    setEditProperty(null)
 
     // Progress simulation
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -291,6 +293,7 @@ export default function DossierPage() {
         setError(data.error || 'Er ging iets mis bij het genereren.')
       } else {
         setDossier(data)
+        if (data.property) setEditProperty({ ...data.property })
         if (data.analyse) setEditAnalyse({ ...data.analyse })
         if (data.pitch_content) setEditPitch({ ...data.pitch_content })
       }
@@ -327,6 +330,7 @@ export default function DossierPage() {
     try {
       const payload = {
         ...dossier,
+        ...(editProperty ? { property: editProperty } : {}),
         ...(editAnalyse ? { analyse: editAnalyse } : {}),
         ...(editPitch ? { pitch_content: editPitch } : {}),
       }
@@ -376,6 +380,7 @@ export default function DossierPage() {
       const units = data.units_data ?? []
       const full = { ...data.dossier_data, units_data: units }
       setDossier(full)
+      if (data.dossier_data.property) setEditProperty({ ...data.dossier_data.property })
       if (data.dossier_data.analyse) setEditAnalyse({ ...data.dossier_data.analyse })
       if (data.dossier_data.pitch_content) setEditPitch({ ...data.dossier_data.pitch_content })
       setTab('new')
@@ -459,6 +464,10 @@ export default function DossierPage() {
               {dossier && !loading && (
                 <ResultBlock
                   dossier={dossier}
+                  editProperty={editProperty}
+                  onPatchProperty={patch =>
+                    setEditProperty(prev => (prev ? { ...prev, ...patch } : null))
+                  }
                   editAnalyse={editAnalyse}
                   editPitch={editPitch}
                   onPatchPitch={patch =>
@@ -474,6 +483,7 @@ export default function DossierPage() {
                     setUrlValue('')
                     setEditAnalyse(null)
                     setEditPitch(null)
+                    setEditProperty(null)
                     setInternalNotes('')
                   }}
                   onDownloadPdf={handleDownloadPdf}
@@ -911,6 +921,8 @@ type SectionDef = { id: string; icon: React.ReactNode; label: string }
 
 function ResultBlock({
   dossier,
+  editProperty,
+  onPatchProperty,
   editAnalyse,
   editPitch,
   onPatchPitch,
@@ -928,6 +940,8 @@ function ResultBlock({
   renoDefaults,
 }: {
   dossier: DossierResult
+  editProperty: DossierResult['property'] | null
+  onPatchProperty: (patch: Partial<DossierResult['property']>) => void
   editAnalyse: DossierAnalyse | null
   editPitch: PitchContent | null
   onPatchPitch: (patch: Partial<PitchContent>) => void
@@ -993,7 +1007,10 @@ function ResultBlock({
         />
 
         <CollapsibleSection id="feiten" num="01" title="Feiten" defaultOpen>
-          <FactsSection property={dossier.property} />
+          <FactsSection
+            property={editProperty ?? dossier.property}
+            onPatch={onPatchProperty}
+          />
         </CollapsibleSection>
 
         {hasUnits && dossier.units_data && (
@@ -1399,39 +1416,61 @@ function CollapsibleSection({
 }
 
 // ═══════════ FACTS SECTION ═══════════
-function FactsSection({ property }: { property: DossierResult['property'] }) {
+function FactsSection({
+  property,
+  onPatch,
+}: {
+  property: DossierResult['property']
+  onPatch: (patch: Partial<DossierResult['property']>) => void
+}) {
   return (
     <>
       <div
         className="grid"
         style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}
       >
-        <Stat label="Vraagprijs" value={fmtPrice(property.vraagprijs)} accent />
-        <Stat
-          label="Oppervlakte"
-          value={
-            property.oppervlakte > 0 ? (
-              <>
-                {property.oppervlakte}
-                <span
-                  className="font-body"
-                  style={{ fontSize: 12, color: '#7A8C8B', marginLeft: 3, fontWeight: 500 }}
-                >
-                  m²
-                </span>
-              </>
-            ) : '—'
-          }
+        <EditableStat
+          label="Vraagprijs"
+          accent
+          prefix="€"
+          value={property.vraagprijs || 0}
+          type="number"
+          onChange={v => onPatch({ vraagprijs: Number(v) || 0 })}
         />
-        <Stat label="Slaapkamers" value={property.slaapkamers > 0 ? String(property.slaapkamers) : '—'} />
-        <Stat label="Badkamers" value={property.badkamers > 0 ? String(property.badkamers) : '—'} />
+        <EditableStat
+          label="Oppervlakte"
+          value={property.oppervlakte || 0}
+          type="number"
+          suffix="m²"
+          onChange={v => onPatch({ oppervlakte: Number(v) || 0 })}
+        />
+        <EditableStat
+          label="Slaapkamers"
+          value={property.slaapkamers || 0}
+          type="number"
+          onChange={v => onPatch({ slaapkamers: Number(v) || 0 })}
+        />
+        <EditableStat
+          label="Badkamers"
+          value={property.badkamers || 0}
+          type="number"
+          onChange={v => onPatch({ badkamers: Number(v) || 0 })}
+        />
       </div>
       <div
         className="grid"
         style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}
       >
-        <MetaItem label="Type" value={property.type || '—'} />
-        <MetaItem label="Regio" value={property.regio || '—'} />
+        <EditableMeta
+          label="Type"
+          value={property.type || ''}
+          onChange={v => onPatch({ type: String(v) })}
+        />
+        <EditableMeta
+          label="Regio"
+          value={property.regio || ''}
+          onChange={v => onPatch({ regio: String(v) })}
+        />
         <MetaItem
           label="Listing"
           value={
@@ -1451,34 +1490,44 @@ function FactsSection({ property }: { property: DossierResult['property'] }) {
           }
         />
       </div>
-      {property.omschrijving && (
+      <div>
         <div
-          className="font-body"
+          className="font-body font-bold uppercase"
           style={{
-            fontSize: 13,
-            color: '#5F7472',
-            lineHeight: 1.6,
-            padding: '14px 16px',
-            background: '#FFFAEF',
-            borderRadius: 10,
-            border: '1px solid rgba(0,75,70,0.08)',
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            color: '#7A8C8B',
+            marginBottom: 6,
           }}
         >
-          {property.omschrijving.slice(0, 600)}
-          {property.omschrijving.length > 600 && '…'}
+          Beschrijving
         </div>
-      )}
+        <DsTextarea
+          value={property.omschrijving || ''}
+          onChange={e => onPatch({ omschrijving: e.target.value })}
+          placeholder="Beschrijving van de woning…"
+          rows={6}
+        />
+      </div>
     </>
   )
 }
 
-function Stat({
+function EditableStat({
   label,
   value,
+  onChange,
+  type = 'text',
+  prefix,
+  suffix,
   accent,
 }: {
   label: string
-  value: React.ReactNode
+  value: string | number
+  onChange: (v: string | number) => void
+  type?: 'text' | 'number'
+  prefix?: string
+  suffix?: string
   accent?: boolean
 }) {
   return (
@@ -1496,22 +1545,88 @@ function Stat({
           fontSize: 10,
           letterSpacing: '0.14em',
           color: accent ? 'rgba(255,250,239,0.6)' : '#7A8C8B',
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div className="flex items-baseline" style={{ gap: 4 }}>
+        {prefix && (
+          <span
+            className="font-heading font-bold"
+            style={{ fontSize: 20, color: accent ? '#F5AF40' : '#004B46', lineHeight: 1 }}
+          >
+            {prefix}
+          </span>
+        )}
+        <input
+          type={type === 'number' ? 'number' : 'text'}
+          value={value === 0 ? '' : String(value)}
+          placeholder={type === 'number' ? '—' : ''}
+          onChange={e =>
+            onChange(type === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value)) : e.target.value)
+          }
+          className="font-heading font-bold bg-transparent outline-none w-full"
+          style={{
+            fontSize: 20,
+            color: accent ? '#F5AF40' : '#004B46',
+            letterSpacing: '-0.01em',
+            lineHeight: 1,
+            border: 'none',
+            padding: 0,
+            minWidth: 0,
+          }}
+        />
+        {suffix && (
+          <span
+            className="font-body"
+            style={{ fontSize: 12, color: accent ? 'rgba(255,250,239,0.6)' : '#7A8C8B', fontWeight: 500 }}
+          >
+            {suffix}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EditableMeta({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <div
+        className="font-body font-bold uppercase"
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.14em',
+          color: '#7A8C8B',
           marginBottom: 4,
         }}
       >
         {label}
       </div>
-      <div
-        className="font-heading font-bold"
+      <input
+        type="text"
+        value={value}
+        placeholder="—"
+        onChange={e => onChange(e.target.value)}
+        className="font-body text-deepsea bg-transparent outline-none w-full"
         style={{
-          fontSize: 20,
-          color: accent ? '#F5AF40' : '#004B46',
-          letterSpacing: '-0.01em',
-          lineHeight: 1,
+          fontSize: 13,
+          fontWeight: 500,
+          border: '1px solid transparent',
+          borderBottom: '1px solid rgba(0,75,70,0.18)',
+          padding: '4px 0',
+          minWidth: 0,
         }}
-      >
-        {value}
-      </div>
+      />
     </div>
   )
 }

@@ -7,9 +7,9 @@ import { requireAuth } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
-function getLogoBase64(): string | undefined {
+function getLogoBase64(filename: string): string | undefined {
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-wordmark-white.svg')
+    const logoPath = path.join(process.cwd(), 'public', 'brand', filename)
     const svg = fs.readFileSync(logoPath)
     return `data:image/svg+xml;base64,${svg.toString('base64')}`
   } catch {
@@ -51,12 +51,13 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth
 
   const data: DossierData = await request.json()
-  const logoSrc = getLogoBase64()
+  const wordmarkSrc = getLogoBase64('costa-select-wordmark-white.svg')
+  const iconSrc = getLogoBase64('costa-select-icon-white.svg')
 
-  // Max 21 foto's: 1 cover + 5 pagina's × 4 foto's
+  // Max 16 foto's: 1 cover + 1 mosaic (3) + 3 grids × 4 = 16
   // Idealista URLs via weserv.nl proxy → base64
   if (data.property.fotos?.length > 0) {
-    const maxPhotos = Math.min(data.property.fotos.length, 21)
+    const maxPhotos = Math.min(data.property.fotos.length, 16)
     const convertedPhotos: string[] = []
 
     for (const url of data.property.fotos.slice(0, maxPhotos)) {
@@ -74,7 +75,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const buffer = await renderToBuffer(<DossierPDF data={data} logoSrc={logoSrc} />)
+    const buffer = await renderToBuffer(
+      <DossierPDF data={data} wordmarkSrc={wordmarkSrc} iconSrc={iconSrc} />
+    )
 
     const filename = data.property.adres
       ? `costa-select-dossier-${data.property.adres.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase()}.pdf`
