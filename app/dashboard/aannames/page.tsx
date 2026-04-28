@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -231,8 +233,8 @@ export default function AannamensPage() {
 
         // Async fetches
         const [regRes, usersRes] = await Promise.allSettled([
-          fetch('/api/regional-settings').then(r => r.ok ? r.json() : []).catch(() => []),
-          fetch('/api/users').then(r => r.ok ? r.json() : { users: [] }).catch(() => ({ users: [] })),
+          fetch('/api/regional-settings', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).catch(() => []),
+          fetch('/api/users', { cache: 'no-store' }).then(r => r.ok ? r.json() : { users: [] }).catch(() => ({ users: [] })),
         ])
         const regData = regRes.status === 'fulfilled' ? (regRes.value ?? []) : []
         const usersData = usersRes.status === 'fulfilled' ? (usersRes.value ?? { users: [] }) : { users: [] }
@@ -398,6 +400,7 @@ function UsersSection({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: u.id, naam: u.naam, role: u.role }),
+          cache: 'no-store',
         })
         if (!res.ok) failed++
       } catch { failed++ }
@@ -427,6 +430,7 @@ function UsersSection({
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: id }),
+          cache: 'no-store',
         })
         if (res.ok) {
           dt.setRows(prev => prev.filter(u => u.id !== id))
@@ -448,13 +452,14 @@ function UsersSection({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser),
+        cache: 'no-store',
       })
       const data = await res.json()
       if (!res.ok) {
         setInviteErr(data.error ?? 'Fout bij aanmaken')
       } else {
         setNewUser({ email: '', naam: '', role: 'consultant' })
-        const listRes = await fetch('/api/users')
+        const listRes = await fetch('/api/users', { cache: 'no-store' })
         if (listRes.ok) {
           const listData = await listRes.json()
           setRows(listData.users ?? [])
@@ -800,7 +805,7 @@ function PipedriveSection({
   async function loadFields() {
     setLoadingFields(true)
     try {
-      const res = await fetch('/api/pipedrive/fields')
+      const res = await fetch('/api/pipedrive/fields', { cache: 'no-store' })
       if (!res.ok) throw new Error('fail')
       const json = await res.json()
       setPdAvailable((json.fields ?? []).map((f: { key: string; name: string }) => ({ key: f.key, name: f.name })))
@@ -953,6 +958,7 @@ function RegioSection({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(r),
+          cache: 'no-store',
         })
         if (!res.ok) failed++
       } catch { failed++ }

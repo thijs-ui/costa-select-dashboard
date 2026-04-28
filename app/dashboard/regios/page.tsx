@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Building2, Euro, TrendingUp, Users } from 'lucide-react'
@@ -71,8 +73,8 @@ export default function RegiosPage() {
         .select('regio, aankoopprijs, bruto_commissie, datum_passering')
       setGeslotenDeals((data ?? []) as GeslotenDeal[])
       const [pdDealsRes, pdLeadsRes] = await Promise.allSettled([
-        fetch('/api/pipedrive/open-deals'),
-        fetch('/api/pipedrive/leads'),
+        fetch('/api/pipedrive/open-deals', { cache: 'no-store' }),
+        fetch('/api/pipedrive/leads', { cache: 'no-store' }),
       ])
       if (pdDealsRes.status === 'fulfilled' && pdDealsRes.value.ok) {
         const json = await pdDealsRes.value.json()

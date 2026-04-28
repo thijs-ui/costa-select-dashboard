@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
@@ -36,8 +38,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     async function load() {
       try {
         const [projRes, usersRes] = await Promise.allSettled([
-          fetch(`/api/projecten?id=${id}`),
-          fetch('/api/todos/users'),
+          fetch(`/api/projecten?id=${id}`, { cache: 'no-store' }),
+          fetch('/api/todos/users', { cache: 'no-store' }),
         ])
         if (cancelled) return
         if (projRes.status === 'fulfilled' && projRes.value.ok) {
@@ -83,7 +85,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   async function reloadProject() {
-    const res = await fetch(`/api/projecten?id=${id}`)
+    const res = await fetch(`/api/projecten?id=${id}`, { cache: 'no-store' })
     if (res.ok) setProject(await res.json())
   }
 
@@ -100,6 +102,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...updates }),
+      cache: 'no-store',
     })
     setEditing(false)
   }
@@ -110,6 +113,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
+      cache: 'no-store',
     })
     window.location.href = '/projecten'
   }
@@ -180,6 +184,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: phaseId, name: newName }),
+      cache: 'no-store',
     })
   }
 
@@ -189,6 +194,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: phaseId }),
+      cache: 'no-store',
     })
     await reloadProject()
   }
@@ -202,6 +208,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: id, name: phaseName.trim(), sort_order: order }),
+      cache: 'no-store',
     })
     await reloadProject()
   }

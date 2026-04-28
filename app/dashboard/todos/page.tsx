@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
@@ -126,7 +128,7 @@ export default function TodosPage() {
         setLabels(settingsData[0].value as string[])
       }
       try {
-        const res = await fetch('/api/todos/users')
+        const res = await fetch('/api/todos/users', { cache: 'no-store' })
         if (res.ok) {
           const data = await res.json()
           setUsers((data.users ?? []) as UserInfo[])

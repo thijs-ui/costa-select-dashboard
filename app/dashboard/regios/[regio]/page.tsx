@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -60,8 +62,8 @@ export default function RegioDetailPage() {
       const [salesRes, makelaarsRes, dealsRes, leadsRes] = await Promise.allSettled([
         supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, netto_commissie_cs, type_deal, makelaar_id, regio'),
         supabase.from('makelaars').select('id, naam'),
-        fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
-        fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
+        fetch('/api/pipedrive/open-deals', { cache: 'no-store' }).then(r => r.ok ? r.json() : { allDeals: [] }),
+        fetch('/api/pipedrive/leads', { cache: 'no-store' }).then(r => r.ok ? r.json() : { leads: [] }),
       ])
       const salesData = salesRes.status === 'fulfilled' ? (salesRes.value.data ?? []) : []
       const makelaarsData = makelaarsRes.status === 'fulfilled' ? (makelaarsRes.value.data ?? []) : []

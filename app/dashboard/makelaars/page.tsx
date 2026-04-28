@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Euro, TrendingUp, Users } from 'lucide-react'
@@ -88,7 +90,7 @@ export default function MakelaarsPage() {
           .from('deals')
           .select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
         supabase.from('afspraken').select('makelaar_id, datum, status, type'),
-        fetch('/api/pipedrive/consultant-funnel').then(r => (r.ok ? r.json() : { perUser: {} })),
+        fetch('/api/pipedrive/consultant-funnel', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { perUser: {} })),
       ])
       const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
       const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []

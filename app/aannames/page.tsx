@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Plus, Trash2, Save, RefreshCw } from 'lucide-react'
@@ -256,7 +258,7 @@ export default function AannamensPage() {
   async function loadPipedriveFields() {
     setLoadingFields(true)
     try {
-      const res = await fetch('/api/pipedrive/fields')
+      const res = await fetch('/api/pipedrive/fields', { cache: 'no-store' })
       if (!res.ok) throw new Error('Velden ophalen mislukt')
       const json = await res.json()
       const fields = (json.fields ?? []) as Array<{ key: string; name: string; field_type: string }>

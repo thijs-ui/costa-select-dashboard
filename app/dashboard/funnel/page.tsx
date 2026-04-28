@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -62,8 +64,8 @@ export default function FunnelPage() {
     try {
       const [salesRes, dealsRes, leadsRes] = await Promise.allSettled([
         supabase.from('deals').select('regio, datum_passering'),
-        fetch('/api/pipedrive/open-deals').then(r => (r.ok ? r.json() : { allDeals: [] })),
-        fetch('/api/pipedrive/leads').then(r => (r.ok ? r.json() : { leads: [] })),
+        fetch('/api/pipedrive/open-deals', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { allDeals: [] })),
+        fetch('/api/pipedrive/leads', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { leads: [] })),
       ])
       const salesData = salesRes.status === 'fulfilled' ? (salesRes.value.data ?? []) : []
       const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value ?? { allDeals: [] }) : { allDeals: [] }

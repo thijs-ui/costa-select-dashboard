@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import DateFilter from '@/components/date-filter'
@@ -70,8 +72,8 @@ export default function RegiosPage() {
       const { data } = await supabase.from('deals').select('regio, aankoopprijs, bruto_commissie, datum_passering')
       setGeslotenDeals((data ?? []) as GeslotenDeal[])
       const [pdDealsRes, pdLeadsRes] = await Promise.allSettled([
-        fetch('/api/pipedrive/open-deals'),
-        fetch('/api/pipedrive/leads'),
+        fetch('/api/pipedrive/open-deals', { cache: 'no-store' }),
+        fetch('/api/pipedrive/leads', { cache: 'no-store' }),
       ])
       if (pdDealsRes.status === 'fulfilled' && pdDealsRes.value.ok) {
         const json = await pdDealsRes.value.json()

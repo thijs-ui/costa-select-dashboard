@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -132,8 +134,8 @@ export default function BezichtigingDetailPage({
   const loadData = useCallback(async () => {
     try {
       const [tripRes, stopsRes] = await Promise.allSettled([
-        fetch(`/api/bezichtigingen?id=${id}`, { credentials: 'include' }),
-        fetch(`/api/bezichtigingen/stops?trip_id=${id}`, { credentials: 'include' }),
+        fetch(`/api/bezichtigingen?id=${id}`, { credentials: 'include', cache: 'no-store' }),
+        fetch(`/api/bezichtigingen/stops?trip_id=${id}`, { credentials: 'include', cache: 'no-store' }),
       ])
       if (tripRes.status === 'fulfilled' && tripRes.value.ok) {
         const trips = await tripRes.value.json()
@@ -165,6 +167,7 @@ export default function BezichtigingDetailPage({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, ...updates }),
+          cache: 'no-store',
         })
         setSaveState(res.ok ? 'saved' : 'error')
       } catch {
@@ -208,6 +211,7 @@ export default function BezichtigingDetailPage({
         contact_phone: draft.contact_phone.trim() || null,
         notes: draft.notes.trim() || null,
       }),
+      cache: 'no-store',
     })
     if (res.ok) {
       const stop = await res.json()
@@ -224,6 +228,7 @@ export default function BezichtigingDetailPage({
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: stopId }),
+      cache: 'no-store',
     })
     setStops(prev => prev.filter(s => s.id !== stopId))
     if (trip?.route_data) {
@@ -250,11 +255,13 @@ export default function BezichtigingDetailPage({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: withOrder[i].id, sort_order: withOrder[i].sort_order }),
+        cache: 'no-store',
       }),
       fetch('/api/bezichtigingen/stops', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: withOrder[j].id, sort_order: withOrder[j].sort_order }),
+        cache: 'no-store',
       }),
     ])
   }
@@ -287,6 +294,7 @@ export default function BezichtigingDetailPage({
             viewing_duration_minutes: s.viewing_duration_minutes,
           })),
         }),
+        cache: 'no-store',
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: 'Mislukt' }))

@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
@@ -27,8 +29,8 @@ export default function ProjectenPage() {
     async function load() {
       try {
         const [projRes, usersRes] = await Promise.allSettled([
-          fetch('/api/projecten'),
-          fetch('/api/todos/users'),
+          fetch('/api/projecten', { cache: 'no-store' }),
+          fetch('/api/todos/users', { cache: 'no-store' }),
         ])
         if (cancelled) return
         if (projRes.status === 'fulfilled' && projRes.value.ok) {
@@ -64,6 +66,7 @@ export default function ProjectenPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Nieuw project', owner_id: user?.id }),
+      cache: 'no-store',
     })
     if (res.ok) {
       const proj = await res.json()

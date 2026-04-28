@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import {
@@ -122,8 +124,8 @@ export default function SamenwerkingenPage() {
   const load = useCallback(async () => {
     try {
       const [aRes, pRes] = await Promise.allSettled([
-        fetch('/api/agentschappen', { credentials: 'include' }),
-        fetch('/api/samenwerkingen', { credentials: 'include' }),
+        fetch('/api/agentschappen', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/samenwerkingen', { credentials: 'include', cache: 'no-store' }),
       ])
       if (aRes.status === 'fulfilled' && aRes.value.ok) {
         const data: RawAgency[] = await aRes.value.json()
@@ -247,6 +249,7 @@ export default function SamenwerkingenPage() {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ id: item.id, is_preferred: next }),
+      cache: 'no-store',
     })
     if (!res.ok) {
       alert('Kon voorkeur niet wijzigen (veld nog niet beschikbaar in database).')
@@ -268,6 +271,7 @@ export default function SamenwerkingenPage() {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ id: item.id, is_active: next }),
+      cache: 'no-store',
     })
     if (!res.ok) {
       alert('Kon status niet wijzigen.')

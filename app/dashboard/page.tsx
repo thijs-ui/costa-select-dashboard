@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Coins, Receipt, TrendingUp, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -54,7 +56,7 @@ export default function DashboardPage() {
           supabase.from('deals').select('aankoopprijs, bruto_commissie, netto_commissie_cs, datum_passering, regio'),
           supabase.from('maandkosten').select('bedrag, jaar, maand, entiteit, kosten_posten(naam)'),
           supabase.from('settings').select('key, value'),
-          fetch('/api/pipedrive/leads').then(r => (r.ok ? r.json() : null)).catch(() => null),
+          fetch('/api/pipedrive/leads', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null),
           supabase.from('afspraken').select('bron, datum, regio'),
         ])
         const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []

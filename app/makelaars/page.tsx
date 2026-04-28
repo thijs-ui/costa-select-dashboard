@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useEntity, matchesEntity, ENTITY_LABELS } from '@/lib/entity'
@@ -80,7 +82,7 @@ export default function MakelaarsPage() {
         supabase.from('makelaars').select('id, naam, rol, area_manager_id, pipedrive_naam').eq('actief', true).order('naam'),
         supabase.from('deals').select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
         supabase.from('afspraken').select('makelaar_id, datum, status, type'),
-        fetch('/api/pipedrive/consultant-funnel').then(r => r.ok ? r.json() : { perUser: {} }),
+        fetch('/api/pipedrive/consultant-funnel', { cache: 'no-store' }).then(r => r.ok ? r.json() : { perUser: {} }),
       ])
       const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
       const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []
