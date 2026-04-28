@@ -296,6 +296,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               alt="Costa Select"
               width={52}
               height={52}
+              quality={95}
               priority
             />
           </Link>

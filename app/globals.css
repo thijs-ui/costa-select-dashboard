@@ -1471,17 +1471,11 @@ body:has(aside.sidebar.collapsed) .sb-shell-main { margin-left: 72px; }
   text-decoration: none;
 }
 .sb-brand-inner img {
-  /* Layout-grootte blijft 52×52 zodat menu niet verschuift; transform: scale(2)
-     maakt 't visueel 2x zo groot zonder layout-impact. */
   width: 52px; height: 52px;
   flex-shrink: 0;
   display: block;
-  transition: transform .3s ease;
   object-fit: contain;
-  transform: scale(2);
-  transform-origin: center;
 }
-aside.sidebar:not(.collapsed) .sb-brand-inner:hover img { transform: scale(2) rotate(20deg); }
 
 /* Floating collapse button */
 .sb-collapse-float {
@@ -1740,12 +1734,7 @@ aside.sidebar.collapsed .sb-nav a.sb-nav-child { display: none; }
 
 /* Collapsed state */
 aside.sidebar.collapsed .sb-brand { padding: 18px 0; }
-aside.sidebar.collapsed .sb-brand-inner img {
-  width: 36px; height: 36px;
-  /* In collapsed-state (72px breed) past 36×scale(2)=72 niet — terugschalen
-     naar scale(1.4) ≈ 50px voor breathing room. */
-  transform: scale(1.4);
-}
+aside.sidebar.collapsed .sb-brand-inner img { width: 36px; height: 36px; }
 aside.sidebar.collapsed .sb-collapse-float { top: 28px; }
 aside.sidebar.collapsed .sb-scroll { padding: 14px 0 12px; }
 aside.sidebar.collapsed .sb-section { padding: 0 10px; }
