@@ -61,14 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false
     let bootstrapped = false
 
-    // Watchdog: garandeer dat loading=false na 8s, ongeacht wat hangt.
-    const watchdog = setTimeout(() => {
-      if (!cancelled) {
-        console.warn('[auth] watchdog tripped — forcing loading=false na 8s')
-        setLoading(false)
-      }
-    }, 8000)
-
     async function bootstrap() {
       console.log('[auth] bootstrap start')
       try {
@@ -92,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         if (!cancelled) {
           bootstrapped = true
-          clearTimeout(watchdog)
           console.log('[auth] setLoading(false)')
           setLoading(false)
         }
@@ -128,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true
-      clearTimeout(watchdog)
       subscription.unsubscribe()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
