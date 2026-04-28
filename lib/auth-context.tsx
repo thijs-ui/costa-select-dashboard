@@ -43,30 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ])
   }
 
-  async function loadUserRole(u: User) {
-    // Primair: direct via browser-client (leunt op `read_own_role` RLS-policy).
-    try {
-      const result = await withTimeout(
-        supabase
-          .from('user_roles')
-          .select('role, naam')
-          .eq('user_id', u.id)
-          .single() as unknown as Promise<{ data: { role?: string; naam?: string } | null }>,
-        5000,
-        'user_roles'
-      )
-      const data = result.data
-      if (data?.role) {
-        setRole(data.role as Role)
-        setNaam(data.naam ?? null)
-        return
-      }
-    } catch (e) {
-      console.warn('[auth] user_roles query failed/timeout:', e)
-    }
-
-    // Fallback: /api/users/me gaat via service-client en bypasst RLS.
-    // Voorkomt dat een JWT-timing issue de rol "verliest" op cold start.
+  async function loadUserRole(_u: User) {
+    // Primaire path was: direct via browser-client + `read_own_role` RLS.
+    // Bleek 5s+ te hangen (zie commit 5ef1e71 logs). Verwijderd, gaat nu
+    // direct via service-client (bypasst RLS, sub-100ms latency).
+    // De RLS-policy `read_own_role` op user_roles wordt binnen Supabase
+    // nog onderzocht; tot dan is de service-client path de enige.
     try {
       const res = await withTimeout(fetch('/api/users/me'), 5000, '/api/users/me')
       if (res.ok) {

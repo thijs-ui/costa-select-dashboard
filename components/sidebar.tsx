@@ -179,7 +179,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { role, loading: authLoading, signOut, user, naam } = useAuth()
   const isAdmin = role === 'admin'
-  const showAdmin = isAdmin || authLoading
+  // Tijdens auth-loading: admin-secties NIET tonen (was: || authLoading).
+  // Voorkomt dat consultants admin-routes "voorbij zien komen" tijdens
+  // de 0-2s window voordat user_roles geladen is.
+  const showAdmin = isAdmin && !authLoading
 
   const [collapsed, setCollapsed] = useState(false)
   const [openSections, setOpenSections] = useState<OpenSections>({
