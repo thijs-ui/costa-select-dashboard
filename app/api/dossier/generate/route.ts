@@ -70,6 +70,52 @@ function getRegioContent(regio: string): string {
   }
 }
 
+// Strip kennisbank-metadata + markdown-syntaxis voor klantgerichte
+// weergave in PDF. Verwijdert headers, __Documentnummer:__-blokjes,
+// review-data, eigenaar-velden, lijst-markers, etc.
+function cleanRegioForCustomer(raw: string): string {
+  if (!raw) return ''
+  return raw
+    // Headers (# Title, ## Title, etc.)
+    .replace(/^#{1,6}\s.*$/gm, '')
+    // Bold metadata: __Documentnummer:__ CS-016 ... __Eigenaar:__ Costa Select
+    .replace(/__[^_]+:__[^\n]*/g, '')
+    // Losse __Foo:__ markers
+    .replace(/__[^_]+__/g, '')
+    // Bullet list markers
+    .replace(/^[*\-•]\s+/gm, '')
+    // Numbered list markers
+    .replace(/^\d+\.\s+/gm, '')
+    // Multiple newlines → single
+    .replace(/\n{2,}/g, '\n\n')
+    .trim()
+}
+
+// Vertaal/herschrijf woning-omschrijving naar Nederlands voor presentatie.
+// Idealista geeft Spaans, Costa Select website geeft soms Engels of slecht
+// vertaald NL. Dit zorgt dat de klant altijd cleane Nederlandse tekst ziet.
+async function rewriteDescriptionToDutch(raw: string): Promise<string> {
+  if (!raw || raw.length < 30) return raw
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: `Herschrijf onderstaande woningbeschrijving naar vloeiend Nederlands voor een klantpresentatie. Bewaar alle feiten (kamers, oppervlaktes, ligging, voorzieningen). Geen marketingtaal, geen "ideaal" of "perfect". Maximaal 150 woorden. Geef ALLEEN de herschreven tekst terug, geen toelichting.
+
+ORIGINELE TEKST:
+${raw.substring(0, 1500)}`,
+      }],
+    })
+    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    return text.trim() || raw
+  } catch (err) {
+    console.error('Description rewrite failed:', err)
+    return raw
+  }
+}
+
 async function scrapeProperty(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { mode, url, adres, regio, type, vraagprijs, oppervlakte, slaapkamers, badkamers, omschrijving, fotos } = body
 
@@ -154,11 +200,19 @@ export async function POST(request: Request) {
 
   const regioContent = getRegioContent(String(propertyData.regio))
 
-  // Presentatie-modus: alleen feitelijke data, geen AI
+  // Presentatie-modus: feitelijke data + Claude-vertaling van omschrijving.
+  // Beschrijving van bron (Idealista/CS-website) is vaak Spaans/Engels of
+  // slecht vertaald NL — kleine Haiku-call zorgt voor cleane klant-tekst.
   if (brochureType === 'presentatie') {
+    const cleanedDescription = await rewriteDescriptionToDutch(
+      String(propertyData.omschrijving || '')
+    )
+    propertyData.omschrijving = cleanedDescription
+
+    const cleanRegio = cleanRegioForCustomer(regioContent)
     const dossierResult = {
       property: propertyData,
-      regioInfo: regioContent ? regioContent.substring(0, 500) : '',
+      regioInfo: cleanRegio ? cleanRegio.substring(0, 500) : '',
       brochure_type: 'presentatie' as const,
       generatedAt: new Date().toISOString(),
     }
@@ -282,9 +336,11 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
     analyse.advies_consultant = 'De AI-analyse is niet beschikbaar. Beoordeel het object handmatig.'
   }
 
+  // Ook in pitch-mode: regio-content opschonen voor klant-display.
+  const cleanRegio = cleanRegioForCustomer(regioContent)
   const dossierResult = {
     property: propertyData,
-    regioInfo: regioContent ? regioContent.substring(0, 500) : aiRegioInfo,
+    regioInfo: cleanRegio ? cleanRegio.substring(0, 500) : aiRegioInfo,
     analyse,
     pitch_content: pitchContent,
     brochure_type: 'pitch' as const,

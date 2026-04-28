@@ -699,8 +699,10 @@ const s = StyleSheet.create({
     height: '100%',
   },
   photoCell: {
+    // 48% × 2 + 12pt gap blijft net onder 100% zodat react-pdf de cellen
+    // niet naar een nieuwe overflow-pagina forceert (bron van lege pagina).
     width: '48.5%',
-    height: '48.5%',
+    height: '47%',
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: DEEPSEA_DEEP,
@@ -739,8 +741,10 @@ function HeaderBar({ iconSrc }: { iconSrc?: string }) {
 }
 
 function PageFooter({ pageLabel, onDark }: { pageLabel: string; onDark?: boolean }) {
+  // Geen `fixed` — bij overflow zou react-pdf 'm anders met dezelfde label
+  // op elke fysieke overflow-pagina renderen ('03/05', '03/05', etc.).
   return (
-    <View style={[s.footer, onDark ? s.footerOnDark : {}]} fixed>
+    <View style={[s.footer, onDark ? s.footerOnDark : {}]}>
       <Text> </Text>
       <Text style={s.footerPagenum}>{pageLabel}</Text>
     </View>
