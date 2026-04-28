@@ -123,6 +123,10 @@ export default function HomePage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) {
+      setDataLoading(false)
+      return
+    }
     const loadData = async () => {
       try {
         const todayIso = new Date().toISOString().split('T')[0]
@@ -131,7 +135,7 @@ export default function HomePage() {
             .from('todos')
             .select('id, description, deadline, status, created_by, created_at')
             .eq('status', 'open')
-            .eq('assigned_to', user!.id)
+            .eq('assigned_to', user.id)
             .order('deadline', { ascending: true, nullsFirst: false })
             .limit(8),
           supabase
@@ -163,7 +167,7 @@ export default function HomePage() {
 
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (loading || dataLoading) {
     return (
