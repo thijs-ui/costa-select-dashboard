@@ -5,19 +5,27 @@ import path from 'path'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/permissions'
 
+// Lokaal gebundeld in public/fonts/ — Google Fonts CDN URLs zijn niet stabiel
+// (zie DossierPDF.tsx commentaar: Raleway 500 v37 ging op 26-04 op 404).
+function fontUrl(name: string): string {
+  return path.join(process.cwd(), 'public', 'fonts', name)
+}
+
 Font.register({
   family: 'Bricolage Grotesque',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9U6as8bTXq_nANBjzKo3IeZx8z6up5BeSl5jBNz_19PpbpMXuECpwUxJBOm_OJWiaaD30YfKfjZZoLvRviyM0.ttf', fontWeight: 400 },
-    { src: 'https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9U6as8bTXq_nANBjzKo3IeZx8z6up5BeSl5jBNz_19PpbpMXuECpwUxJBOm_OJWiaaD30YfKfjZZoLvfzlyM0.ttf', fontWeight: 700 },
+    { src: fontUrl('bricolage-grotesque-400.ttf'), fontWeight: 400 },
+    { src: fontUrl('bricolage-grotesque-600.ttf'), fontWeight: 600 },
+    { src: fontUrl('bricolage-grotesque-700.ttf'), fontWeight: 700 },
   ],
 })
 Font.register({
   family: 'Raleway',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVvaooCP.ttf', fontWeight: 400 },
-    { src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVsEpYCP.ttf', fontWeight: 600 },
-    { src: 'https://fonts.gstatic.com/s/raleway/v37/1Ptxg8zYS_SKggPN4iEgvnHyvveLxVscpoCP.ttf', fontWeight: 700 },
+    { src: fontUrl('raleway-400.ttf'), fontWeight: 400 },
+    { src: fontUrl('raleway-500.ttf'), fontWeight: 500 },
+    { src: fontUrl('raleway-600.ttf'), fontWeight: 600 },
+    { src: fontUrl('raleway-700.ttf'), fontWeight: 700 },
   ],
 })
 Font.registerHyphenationCallback((word) => [word])
