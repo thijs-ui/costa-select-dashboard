@@ -1,12 +1,19 @@
 import { renderToBuffer } from '@react-pdf/renderer'
-import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  Image,
+  StyleSheet,
+  Font,
+} from '@react-pdf/renderer'
 import fs from 'fs'
 import path from 'path'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/permissions'
 
-// Lokaal gebundeld in public/fonts/ — Google Fonts CDN URLs zijn niet stabiel
-// (zie DossierPDF.tsx commentaar: Raleway 500 v37 ging op 26-04 op 404).
+// ─── Brand fonts (lokaal gebundeld, zelfde set als DossierPDF) ────────────
 function fontUrl(name: string): string {
   return path.join(process.cwd(), 'public', 'fonts', name)
 }
@@ -28,262 +35,29 @@ Font.register({
     { src: fontUrl('raleway-700.ttf'), fontWeight: 700 },
   ],
 })
-Font.registerHyphenationCallback((word) => [word])
+Font.registerHyphenationCallback(word => [word])
 
-// Costa Select kleurpalet (gedeeld met DossierPDF)
+// ─── Tokens ───────────────────────────────────────────────────────────────
 const DEEPSEA = '#004B46'
-const DEEPSEA_LIGHT = '#0A6B63'
 const DEEPSEA_DEEP = '#072A24'
 const SUN = '#F5AF40'
-const SUN_DARK = '#D4921A'
+const SUN_DARK = '#C58118'
+const SUN_TINT = '#FAEDD0'
 const MARBLE = '#FFFAEF'
-const SEA = '#0EAE96'
-const WHITE = '#FFFFFF'
-const GRAY_500 = '#7A8C8B'
-const BORDER = 'rgba(0,75,70,0.12)'
+const MARBLE_DEEP = '#F4EDDD'
+const INK = '#1B2A28'
+const INK_MUTE = '#8A9794'
+const RULE = 'rgba(7,42,36,0.10)'
+const RULE_STRONG = 'rgba(7,42,36,0.20)'
+const ON_DARK_45 = 'rgba(255,250,239,0.45)'
+const ON_DARK_55 = 'rgba(255,250,239,0.55)'
+const ON_DARK_92 = 'rgba(255,250,239,0.92)'
+const ON_DARK_20 = 'rgba(255,250,239,0.20)'
 
-const s = StyleSheet.create({
-  page: { backgroundColor: MARBLE, fontFamily: 'Raleway', padding: 0 },
-  darkPage: { backgroundColor: DEEPSEA, fontFamily: 'Raleway', padding: 0, color: MARBLE },
+const PAD_X = 48
+const HEADER_H = 56
 
-  // ─── Cover ───
-  coverContainer: { flexDirection: 'column', width: '100%', height: '100%' },
-  coverTop: { padding: 40, paddingBottom: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  coverLogo: { height: 22 },
-  coverTag: {
-    fontSize: 10,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SUN,
-    letterSpacing: 2.4,
-    textTransform: 'uppercase',
-  },
-  coverMain: { paddingHorizontal: 40, paddingTop: 80, paddingBottom: 24 },
-  coverEyebrow: {
-    fontSize: 11,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SEA,
-    letterSpacing: 2.4,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  coverTitle: {
-    fontFamily: 'Bricolage Grotesque',
-    fontWeight: 700,
-    fontSize: 44,
-    color: MARBLE,
-    lineHeight: 1.05,
-    letterSpacing: -0.5,
-    marginBottom: 18,
-  },
-  coverDivider: { width: 56, height: 3, backgroundColor: SUN, marginBottom: 18 },
-  coverMeta: {
-    fontSize: 13,
-    fontFamily: 'Raleway',
-    fontWeight: 400,
-    color: 'rgba(255,250,239,0.75)',
-    marginBottom: 6,
-  },
-  coverMetaStrong: {
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: MARBLE,
-  },
-  coverHeroWrap: { flex: 1, paddingHorizontal: 40, paddingBottom: 32 },
-  coverHero: { width: '100%', height: '100%', borderRadius: 12, objectFit: 'cover', backgroundColor: DEEPSEA_DEEP },
-  coverFooter: {
-    paddingHorizontal: 40,
-    paddingBottom: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  coverFooterText: {
-    fontSize: 9,
-    fontFamily: 'Raleway',
-    fontWeight: 600,
-    color: 'rgba(255,250,239,0.55)',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-
-  // ─── Header bar (listing pages) ───
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: DEEPSEA,
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-  },
-  headerLogo: { height: 18 },
-  headerTitle: {
-    fontSize: 9.5,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SUN,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-  },
-
-  // ─── Body ───
-  body: { flex: 1, paddingHorizontal: 40, paddingTop: 28, paddingBottom: 16 },
-  pageHeading: { marginBottom: 18 },
-  pageHeadingEyebrow: {
-    fontSize: 9,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SUN_DARK,
-    letterSpacing: 2.2,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  pageHeadingTitle: {
-    fontSize: 22,
-    fontFamily: 'Bricolage Grotesque',
-    fontWeight: 700,
-    color: DEEPSEA,
-    letterSpacing: -0.3,
-  },
-  pageHeadingRule: { width: 40, height: 3, backgroundColor: SUN, marginTop: 10 },
-
-  // ─── Listing card ───
-  cards: { flex: 1, gap: 16 },
-  card: {
-    flexDirection: 'row',
-    flex: 1,
-    backgroundColor: WHITE,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: BORDER,
-  },
-  cardFav: {
-    borderWidth: 1.5,
-    borderColor: SUN,
-  },
-  cardThumbWrap: {
-    width: 245,
-    backgroundColor: DEEPSEA_LIGHT,
-    position: 'relative',
-  },
-  cardThumb: { width: '100%', height: '100%', objectFit: 'cover' },
-  cardFavBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: SUN,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardFavBadgeStar: {
-    fontSize: 10,
-    color: DEEPSEA,
-    fontWeight: 700,
-  },
-  cardFavBadgeText: {
-    fontSize: 8,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: DEEPSEA,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  cardInfo: {
-    flex: 1,
-    paddingHorizontal: 22,
-    paddingVertical: 18,
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-  },
-  cardInfoTop: { flexDirection: 'column' },
-  cardRegio: {
-    fontSize: 9,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: SEA,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontFamily: 'Bricolage Grotesque',
-    fontWeight: 700,
-    color: DEEPSEA,
-    lineHeight: 1.2,
-    letterSpacing: -0.2,
-    marginBottom: 12,
-  },
-  cardMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    marginBottom: 14,
-  },
-  cardMetaItem: { flexDirection: 'column' },
-  cardMetaLabel: {
-    fontSize: 7.5,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: GRAY_500,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  cardMetaValue: {
-    fontSize: 12,
-    fontFamily: 'Bricolage Grotesque',
-    fontWeight: 700,
-    color: DEEPSEA,
-  },
-  cardPrice: {
-    fontSize: 22,
-    fontFamily: 'Bricolage Grotesque',
-    fontWeight: 700,
-    color: SUN,
-    letterSpacing: -0.4,
-  },
-  cardPriceMuted: {
-    fontSize: 13,
-    fontFamily: 'Raleway',
-    fontWeight: 600,
-    color: GRAY_500,
-  },
-
-  // ─── Footer ───
-  footer: {
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  footerText: {
-    fontSize: 8,
-    fontFamily: 'Raleway',
-    fontWeight: 600,
-    color: GRAY_500,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  footerPage: {
-    fontSize: 8,
-    fontFamily: 'Raleway',
-    fontWeight: 700,
-    color: DEEPSEA,
-    letterSpacing: 1.2,
-  },
-})
-
+// ─── Types ────────────────────────────────────────────────────────────────
 interface Item {
   title: string
   url: string
@@ -293,19 +67,23 @@ interface Item {
   bathrooms: number | null
   size_m2: number | null
   thumbnail: string | null
+  source: string
+  notities: string
   is_favorite: boolean
 }
 
-function fmtEuro(n: number): string {
-  return `€ ${n.toLocaleString('nl-NL')}`
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function fmtEuro(n: number | null | undefined): string {
+  if (n == null) return 'Op aanvraag'
+  return `€ ${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
 }
 
-function pickHero(items: Item[]): string | null {
-  // Eerst proberen de favoriete woning, anders de eerste met thumbnail.
-  const fav = items.find(i => i.is_favorite && i.thumbnail)
-  if (fav?.thumbnail) return fav.thumbnail
-  const first = items.find(i => i.thumbnail)
-  return first?.thumbnail ?? null
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('nl-NL', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 function uniqueRegions(items: Item[]): string[] {
@@ -316,217 +94,1140 @@ function uniqueRegions(items: Item[]): string[] {
   return Array.from(set)
 }
 
-function ListingCard({ item }: { item: Item }) {
-  return (
-    <View style={[s.card, item.is_favorite ? s.cardFav : {}]} wrap={false}>
-      <View style={s.cardThumbWrap}>
-        {item.thumbnail ? (
-          <Image src={item.thumbnail} style={s.cardThumb} />
-        ) : null}
-        {item.is_favorite && (
-          <View style={s.cardFavBadge}>
-            <Text style={s.cardFavBadgeStar}>★</Text>
-            <Text style={s.cardFavBadgeText}>Favoriet</Text>
-          </View>
-        )}
-      </View>
-      <View style={s.cardInfo}>
-        <View style={s.cardInfoTop}>
-          {item.location ? <Text style={s.cardRegio}>{item.location}</Text> : null}
-          <Text style={s.cardTitle}>{item.title || 'Onbekend'}</Text>
-
-          <View style={s.cardMetaRow}>
-            {item.size_m2 ? (
-              <View style={s.cardMetaItem}>
-                <Text style={s.cardMetaLabel}>Woonopp.</Text>
-                <Text style={s.cardMetaValue}>{item.size_m2} m²</Text>
-              </View>
-            ) : null}
-            {item.bedrooms ? (
-              <View style={s.cardMetaItem}>
-                <Text style={s.cardMetaLabel}>Slaapk.</Text>
-                <Text style={s.cardMetaValue}>{item.bedrooms}</Text>
-              </View>
-            ) : null}
-            {item.bathrooms ? (
-              <View style={s.cardMetaItem}>
-                <Text style={s.cardMetaLabel}>Badk.</Text>
-                <Text style={s.cardMetaValue}>{item.bathrooms}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        {item.price ? (
-          <Text style={s.cardPrice}>{fmtEuro(item.price)}</Text>
-        ) : (
-          <Text style={s.cardPriceMuted}>Prijs op aanvraag</Text>
-        )}
-      </View>
-    </View>
-  )
+function pickHero(items: Item[]): Item | null {
+  const fav = items.find(i => i.is_favorite && i.thumbnail)
+  if (fav) return fav
+  const first = items.find(i => i.thumbnail)
+  return first ?? null
 }
 
-function ShortlistPDF({
-  klantNaam,
-  items,
-  logoSrc,
-}: {
-  klantNaam: string
-  items: Item[]
-  logoSrc?: string
-}) {
-  const datum = new Date().toLocaleDateString('nl-NL', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function sortFavoritesFirst(items: Item[]): Item[] {
+  // Favorites first, preserve consultant order within groups (stable sort).
+  const favs = items.filter(i => i.is_favorite)
+  const rest = items.filter(i => !i.is_favorite)
+  return [...favs, ...rest]
+}
 
-  const itemsPerPage = 2
-  const pages: Item[][] = []
-  for (let i = 0; i < items.length; i += itemsPerPage) {
-    pages.push(items.slice(i, i + itemsPerPage))
+function sourceLabel(item: Item): string {
+  const src = (item.source || '').toLowerCase()
+  if (src.includes('idealista')) return 'Idealista'
+  if (src.includes('costa') || src.includes('costaselect')) return 'Costa Select'
+  if (item.url) {
+    try {
+      const host = new URL(item.url).host.replace(/^www\./, '')
+      if (host.includes('idealista')) return 'Idealista'
+      if (host.includes('costaselect')) return 'Costa Select'
+    } catch { /* ignore */ }
   }
-
-  const totalListingPages = pages.length
-  const totalPages = totalListingPages + 1 // +1 voor cover
-  const heroSrc = pickHero(items)
-  const regios = uniqueRegions(items)
-  const favCount = items.filter(i => i.is_favorite).length
-
-  return (
-    <Document>
-      {/* ─── Cover ─── */}
-      <Page size="A4" style={s.darkPage}>
-        <View style={s.coverContainer}>
-          <View style={s.coverTop}>
-            {logoSrc ? (
-              <Image src={logoSrc} style={s.coverLogo} />
-            ) : (
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontFamily: 'Bricolage Grotesque',
-                  fontWeight: 700,
-                  color: MARBLE,
-                  letterSpacing: 2,
-                }}
-              >
-                COSTA SELECT
-              </Text>
-            )}
-            <Text style={s.coverTag}>Woningoverzicht</Text>
-          </View>
-
-          <View style={s.coverMain}>
-            <Text style={s.coverEyebrow}>Voor</Text>
-            <Text style={s.coverTitle}>{klantNaam}</Text>
-            <View style={s.coverDivider} />
-            <Text style={[s.coverMeta, s.coverMetaStrong]}>{datum}</Text>
-            <Text style={[s.coverMeta, s.coverMetaStrong]}>
-              {items.length} {items.length === 1 ? 'woning' : 'woningen'}
-              {favCount > 0
-                ? ` · ${favCount} ${favCount === 1 ? 'favoriet' : 'favorieten'}`
-                : ''}
-            </Text>
-            {regios.length > 0 ? (
-              <Text style={[s.coverMeta, s.coverMetaStrong]}>
-                {regios.slice(0, 4).join(' · ')}
-                {regios.length > 4 ? ` +${regios.length - 4}` : ''}
-              </Text>
-            ) : null}
-          </View>
-
-          <View style={s.coverHeroWrap}>
-            {heroSrc ? (
-              <Image src={heroSrc} style={s.coverHero} />
-            ) : (
-              <View style={s.coverHero} />
-            )}
-          </View>
-
-          <View style={s.coverFooter}>
-            <Text style={s.coverFooterText}>Costa Select · Premium Aankoopmakelaar Spanje</Text>
-            <Text style={s.coverFooterText}>01 / {String(totalPages).padStart(2, '0')}</Text>
-          </View>
-        </View>
-      </Page>
-
-      {/* ─── Listing pages ─── */}
-      {pages.map((pageItems, pageIdx) => {
-        const physicalPage = pageIdx + 2 // +1 cover, +1 (1-indexed)
-        return (
-          <Page key={pageIdx} size="A4" style={s.page}>
-            <View style={s.header}>
-              {logoSrc ? (
-                <Image src={logoSrc} style={s.headerLogo} />
-              ) : (
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'Bricolage Grotesque',
-                    fontWeight: 700,
-                    color: WHITE,
-                    letterSpacing: 1.6,
-                  }}
-                >
-                  COSTA SELECT
-                </Text>
-              )}
-              <Text style={s.headerTitle}>Woningoverzicht · {klantNaam}</Text>
-            </View>
-
-            <View style={s.body}>
-              {pageIdx === 0 && (
-                <View style={s.pageHeading}>
-                  <Text style={s.pageHeadingEyebrow}>Selectie</Text>
-                  <Text style={s.pageHeadingTitle}>
-                    {items.length} {items.length === 1 ? 'woning' : 'woningen'} voor je geselecteerd
-                  </Text>
-                  <View style={s.pageHeadingRule} />
-                </View>
-              )}
-
-              <View style={s.cards}>
-                {pageItems.map((item, i) => (
-                  <ListingCard key={i} item={item} />
-                ))}
-              </View>
-            </View>
-
-            <View style={s.footer}>
-              <Text style={s.footerText}>Costa Select · Premium Aankoopmakelaar Spanje</Text>
-              <Text style={s.footerPage}>
-                {String(physicalPage).padStart(2, '0')} /{' '}
-                {String(totalPages).padStart(2, '0')}
-              </Text>
-            </View>
-          </Page>
-        )
-      })}
-    </Document>
-  )
+  return 'Handmatig'
 }
 
-function getLogoBase64(): string | undefined {
+function getAssetBase64(filename: string): string | undefined {
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'brand', 'costa-select-wordmark-white.svg')
-    const svg = fs.readFileSync(logoPath)
-    return `data:image/svg+xml;base64,${svg.toString('base64')}`
+    const assetPath = path.join(process.cwd(), 'public', 'brand', filename)
+    const buf = fs.readFileSync(assetPath)
+    const ext = filename.split('.').pop()?.toLowerCase()
+    const mime =
+      ext === 'svg'
+        ? 'image/svg+xml'
+        : ext === 'png'
+          ? 'image/png'
+          : ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : 'application/octet-stream'
+    return `data:${mime};base64,${buf.toString('base64')}`
   } catch {
     return undefined
   }
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  // Page shell
+  page: {
+    backgroundColor: MARBLE,
+    fontFamily: 'Raleway',
+    color: INK,
+  },
+
+  // ── Cover ──
+  cover: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: DEEPSEA,
+    color: MARBLE,
+    flexDirection: 'column',
+  },
+  coverHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingTop: 48,
+    paddingBottom: 0,
+    paddingHorizontal: 56,
+  },
+  coverBeeldmerk: {
+    width: 56,
+    height: 56,
+    marginTop: -28,
+    marginLeft: -16,
+  },
+  coverBeeldmerkImg: { width: '100%', height: '100%', objectFit: 'contain' },
+  coverTag: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  coverTagEyebrow: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 2.34,
+    textTransform: 'uppercase',
+    color: SUN,
+    marginBottom: 8,
+  },
+  coverTagRule: {
+    width: 36,
+    height: 2,
+    backgroundColor: SUN,
+    marginBottom: 8,
+  },
+  coverTagMeta: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 500,
+    letterSpacing: 1.7,
+    textTransform: 'uppercase',
+    color: ON_DARK_45,
+  },
+  coverBody: {
+    paddingHorizontal: 56,
+    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    marginBottom: 28,
+  },
+  coverPre: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 2.52,
+    textTransform: 'uppercase',
+    color: SUN,
+    marginBottom: 18,
+  },
+  coverTitle: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 56,
+    lineHeight: 0.96,
+    letterSpacing: -1.57,
+    color: MARBLE,
+    marginBottom: 4,
+    maxWidth: 580,
+  },
+  coverName: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 56,
+    lineHeight: 0.96,
+    letterSpacing: -1.57,
+    color: SUN,
+    marginBottom: 32,
+    maxWidth: 580,
+  },
+  coverNameTerminal: { color: MARBLE },
+  coverTick: {
+    width: 48,
+    height: 2,
+    backgroundColor: SUN,
+    marginBottom: 24,
+  },
+  coverMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: ON_DARK_20,
+    paddingTop: 22,
+  },
+  coverMetaItem: {
+    flexDirection: 'column',
+    paddingRight: 28,
+    marginRight: 28,
+    borderRightWidth: 1,
+    borderRightStyle: 'solid',
+    borderRightColor: ON_DARK_20,
+  },
+  coverMetaItemLast: {
+    borderRightWidth: 0,
+    paddingRight: 0,
+    marginRight: 0,
+  },
+  coverMetaL: {
+    fontFamily: 'Raleway',
+    fontSize: 8,
+    fontWeight: 700,
+    letterSpacing: 1.76,
+    textTransform: 'uppercase',
+    color: ON_DARK_55,
+    marginBottom: 6,
+  },
+  coverMetaV: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 20,
+    color: MARBLE,
+    letterSpacing: -0.36,
+    lineHeight: 1,
+  },
+  coverMetaVSmall: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 13,
+    color: MARBLE,
+    letterSpacing: -0.23,
+    lineHeight: 1.3,
+    maxWidth: 320,
+  },
+  coverMetaUnit: {
+    fontFamily: 'Raleway',
+    fontSize: 10,
+    fontWeight: 500,
+    color: ON_DARK_55,
+    marginLeft: 3,
+  },
+  coverHero: {
+    height: 420,
+    backgroundColor: DEEPSEA_DEEP,
+    flexShrink: 0,
+    position: 'relative',
+  },
+  coverHeroImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  coverHeroEmpty: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverHeroEmptyText: {
+    fontFamily: 'Raleway',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 2.42,
+    textTransform: 'uppercase',
+    color: ON_DARK_45,
+  },
+  coverHeroTag: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    backgroundColor: SUN,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  coverHeroTagText: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 1.87,
+    textTransform: 'uppercase',
+    color: DEEPSEA_DEEP,
+  },
+
+  // ── Header bar (listing pages) ──
+  hbar: {
+    height: HEADER_H,
+    paddingHorizontal: PAD_X,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: MARBLE,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: RULE,
+    flexShrink: 0,
+  },
+  hbarLeft: { flexDirection: 'row', alignItems: 'center' },
+  hbarWordmark: { height: 11, marginRight: 14 },
+  hbarWordmarkImg: { height: 11, objectFit: 'contain' },
+  hbarRule: {
+    width: 1,
+    height: 18,
+    backgroundColor: RULE_STRONG,
+    marginRight: 14,
+  },
+  hbarMeta: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 1.98,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+  },
+  hbarMetaName: { color: DEEPSEA },
+  hbarRight: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 1.98,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+  },
+
+  // ── Listing body ──
+  body: {
+    flex: 1,
+    paddingHorizontal: PAD_X,
+    paddingTop: 28,
+    paddingBottom: 44,
+    flexDirection: 'column',
+  },
+
+  // Section title
+  stitle: { marginBottom: 22, flexDirection: 'column' },
+  stitleEyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  stitleEyebrow: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 2.52,
+    textTransform: 'uppercase',
+    color: DEEPSEA,
+  },
+  stitleEyebrowRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: RULE,
+    marginHorizontal: 6,
+  },
+  stitleEyebrowCounter: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 1.98,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+  },
+  sunTick: {
+    width: 32,
+    height: 2,
+    backgroundColor: SUN,
+    marginBottom: 10,
+  },
+  stitleH2: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 24,
+    lineHeight: 1.05,
+    letterSpacing: -0.53,
+    color: DEEPSEA,
+    maxWidth: 600,
+  },
+  stitleTerminal: { color: SUN },
+
+  // Card stack
+  cards: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+
+  // Card — base
+  card: {
+    flexDirection: 'row',
+    backgroundColor: MARBLE,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: RULE,
+    borderRadius: 2,
+    overflow: 'hidden',
+    flex: 1,
+  },
+  // Favorite outer wrapper (3px sun-tint ring around the card)
+  favOuter: {
+    backgroundColor: SUN_TINT,
+    padding: 3,
+    borderRadius: 2,
+    flex: 1,
+  },
+  cardFav: {
+    flexDirection: 'row',
+    backgroundColor: MARBLE,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: SUN,
+    borderRadius: 2,
+    overflow: 'hidden',
+    flex: 1,
+  },
+
+  // Thumb
+  cardThumb: {
+    width: 320,
+    flexShrink: 0,
+    backgroundColor: DEEPSEA_DEEP,
+    position: 'relative',
+  },
+  cardThumbCompact: { width: 240 },
+  cardThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  cardThumbEmpty: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: MARBLE_DEEP,
+  },
+  cardThumbEmptyText: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 1.87,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+  },
+
+  // Badges/pills on thumb
+  favBadge: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    backgroundColor: SUN,
+    paddingTop: 7,
+    paddingBottom: 7,
+    paddingLeft: 11,
+    paddingRight: 12,
+    borderRadius: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  favBadgeStar: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: DEEPSEA_DEEP,
+    marginRight: 7,
+  },
+  favBadgeText: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 1.7,
+    textTransform: 'uppercase',
+    color: DEEPSEA_DEEP,
+  },
+  cardIdx: {
+    position: 'absolute',
+    bottom: 14,
+    right: 14,
+    backgroundColor: 'rgba(7,42,36,0.78)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 2,
+  },
+  cardIdxText: {
+    fontFamily: 'Bricolage Grotesque',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: 0.44,
+    color: MARBLE,
+  },
+  cardSource: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    backgroundColor: ON_DARK_92,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 2,
+  },
+  cardSourceText: {
+    fontFamily: 'Raleway',
+    fontSize: 8,
+    fontWeight: 700,
+    letterSpacing: 1.44,
+    textTransform: 'uppercase',
+    color: DEEPSEA,
+  },
+
+  // Card info
+  cardInfo: {
+    flex: 1,
+    paddingTop: 24,
+    paddingRight: 28,
+    paddingBottom: 22,
+    paddingLeft: 28,
+    flexDirection: 'column',
+  },
+  cardInfoFav: {
+    paddingLeft: 32,
+    paddingRight: 32,
+  },
+  cardInfoCompact: {
+    paddingTop: 18,
+    paddingRight: 22,
+    paddingBottom: 18,
+    paddingLeft: 22,
+  },
+  cardInfoSolo: {
+    paddingTop: 32,
+    paddingRight: 36,
+    paddingBottom: 32,
+    paddingLeft: 36,
+  },
+
+  cardLoc: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 2.04,
+    textTransform: 'uppercase',
+    color: SUN_DARK,
+    marginBottom: 10,
+  },
+  cardTitle: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 22,
+    lineHeight: 1.08,
+    letterSpacing: -0.4,
+    color: DEEPSEA,
+    marginBottom: 4,
+  },
+  cardTitleFav: { fontSize: 24 },
+  cardTitleSolo: { fontSize: 34, lineHeight: 1.02, letterSpacing: -0.82 },
+  cardTitleCompact: { fontSize: 18 },
+  cardTitleCompactFav: { fontSize: 20 },
+  cardTitleTerminal: { color: SUN },
+
+  // Specs row
+  cardSpecs: {
+    flexDirection: 'row',
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: RULE,
+  },
+  cardSpec: {
+    flex: 1,
+    flexDirection: 'column',
+    paddingHorizontal: 12,
+    borderRightWidth: 1,
+    borderRightStyle: 'solid',
+    borderRightColor: RULE,
+  },
+  cardSpecFirst: { paddingLeft: 0 },
+  cardSpecLast: { borderRightWidth: 0, paddingRight: 0 },
+  cardSpecPrice: {
+    flex: 1.4,
+    borderRightColor: RULE_STRONG,
+  },
+  cardSpecL: {
+    fontFamily: 'Raleway',
+    fontSize: 7.5,
+    fontWeight: 700,
+    letterSpacing: 1.65,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+    marginBottom: 4,
+  },
+  cardSpecLPrice: { color: SUN_DARK },
+  cardSpecV: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 15,
+    color: DEEPSEA,
+    letterSpacing: -0.27,
+    lineHeight: 1,
+  },
+  cardSpecVPrice: {
+    fontSize: 19,
+    color: SUN_DARK,
+  },
+  cardSpecVPriceFav: { fontSize: 21 },
+  cardSpecVSolo: { fontSize: 17 },
+  cardSpecVPriceSolo: { fontSize: 24 },
+  cardSpecVCompact: { fontSize: 12 },
+  cardSpecVPriceCompact: { fontSize: 16 },
+  cardSpecUnit: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 500,
+    color: INK_MUTE,
+    marginLeft: 2,
+  },
+
+  // Note callout (favorites only)
+  cardNote: {
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: SUN_TINT,
+    borderLeftWidth: 2,
+    borderLeftStyle: 'solid',
+    borderLeftColor: SUN,
+    flexDirection: 'column',
+  },
+  cardNoteCompact: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  cardNoteLbl: {
+    fontFamily: 'Raleway',
+    fontSize: 8,
+    fontWeight: 700,
+    letterSpacing: 1.92,
+    textTransform: 'uppercase',
+    color: SUN_DARK,
+    marginBottom: 6,
+  },
+  cardNoteText: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 400,
+    fontSize: 11,
+    lineHeight: 1.5,
+    letterSpacing: -0.05,
+    color: INK,
+    fontStyle: 'italic',
+  },
+  cardNoteTextCompact: { fontSize: 10.5 },
+
+  // Solo card overrides
+  cardSolo: {
+    flexDirection: 'column',
+    flex: 1,
+  },
+  cardSoloThumb: {
+    width: '100%',
+    height: 420,
+    flexShrink: 0,
+  },
+})
+
+// ─── Components ───────────────────────────────────────────────────────────
+function HeaderBar({
+  klantNaam,
+  date,
+  wordmarkSrc,
+}: {
+  klantNaam: string
+  date: string
+  wordmarkSrc?: string
+}) {
+  return (
+    <View style={s.hbar}>
+      <View style={s.hbarLeft}>
+        {wordmarkSrc ? (
+          <View style={s.hbarWordmark}>
+            <Image src={wordmarkSrc} style={s.hbarWordmarkImg} />
+          </View>
+        ) : (
+          <Text style={[s.hbarMeta, { color: DEEPSEA, marginRight: 14 }]}>
+            COSTA SELECT
+          </Text>
+        )}
+        <View style={s.hbarRule} />
+        <Text style={s.hbarMeta}>
+          Woningoverzicht ·{' '}
+          <Text style={s.hbarMetaName}>{klantNaam}</Text>
+        </Text>
+      </View>
+      <Text style={s.hbarRight}>{date}</Text>
+    </View>
+  )
+}
+
+function CardSpec({
+  label,
+  value,
+  unit,
+  variant,
+  isPrice,
+  isFirst,
+  isLast,
+}: {
+  label: string
+  value: string
+  unit?: string
+  variant: 'regular' | 'compact' | 'solo'
+  isPrice?: boolean
+  isFirst?: boolean
+  isLast?: boolean
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const valueStyles: any[] = [s.cardSpecV]
+  if (variant === 'compact') valueStyles.push(s.cardSpecVCompact)
+  if (variant === 'solo') valueStyles.push(s.cardSpecVSolo)
+  if (isPrice) {
+    valueStyles.push(s.cardSpecVPrice)
+    if (variant === 'compact') valueStyles.push(s.cardSpecVPriceCompact)
+    if (variant === 'solo') valueStyles.push(s.cardSpecVPriceSolo)
+  }
+  return (
+    <View
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      style={[s.cardSpec, isPrice ? s.cardSpecPrice : {}, isFirst ? s.cardSpecFirst : {}, isLast ? s.cardSpecLast : {}] as any}
+    >
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <Text style={[s.cardSpecL, isPrice ? s.cardSpecLPrice : {}] as any}>
+        {label}
+      </Text>
+      <Text style={valueStyles}>
+        {value}
+        {unit ? <Text style={s.cardSpecUnit}>{unit}</Text> : null}
+      </Text>
+    </View>
+  )
+}
+
+function ListingCard({
+  item,
+  index,
+  variant,
+}: {
+  item: Item
+  index: number
+  variant: 'regular' | 'compact' | 'solo'
+}) {
+  const isFav = item.is_favorite || variant === 'solo'
+  const isSolo = variant === 'solo'
+  const isCompact = variant === 'compact'
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const titleStyles: any[] = [s.cardTitle]
+  if (isFav && !isCompact) titleStyles.push(s.cardTitleFav)
+  if (isSolo) titleStyles.push(s.cardTitleSolo)
+  if (isCompact) titleStyles.push(isFav ? s.cardTitleCompactFav : s.cardTitleCompact)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const infoStyles: any[] = [s.cardInfo]
+  if (isFav && !isSolo && !isCompact) infoStyles.push(s.cardInfoFav)
+  if (isCompact) infoStyles.push(s.cardInfoCompact)
+  if (isSolo) infoStyles.push(s.cardInfoSolo)
+
+  const cardInner = (
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    <View style={[isFav ? s.cardFav : s.card, isSolo ? s.cardSolo : {}] as any}>
+      <View
+        style={[s.cardThumb, isCompact ? s.cardThumbCompact : {}, isSolo ? s.cardSoloThumb : {}] as any}
+      >
+        {item.thumbnail ? (
+          <Image src={item.thumbnail} style={s.cardThumbImg} />
+        ) : (
+          <View style={s.cardThumbEmpty}>
+            <Text style={s.cardThumbEmptyText}>Geen foto beschikbaar</Text>
+          </View>
+        )}
+        {isFav ? (
+          <View style={s.favBadge}>
+            <Text style={s.favBadgeStar}>★</Text>
+            <Text style={s.favBadgeText}>Favoriet</Text>
+          </View>
+        ) : (
+          <View style={s.cardIdx}>
+            <Text style={s.cardIdxText}>
+              {String(index).padStart(2, '0')}
+            </Text>
+          </View>
+        )}
+        {item.thumbnail && (
+          <View style={s.cardSource}>
+            <Text style={s.cardSourceText}>{sourceLabel(item)}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={infoStyles}>
+        {item.location ? (
+          <Text style={s.cardLoc}>◆ {item.location}</Text>
+        ) : null}
+        <Text style={titleStyles}>
+          {item.title || 'Woning zonder titel'}
+          <Text style={s.cardTitleTerminal}>.</Text>
+        </Text>
+
+        <View style={s.cardSpecs}>
+          <CardSpec
+            label="Vraagprijs"
+            value={fmtEuro(item.price)}
+            variant={variant}
+            isPrice
+            isFirst
+          />
+          <CardSpec
+            label="Woonopp."
+            value={item.size_m2 != null ? String(item.size_m2) : '—'}
+            unit={item.size_m2 != null ? 'm²' : undefined}
+            variant={variant}
+          />
+          <CardSpec
+            label="Slaapk."
+            value={item.bedrooms != null ? String(item.bedrooms) : '—'}
+            variant={variant}
+          />
+          <CardSpec
+            label="Badk."
+            value={item.bathrooms != null ? String(item.bathrooms) : '—'}
+            variant={variant}
+            isLast
+          />
+        </View>
+
+        {isFav && item.notities ? (
+          <View style={[s.cardNote, isCompact ? s.cardNoteCompact : {}] as any}>
+            <Text style={s.cardNoteLbl}>Notitie consultant</Text>
+            <Text style={[s.cardNoteText, isCompact ? s.cardNoteTextCompact : {}] as any}>
+              {item.notities}
+            </Text>
+          </View>
+        ) : null}
+        {/* eslint-enable @typescript-eslint/no-explicit-any */}
+      </View>
+    </View>
+  )
+
+  // Favorite + solo: 3px sun-tint ring around card via outer wrapper
+  if (isFav) {
+    return (
+      <View
+        style={[
+          s.favOuter,
+          { marginTop: 4, marginBottom: 4, marginLeft: 4, marginRight: 4 },
+        ]}
+      >
+        {cardInner}
+      </View>
+    )
+  }
+  return cardInner
+}
+
+function CoverPage({
+  klantNaam,
+  date,
+  items,
+  beeldmerkSrc,
+}: {
+  klantNaam: string
+  date: string
+  items: Item[]
+  beeldmerkSrc?: string
+}) {
+  const hero = pickHero(items)
+  const favCount = items.filter(i => i.is_favorite).length
+  const regions = uniqueRegions(items)
+  const regionsText = regions.slice(0, 6).join(' · ')
+
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.cover}>
+        <View style={s.coverHead}>
+          <View style={s.coverBeeldmerk}>
+            {beeldmerkSrc ? (
+              <Image src={beeldmerkSrc} style={s.coverBeeldmerkImg} />
+            ) : null}
+          </View>
+          <View style={s.coverTag}>
+            <Text style={s.coverTagEyebrow}>Woningoverzicht</Text>
+            <View style={s.coverTagRule} />
+            <Text style={s.coverTagMeta}>{date}</Text>
+          </View>
+        </View>
+
+        <View style={s.coverBody}>
+          <Text style={s.coverPre}>Een persoonlijke selectie</Text>
+          <Text style={s.coverTitle}>Voor</Text>
+          <Text style={s.coverName}>
+            {klantNaam}
+            <Text style={s.coverNameTerminal}>.</Text>
+          </Text>
+          <View style={s.coverTick} />
+
+          <View style={s.coverMeta}>
+            <View style={s.coverMetaItem}>
+              <Text style={s.coverMetaL}>Woningen</Text>
+              <Text style={s.coverMetaV}>
+                {String(items.length).padStart(2, '0')}
+              </Text>
+            </View>
+            {favCount > 0 && (
+              <View style={s.coverMetaItem}>
+                <Text style={s.coverMetaL}>Favorieten</Text>
+                <Text style={s.coverMetaV}>
+                  {favCount}
+                  <Text style={s.coverMetaUnit}> ★</Text>
+                </Text>
+              </View>
+            )}
+            {regionsText ? (
+              <View style={s.coverMetaItem}>
+                <Text style={s.coverMetaL}>Regio&apos;s</Text>
+                <Text style={s.coverMetaVSmall}>{regionsText}</Text>
+              </View>
+            ) : null}
+            <View style={[s.coverMetaItem, s.coverMetaItemLast]}>
+              <Text style={s.coverMetaL}>Datum</Text>
+              <Text style={s.coverMetaVSmall}>{date}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={s.coverHero}>
+          {hero?.thumbnail ? (
+            <>
+              <Image src={hero.thumbnail} style={s.coverHeroImg} />
+              {hero.is_favorite && (
+                <View style={s.coverHeroTag}>
+                  <Text style={s.coverHeroTagText}>
+                    ★ Onze topkeuze · {hero.title || 'Woning'}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={s.coverHeroEmpty}>
+              <Text style={s.coverHeroEmptyText}>Hero foto</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Page>
+  )
+}
+
+function SectionTitle({
+  eyebrow,
+  counter,
+  title,
+}: {
+  eyebrow: string
+  counter: string
+  title: string
+}) {
+  return (
+    <View style={s.stitle}>
+      <View style={s.stitleEyebrowRow}>
+        <Text style={s.stitleEyebrow}>{eyebrow}</Text>
+        <View style={s.stitleEyebrowRule} />
+        <Text style={s.stitleEyebrowCounter}>{counter}</Text>
+      </View>
+      <View style={s.sunTick} />
+      <Text style={s.stitleH2}>
+        {title}
+        <Text style={s.stitleTerminal}>.</Text>
+      </Text>
+    </View>
+  )
+}
+
+function ListingPage({
+  klantNaam,
+  date,
+  items,
+  startIndex,
+  pageNum,
+  totalPages,
+  wordmarkSrc,
+}: {
+  klantNaam: string
+  date: string
+  items: Item[]
+  startIndex: number
+  pageNum: number
+  totalPages: number
+  wordmarkSrc?: string
+}) {
+  return (
+    <Page size="A4" style={s.page}>
+      <HeaderBar klantNaam={klantNaam} date={date} wordmarkSrc={wordmarkSrc} />
+      <View style={s.body}>
+        <SectionTitle
+          eyebrow="De selectie"
+          counter={`Pagina ${String(pageNum).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}`}
+          title="Geselecteerde woningen"
+        />
+        <View style={s.cards}>
+          {items.map((item, i) => (
+            <ListingCard
+              key={i}
+              item={item}
+              index={startIndex + i + 1}
+              variant="regular"
+            />
+          ))}
+        </View>
+      </View>
+    </Page>
+  )
+}
+
+function SoloPage({
+  klantNaam,
+  date,
+  item,
+  wordmarkSrc,
+}: {
+  klantNaam: string
+  date: string
+  item: Item
+  wordmarkSrc?: string
+}) {
+  return (
+    <Page size="A4" style={s.page}>
+      <HeaderBar klantNaam={klantNaam} date={date} wordmarkSrc={wordmarkSrc} />
+      <View style={s.body}>
+        <SectionTitle
+          eyebrow="De selectie"
+          counter="01 / 01 · Solo"
+          title="Eén woning, zorgvuldig gekozen"
+        />
+        <ListingCard item={item} index={1} variant="solo" />
+      </View>
+    </Page>
+  )
+}
+
+function CompactPage({
+  klantNaam,
+  date,
+  items,
+  wordmarkSrc,
+}: {
+  klantNaam: string
+  date: string
+  items: Item[]
+  wordmarkSrc?: string
+}) {
+  return (
+    <Page size="A4" style={s.page}>
+      <HeaderBar klantNaam={klantNaam} date={date} wordmarkSrc={wordmarkSrc} />
+      <View style={s.body}>
+        <SectionTitle
+          eyebrow="De selectie"
+          counter="01 / 01 · 3 woningen"
+          title="Drie woningen op één pagina"
+        />
+        <View style={s.cards}>
+          {items.map((item, i) => (
+            <ListingCard key={i} item={item} index={i + 1} variant="compact" />
+          ))}
+        </View>
+      </View>
+    </Page>
+  )
+}
+
+// ─── PDF document ─────────────────────────────────────────────────────────
+function ShortlistPDF({
+  klantNaam,
+  items,
+  beeldmerkSrc,
+  wordmarkSrc,
+}: {
+  klantNaam: string
+  items: Item[]
+  beeldmerkSrc?: string
+  wordmarkSrc?: string
+}) {
+  const date = fmtDate(new Date())
+  const sorted = sortFavoritesFirst(items)
+
+  // Decide page mode
+  if (sorted.length === 1) {
+    return (
+      <Document>
+        <CoverPage
+          klantNaam={klantNaam}
+          date={date}
+          items={sorted.map(i => ({ ...i, is_favorite: true }))}
+          beeldmerkSrc={beeldmerkSrc}
+        />
+        <SoloPage
+          klantNaam={klantNaam}
+          date={date}
+          item={{ ...sorted[0], is_favorite: true }}
+          wordmarkSrc={wordmarkSrc}
+        />
+      </Document>
+    )
+  }
+
+  if (sorted.length === 3) {
+    return (
+      <Document>
+        <CoverPage
+          klantNaam={klantNaam}
+          date={date}
+          items={sorted}
+          beeldmerkSrc={beeldmerkSrc}
+        />
+        <CompactPage
+          klantNaam={klantNaam}
+          date={date}
+          items={sorted}
+          wordmarkSrc={wordmarkSrc}
+        />
+      </Document>
+    )
+  }
+
+  // Default: paginate 2 cards per page
+  const itemsPerPage = 2
+  const pages: Item[][] = []
+  for (let i = 0; i < sorted.length; i += itemsPerPage) {
+    pages.push(sorted.slice(i, i + itemsPerPage))
+  }
+  const totalPages = pages.length
+
+  return (
+    <Document>
+      <CoverPage
+        klantNaam={klantNaam}
+        date={date}
+        items={sorted}
+        beeldmerkSrc={beeldmerkSrc}
+      />
+      {pages.map((pageItems, pageIdx) => (
+        <ListingPage
+          key={pageIdx}
+          klantNaam={klantNaam}
+          date={date}
+          items={pageItems}
+          startIndex={pageIdx * itemsPerPage}
+          pageNum={pageIdx + 1}
+          totalPages={totalPages}
+          wordmarkSrc={wordmarkSrc}
+        />
+      ))}
+    </Document>
+  )
+}
+
+// ─── Route ────────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
   const { klant_naam, items } = await request.json()
-  const logoSrc = getLogoBase64()
+  const beeldmerkSrc = getAssetBase64('beeldmerk-sun.png')
+  const wordmarkSrc = getAssetBase64('wordmark-deepsea-v2.svg')
 
   const buffer = await renderToBuffer(
-    <ShortlistPDF klantNaam={klant_naam || 'Klant'} items={items || []} logoSrc={logoSrc} />
+    <ShortlistPDF
+      klantNaam={klant_naam || 'Klant'}
+      items={(items || []) as Item[]}
+      beeldmerkSrc={beeldmerkSrc}
+      wordmarkSrc={wordmarkSrc}
+    />
   )
 
   const filename = `costa-select-woningoverzicht-${(klant_naam || 'klant').replace(/\s+/g, '-').toLowerCase()}.pdf`
