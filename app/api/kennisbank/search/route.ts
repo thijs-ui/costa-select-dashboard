@@ -24,9 +24,29 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Zoek relevante chunks via full-text search
+  // Preprocess query voor websearch_to_tsquery('simple'):
+  // - 'simple' config doet geen Dutch-stemming, dus 'microklimaat' ≠ 'microklimaten'
+  // - websearch is default AND, dus "Wat is het microklimaat in Nerja"
+  //   matcht alleen chunks die ALLE 6 woorden bevatten — vrijwel altijd 0.
+  // Strip stopwoorden + maak OR-logic via ' or '-separator. ts_rank zorgt
+  // dat chunks met meer matches hoger eindigen.
+  const STOPWORDS = new Set([
+    'de', 'het', 'een', 'en', 'of', 'is', 'in', 'op', 'aan', 'naar', 'voor',
+    'met', 'bij', 'om', 'door', 'over', 'uit', 'van', 'tot', 'als', 'dan',
+    'dat', 'die', 'deze', 'dit', 'er', 'wat', 'wie', 'hoe', 'waar', 'wanneer',
+    'waarom', 'welke', 'mijn', 'jouw', 'zijn', 'haar', 'hun', 'ons', 'we', 'ik',
+    'je', 'jij', 'hij', 'zij', 'ze', 'me', 'mij', 'niet', 'wel', 'maar',
+    'ook', 'nog', 'zo', 'heel', 'veel', 'meer', 'minder', 'kan', 'moet',
+    'gaat', 'wordt', 'kunnen', 'zullen', 'hebben', 'heb', 'heeft', 'had',
+    'the', 'and', 'or', 'on', 'at', 'to', 'for',
+  ])
+  const tokens = query.trim().toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w))
+  const searchQuery = tokens.length > 0 ? tokens.join(' or ') : query.trim()
+
   const { data: chunks, error: searchError } = await supabase
-    .rpc('search_kb', { query: query.trim(), match_count: 8 })
+    .rpc('search_kb', { query: searchQuery, match_count: 8 })
 
   if (searchError) {
     console.error('Search error:', searchError)
