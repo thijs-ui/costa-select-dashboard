@@ -32,25 +32,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [supabase] = useState(() => createBrowserClient())
 
+  // Race-helper: faalt na `ms` als de promise niet eerst resolveert.
+  // Voorkomt dat een hangende fetch/query auth-context oneindig blokkeert.
+  function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`[auth] ${label} timeout after ${ms}ms`)), ms)
+      ),
+    ])
+  }
+
   async function loadUserRole(u: User) {
     // Primair: direct via browser-client (leunt op `read_own_role` RLS-policy).
     try {
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role, naam')
-        .eq('user_id', u.id)
-        .single()
+      const result = await withTimeout(
+        supabase
+          .from('user_roles')
+          .select('role, naam')
+          .eq('user_id', u.id)
+          .single() as unknown as Promise<{ data: { role?: string; naam?: string } | null }>,
+        5000,
+        'user_roles'
+      )
+      const data = result.data
       if (data?.role) {
         setRole(data.role as Role)
         setNaam(data.naam ?? null)
         return
       }
-    } catch { /* fall through naar fallback */ }
+    } catch (e) {
+      console.warn('[auth] user_roles query failed/timeout:', e)
+    }
 
     // Fallback: /api/users/me gaat via service-client en bypasst RLS.
     // Voorkomt dat een JWT-timing issue de rol "verliest" op cold start.
     try {
-      const res = await fetch('/api/users/me')
+      const res = await withTimeout(fetch('/api/users/me'), 5000, '/api/users/me')
       if (res.ok) {
         const me = await res.json()
         if (me?.role) {
@@ -58,20 +76,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setNaam(me.naam ?? null)
         }
       }
-    } catch { /* silent */ }
+    } catch (e) {
+      console.warn('[auth] /api/users/me failed/timeout:', e)
+    }
   }
 
   useEffect(() => {
+    let cancelled = false
+
+    // Watchdog: garandeer dat loading=false na 8s, ongeacht wat hangt.
+    const watchdog = setTimeout(() => {
+      if (!cancelled) {
+        console.warn('[auth] watchdog tripped — forcing loading=false na 8s')
+        setLoading(false)
+      }
+    }, 8000)
+
     async function getUser() {
+      console.log('[auth] getUser start')
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const result = await withTimeout(
+          supabase.auth.getUser() as Promise<{ data: { user: User | null } }>,
+          6000,
+          'getUser'
+        )
+        const user = result.data.user
+        if (cancelled) return
+        console.log('[auth] getUser resolved, user=', !!user)
         setUser(user)
         if (user) await loadUserRole(user)
-      } catch {
-        setUser(null)
-        setRole(null)
+      } catch (e) {
+        console.error('[auth] getUser failed:', e)
+        if (!cancelled) {
+          setUser(null)
+          setRole(null)
+        }
+      } finally {
+        if (!cancelled) {
+          clearTimeout(watchdog)
+          console.log('[auth] setLoading(false)')
+          setLoading(false)
+        }
       }
-      setLoading(false)
     }
 
     getUser()
@@ -97,7 +143,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      clearTimeout(watchdog)
+      subscription.unsubscribe()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase])
 
