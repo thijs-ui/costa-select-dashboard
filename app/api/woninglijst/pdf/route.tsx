@@ -73,7 +73,7 @@ const s = StyleSheet.create({
   coverMeta: {
     fontSize: 13,
     fontFamily: 'Raleway',
-    fontWeight: 500,
+    fontWeight: 400,
     color: 'rgba(255,250,239,0.75)',
     marginBottom: 6,
   },
@@ -148,10 +148,13 @@ const s = StyleSheet.create({
     backgroundColor: WHITE,
     borderRadius: 12,
     overflow: 'hidden',
-    border: `1pt solid ${BORDER}`,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: BORDER,
   },
   cardFav: {
-    border: `1.5pt solid ${SUN}`,
+    borderWidth: 1.5,
+    borderColor: SUN,
   },
   cardThumbWrap: {
     width: 245,
@@ -411,23 +414,16 @@ function ShortlistPDF({
             <Text style={s.coverEyebrow}>Voor</Text>
             <Text style={s.coverTitle}>{klantNaam}</Text>
             <View style={s.coverDivider} />
-            <Text style={s.coverMeta}>
-              <Text style={s.coverMetaStrong}>{datum}</Text>
-            </Text>
-            <Text style={s.coverMeta}>
-              <Text style={s.coverMetaStrong}>{items.length}</Text>{' '}
-              {items.length === 1 ? 'woning' : 'woningen'}
-              {favCount > 0 ? (
-                <>
-                  {' · '}
-                  <Text style={s.coverMetaStrong}>{favCount}</Text>{' '}
-                  {favCount === 1 ? 'favoriet' : 'favorieten'}
-                </>
-              ) : null}
+            <Text style={[s.coverMeta, s.coverMetaStrong]}>{datum}</Text>
+            <Text style={[s.coverMeta, s.coverMetaStrong]}>
+              {items.length} {items.length === 1 ? 'woning' : 'woningen'}
+              {favCount > 0
+                ? ` · ${favCount} ${favCount === 1 ? 'favoriet' : 'favorieten'}`
+                : ''}
             </Text>
             {regios.length > 0 ? (
-              <Text style={s.coverMeta}>
-                <Text style={s.coverMetaStrong}>{regios.slice(0, 4).join(' · ')}</Text>
+              <Text style={[s.coverMeta, s.coverMetaStrong]}>
+                {regios.slice(0, 4).join(' · ')}
                 {regios.length > 4 ? ` +${regios.length - 4}` : ''}
               </Text>
             ) : null}
