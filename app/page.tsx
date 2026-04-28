@@ -123,11 +123,11 @@ export default function HomePage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
-    if (!user) {
-      setDataLoading(false)
-      return
-    }
-    const loadData = async () => {
+    async function loadData() {
+      if (!user) {
+        setDataLoading(false)
+        return
+      }
       try {
         const todayIso = new Date().toISOString().split('T')[0]
         const results = await Promise.allSettled([
