@@ -772,6 +772,8 @@ function CardSpec({
     if (variant === 'compact') valueStyles.push(s.cardSpecVPriceCompact)
     if (variant === 'solo') valueStyles.push(s.cardSpecVPriceSolo)
   }
+  // Inline unit (geen nested <Text>) — voorkomt rare wrapping/spacing artifacts.
+  const valueText = unit ? `${value} ${unit}` : value
   return (
     <View
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -781,10 +783,7 @@ function CardSpec({
       <Text style={[s.cardSpecL, isPrice ? s.cardSpecLPrice : {}] as any}>
         {label}
       </Text>
-      <Text style={valueStyles}>
-        {value}
-        {unit ? <Text style={s.cardSpecUnit}>{unit}</Text> : null}
-      </Text>
+      <Text style={valueStyles}>{valueText}</Text>
     </View>
   )
 }
@@ -848,11 +847,10 @@ function ListingCard({
 
       <View style={infoStyles}>
         {item.location ? (
-          <Text style={s.cardLoc}>◆ {item.location}</Text>
+          <Text style={s.cardLoc}>{item.location}</Text>
         ) : null}
         <Text style={titleStyles}>
-          {item.title || 'Woning zonder titel'}
-          <Text style={s.cardTitleTerminal}>.</Text>
+          {(item.title || 'Woning zonder titel') + '.'}
         </Text>
 
         <View style={s.cardSpecs}>
@@ -946,10 +944,7 @@ function CoverPage({
         <View style={s.coverBody}>
           <Text style={s.coverPre}>Een persoonlijke selectie</Text>
           <Text style={s.coverTitle}>Voor</Text>
-          <Text style={s.coverName}>
-            {klantNaam}
-            <Text style={s.coverNameTerminal}>.</Text>
-          </Text>
+          <Text style={s.coverName}>{klantNaam + '.'}</Text>
           <View style={s.coverTick} />
 
           <View style={s.coverMeta}>
@@ -962,10 +957,7 @@ function CoverPage({
             {favCount > 0 && (
               <View style={s.coverMetaItem}>
                 <Text style={s.coverMetaL}>Favorieten</Text>
-                <Text style={s.coverMetaV}>
-                  {favCount}
-                  <Text style={s.coverMetaUnit}> ★</Text>
-                </Text>
+                <Text style={s.coverMetaV}>{`${favCount} ★`}</Text>
               </View>
             )}
             {regionsText ? (
@@ -1021,10 +1013,7 @@ function SectionTitle({
         <Text style={s.stitleEyebrowCounter}>{counter}</Text>
       </View>
       <View style={s.sunTick} />
-      <Text style={s.stitleH2}>
-        {title}
-        <Text style={s.stitleTerminal}>.</Text>
-      </Text>
+      <Text style={s.stitleH2}>{title + '.'}</Text>
     </View>
   )
 }
