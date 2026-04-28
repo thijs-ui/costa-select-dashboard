@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  MbCalendar, MbCatNav, MbContentCard, MbEmpty, MbFilters, MbHero,
+  MbCalendar, MbContentCard, MbEmpty, MbFilters, MbHero,
   MbPlanModal, MbSidePanel, MbSubBar, MbToast,
   type CategoryFilter, type ContentItem, type LanguageFilter, type ViewMode,
 } from '@/components/bibliotheek/parts'
@@ -181,7 +181,6 @@ export default function BibliotheekPage() {
   return (
     <div className="mb-page">
       <div className="mb-shell">
-        <MbCatNav />
         <MbHero
           totalCount={totalCount}
           scheduledCount={scheduledCount}
