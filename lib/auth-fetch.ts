@@ -11,7 +11,10 @@ export interface MeResponse {
 // /api/users/me draait server-side via service-client, bypasst de RLS-hang
 // op user_roles. Frontend mag NOOIT direct user_roles queryen.
 export async function fetchMe(): Promise<MeResponse> {
-  const res = await fetch('/api/users/me', { cache: 'no-store' })
+  const res = await fetch('/api/users/me', {
+    method: 'GET',
+    cache: 'no-store',
+  })
   if (!res.ok) throw new Error(`fetchMe failed: ${res.status}`)
   return res.json()
 }
