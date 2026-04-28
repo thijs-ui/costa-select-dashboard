@@ -69,16 +69,16 @@ export default function RegiosPage() {
     try {
       const { data } = await supabase.from('deals').select('regio, aankoopprijs, bruto_commissie, datum_passering')
       setGeslotenDeals((data ?? []) as GeslotenDeal[])
-      const [pdDealsRes, pdLeadsRes] = await Promise.all([
+      const [pdDealsRes, pdLeadsRes] = await Promise.allSettled([
         fetch('/api/pipedrive/open-deals'),
         fetch('/api/pipedrive/leads'),
       ])
-      if (pdDealsRes.ok) {
-        const json = await pdDealsRes.json()
+      if (pdDealsRes.status === 'fulfilled' && pdDealsRes.value.ok) {
+        const json = await pdDealsRes.value.json()
         setPipedriveDeals((json.allDeals ?? []).filter((d: PipedriveDealRow) => d.status === 'open'))
       }
-      if (pdLeadsRes.ok) {
-        const json = await pdLeadsRes.json()
+      if (pdLeadsRes.status === 'fulfilled' && pdLeadsRes.value.ok) {
+        const json = await pdLeadsRes.value.json()
         setPipedriveLeads(json.leads ?? [])
       }
     } catch (e) {

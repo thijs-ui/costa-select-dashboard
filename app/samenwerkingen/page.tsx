@@ -121,18 +121,20 @@ export default function SamenwerkingenPage() {
 
   const load = useCallback(async () => {
     try {
-      const [aRes, pRes] = await Promise.all([
+      const [aRes, pRes] = await Promise.allSettled([
         fetch('/api/agentschappen', { credentials: 'include' }),
         fetch('/api/samenwerkingen', { credentials: 'include' }),
       ])
-      if (aRes.ok) {
-        const data: RawAgency[] = await aRes.json()
+      if (aRes.status === 'fulfilled' && aRes.value.ok) {
+        const data: RawAgency[] = await aRes.value.json()
         setAgencies(data.map(normalizeAgency))
       }
-      if (pRes.ok) {
-        const data: RawPartner[] = await pRes.json()
+      if (pRes.status === 'fulfilled' && pRes.value.ok) {
+        const data: RawPartner[] = await pRes.value.json()
         setPartners(data.map(normalizePartner))
       }
+    } catch (e) {
+      console.error('[load] failed:', e)
     } finally {
       setLoading(false)
     }

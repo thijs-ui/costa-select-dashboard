@@ -62,15 +62,23 @@ export default function FunnelPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [salesRes, dealsRes, leadsRes] = await Promise.all([
-      supabase.from('deals').select('regio, datum_passering'),
-      fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
-      fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
-    ])
-    setSales((salesRes.data ?? []) as Sale[])
-    setPipedriveDeals((dealsRes.allDeals ?? []) as PipedriveDealRow[])
-    setPipedriveLeads((leadsRes.leads ?? []) as PipedriveLeadRow[])
-    setLoading(false)
+    try {
+      const [salesRes, dealsRes, leadsRes] = await Promise.allSettled([
+        supabase.from('deals').select('regio, datum_passering'),
+        fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
+        fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
+      ])
+      const salesData = salesRes.status === 'fulfilled' ? (salesRes.value.data ?? []) : []
+      const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value ?? { allDeals: [] }) : { allDeals: [] }
+      const leadsData = leadsRes.status === 'fulfilled' ? (leadsRes.value ?? { leads: [] }) : { leads: [] }
+      setSales(salesData as Sale[])
+      setPipedriveDeals((dealsData.allDeals ?? []) as PipedriveDealRow[])
+      setPipedriveLeads((leadsData.leads ?? []) as PipedriveLeadRow[])
+    } catch (e) {
+      console.error('[load] failed:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])

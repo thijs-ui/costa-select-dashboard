@@ -62,58 +62,66 @@ export default function MaandkostenPage() {
     }
     let cancelled = false
     async function run() {
-      const [catRes, postRes, kostRes] = await Promise.all([
-        supabase
-          .from('kosten_categorieen')
-          .select('*')
-          .eq('actief', true)
-          .order('volgorde'),
-        supabase.from('kosten_posten').select('*').eq('actief', true).order('volgorde'),
-        supabase
-          .from('maandkosten')
-          .select('kosten_post_id, maand, bedrag')
-          .eq('jaar', jaar)
-          .eq('entiteit', editEntity),
-      ])
-      if (cancelled) return
-      setCategorieen((catRes.data ?? []) as Categorie[])
-      setPosten((postRes.data ?? []) as Post[])
+      try {
+        const [catRes, postRes, kostRes] = await Promise.allSettled([
+          supabase
+            .from('kosten_categorieen')
+            .select('*')
+            .eq('actief', true)
+            .order('volgorde'),
+          supabase.from('kosten_posten').select('*').eq('actief', true).order('volgorde'),
+          supabase
+            .from('maandkosten')
+            .select('kosten_post_id, maand, bedrag')
+            .eq('jaar', jaar)
+            .eq('entiteit', editEntity),
+        ])
+        if (cancelled) return
+        const catData = catRes.status === 'fulfilled' ? (catRes.value.data ?? []) : []
+        const postData = postRes.status === 'fulfilled' ? (postRes.value.data ?? []) : []
+        const kostData = kostRes.status === 'fulfilled' ? (kostRes.value.data ?? []) : []
+        setCategorieen(catData as Categorie[])
+        setPosten(postData as Post[])
 
-      const map: Record<string, Record<number, number>> = {}
-      ;((kostRes.data ?? []) as Maandkost[]).forEach(k => {
-        if (!map[k.kosten_post_id]) map[k.kosten_post_id] = {}
-        map[k.kosten_post_id][k.maand] = k.bedrag
-      })
+        const map: Record<string, Record<number, number>> = {}
+        ;(kostData as Maandkost[]).forEach(k => {
+          if (!map[k.kosten_post_id]) map[k.kosten_post_id] = {}
+          map[k.kosten_post_id][k.maand] = k.bedrag
+        })
 
-      // Auto-fill lege maanden voor vaste lasten
-      const vastePosts = ((postRes.data ?? []) as Post[]).filter(
-        p => p.vaste_lasten?.[editEntity]
-      )
-      for (const post of vastePosts) {
-        const bedrag = post.vaste_lasten![editEntity]
-        const updates: object[] = []
-        for (let maand = 1; maand <= 12; maand++) {
-          if (!map[post.id]?.[maand]) {
-            updates.push({
-              kosten_post_id: post.id,
-              jaar,
-              maand,
-              bedrag,
-              entiteit: editEntity,
-            })
-            if (!map[post.id]) map[post.id] = {}
-            map[post.id][maand] = bedrag
+        // Auto-fill lege maanden voor vaste lasten
+        const vastePosts = (postData as Post[]).filter(
+          p => p.vaste_lasten?.[editEntity]
+        )
+        for (const post of vastePosts) {
+          const bedrag = post.vaste_lasten![editEntity]
+          const updates: object[] = []
+          for (let maand = 1; maand <= 12; maand++) {
+            if (!map[post.id]?.[maand]) {
+              updates.push({
+                kosten_post_id: post.id,
+                jaar,
+                maand,
+                bedrag,
+                entiteit: editEntity,
+              })
+              if (!map[post.id]) map[post.id] = {}
+              map[post.id][maand] = bedrag
+            }
+          }
+          if (updates.length > 0) {
+            await supabase
+              .from('maandkosten')
+              .upsert(updates, { onConflict: 'kosten_post_id,jaar,maand,entiteit' })
           }
         }
-        if (updates.length > 0) {
-          await supabase
-            .from('maandkosten')
-            .upsert(updates, { onConflict: 'kosten_post_id,jaar,maand,entiteit' })
-        }
-      }
 
-      setKosten(map)
-      setLoading(false)
+        setKosten(map)
+      } catch (e) {
+        console.error('[run] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     setLoading(true)
     void run()

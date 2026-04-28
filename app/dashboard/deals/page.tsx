@@ -58,30 +58,38 @@ function DealsPage() {
   }, [deals, searchParams])
 
   async function loadAll() {
-    const [dealsRes, makelaarRes, settingsRes] = await Promise.all([
-      supabase.from('deals').select('*').order('datum_passering', { ascending: false }),
-      supabase
-        .from('makelaars')
-        .select('id, naam, rol, area_manager_id')
-        .eq('actief', true),
-      supabase.from('settings').select('key, value'),
-    ])
-    setDeals((dealsRes.data ?? []) as Deal[])
-    setMakelaars((makelaarRes.data ?? []) as Makelaar[])
-    if (settingsRes.data) {
-      const map: Record<string, unknown> = {}
-      ;(settingsRes.data as { key: string; value: unknown }[]).forEach(r => {
-        map[r.key] = r.value
-      })
-      setAppSettings({
-        minimum_fee: Number(map.minimum_fee) || 6000,
-        commissie_per_type: (map.commissie_per_type as Record<string, number>) || {},
-        regios: (map.regios as string[]) || [],
-        deal_types: (map.deal_types as string[]) || [],
-        bronnen: (map.bronnen as string[]) || [],
-      })
+    try {
+      const [dealsRes, makelaarRes, settingsRes] = await Promise.allSettled([
+        supabase.from('deals').select('*').order('datum_passering', { ascending: false }),
+        supabase
+          .from('makelaars')
+          .select('id, naam, rol, area_manager_id')
+          .eq('actief', true),
+        supabase.from('settings').select('key, value'),
+      ])
+      const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []
+      const makelaarData = makelaarRes.status === 'fulfilled' ? (makelaarRes.value.data ?? []) : []
+      const settingsData = settingsRes.status === 'fulfilled' ? (settingsRes.value.data ?? null) : null
+      setDeals(dealsData as Deal[])
+      setMakelaars(makelaarData as Makelaar[])
+      if (settingsData) {
+        const map: Record<string, unknown> = {}
+        ;(settingsData as { key: string; value: unknown }[]).forEach(r => {
+          map[r.key] = r.value
+        })
+        setAppSettings({
+          minimum_fee: Number(map.minimum_fee) || 6000,
+          commissie_per_type: (map.commissie_per_type as Record<string, number>) || {},
+          regios: (map.regios as string[]) || [],
+          deal_types: (map.deal_types as string[]) || [],
+          bronnen: (map.bronnen as string[]) || [],
+        })
+      }
+    } catch (e) {
+      console.error('[loadAll] failed:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function getAreaManager() {

@@ -59,17 +59,25 @@ export default function PartnersPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [pRes, dRes, aRes] = await Promise.all([
-      supabase.from('partners').select('*').eq('actief', true).order('naam'),
-      supabase
-        .from('deals')
-        .select('partner_naam, partner_commissie, partner_deal, datum_passering, aankoopprijs'),
-      supabase.from('afspraken').select('partner_id, datum'),
-    ])
-    setPartners((pRes.data ?? []) as Partner[])
-    setDeals((dRes.data ?? []) as DealRow[])
-    setAfspraken((aRes.data ?? []) as AfspraakRow[])
-    setLoading(false)
+    try {
+      const [pRes, dRes, aRes] = await Promise.allSettled([
+        supabase.from('partners').select('*').eq('actief', true).order('naam'),
+        supabase
+          .from('deals')
+          .select('partner_naam, partner_commissie, partner_deal, datum_passering, aankoopprijs'),
+        supabase.from('afspraken').select('partner_id, datum'),
+      ])
+      const pData = pRes.status === 'fulfilled' ? (pRes.value.data ?? []) : []
+      const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []
+      const aData = aRes.status === 'fulfilled' ? (aRes.value.data ?? []) : []
+      setPartners(pData as Partner[])
+      setDeals(dData as DealRow[])
+      setAfspraken(aData as AfspraakRow[])
+    } catch (e) {
+      console.error('[load] failed:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {

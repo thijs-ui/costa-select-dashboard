@@ -48,17 +48,25 @@ export default function MakelaarDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [mRes, dRes, aRes] = await Promise.all([
-        supabase.from('makelaars').select('id, naam, rol, pipedrive_naam').eq('id', id).single(),
-        supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, regio, type_deal').eq('makelaar_id', id).order('datum_passering', { ascending: false }),
-        supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio').eq('makelaar_id', id).order('datum', { ascending: false }),
-      ])
-      const m = mRes.data as Makelaar | null
-      setMakelaar(m)
-      setPipedriveNaam(m?.pipedrive_naam ?? '')
-      setDeals((dRes.data ?? []) as Deal[])
-      setAfspraken((aRes.data ?? []) as Afspraak[])
-      setLoading(false)
+      try {
+        const [mRes, dRes, aRes] = await Promise.allSettled([
+          supabase.from('makelaars').select('id, naam, rol, pipedrive_naam').eq('id', id).single(),
+          supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, regio, type_deal').eq('makelaar_id', id).order('datum_passering', { ascending: false }),
+          supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio').eq('makelaar_id', id).order('datum', { ascending: false }),
+        ])
+        const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? null) : null
+        const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []
+        const aData = aRes.status === 'fulfilled' ? (aRes.value.data ?? []) : []
+        const m = mData as Makelaar | null
+        setMakelaar(m)
+        setPipedriveNaam(m?.pipedrive_naam ?? '')
+        setDeals(dData as Deal[])
+        setAfspraken(aData as Afspraak[])
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [id])

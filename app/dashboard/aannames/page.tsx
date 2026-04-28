@@ -152,16 +152,20 @@ export default function AannamensPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [settingsRes, teamRes, catRes, postRes] = await Promise.all([
+        const [settingsRes, teamRes, catRes, postRes] = await Promise.allSettled([
           supabase.from('settings').select('key, value'),
           supabase.from('makelaars').select('id, naam, actief, rol, area_manager_id').order('naam'),
           supabase.from('kosten_categorieen').select('id, naam, volgorde, actief').order('volgorde'),
           supabase.from('kosten_posten').select('id, categorie_id, naam, volgorde, actief').order('volgorde'),
         ])
+        const settingsData = settingsRes.status === 'fulfilled' ? (settingsRes.value.data ?? []) : []
+        const teamData = teamRes.status === 'fulfilled' ? (teamRes.value.data ?? []) : []
+        const catData = catRes.status === 'fulfilled' ? (catRes.value.data ?? []) : []
+        const postData = postRes.status === 'fulfilled' ? (postRes.value.data ?? []) : []
 
         // Settings → adv + pipedrive mapping
         const map: Record<string, unknown> = {}
-        ;(settingsRes.data ?? []).forEach((row: { key: string; value: unknown }) => { map[row.key] = row.value })
+        ;(settingsData ?? []).forEach((row: { key: string; value: unknown }) => { map[row.key] = row.value })
 
         setAdv({
           minimum_fee: Number(map.minimum_fee) || defaultAdv.minimum_fee,
@@ -206,7 +210,7 @@ export default function AannamensPage() {
 
         // Team
         type DbTeam = { id: string; naam: string; actief: boolean; rol: string | null; area_manager_id: string | null }
-        setTeam(((teamRes.data ?? []) as DbTeam[]).map(m => ({
+        setTeam((teamData as DbTeam[]).map(m => ({
           id: m.id,
           dbId: m.id,
           naam: m.naam,
@@ -218,25 +222,28 @@ export default function AannamensPage() {
         // Categorieën / posten
         type DbCat = { id: string; naam: string; volgorde: number; actief: boolean }
         type DbPost = { id: string; categorie_id: string; naam: string; volgorde: number; actief: boolean }
-        setCats(((catRes.data ?? []) as DbCat[]).map(c => ({
+        setCats((catData as DbCat[]).map(c => ({
           id: c.id, dbId: c.id, naam: c.naam, volgorde: c.volgorde, actief: c.actief,
         })))
-        setPosten(((postRes.data ?? []) as DbPost[]).map(p => ({
+        setPosten((postData as DbPost[]).map(p => ({
           id: p.id, dbId: p.id, categorie_id: p.categorie_id, naam: p.naam, volgorde: p.volgorde, actief: p.actief,
         })))
 
         // Async fetches
-        const [regRes, usersRes] = await Promise.all([
+        const [regRes, usersRes] = await Promise.allSettled([
           fetch('/api/regional-settings').then(r => r.ok ? r.json() : []).catch(() => []),
           fetch('/api/users').then(r => r.ok ? r.json() : { users: [] }).catch(() => ({ users: [] })),
         ])
-        setRegios((regRes as RegioRow[]).map(r => ({ ...r, id: r.id || r.region })))
-        setUsers((usersRes.users ?? []) as UserRow[])
+        const regData = regRes.status === 'fulfilled' ? (regRes.value ?? []) : []
+        const usersData = usersRes.status === 'fulfilled' ? (usersRes.value ?? { users: [] }) : { users: [] }
+        setRegios((regData as RegioRow[]).map(r => ({ ...r, id: r.id || r.region })))
+        setUsers((usersData.users ?? []) as UserRow[])
       } catch (err) {
-        console.error('Aannames laden mislukt:', err)
+        console.error('[load] failed:', err)
         flashToast('error', 'Laden mislukt')
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [flashToast])

@@ -77,43 +77,52 @@ export default function AannamensPage() {
 
   useEffect(() => {
     async function load() {
-      const [settingsRes, makelaarsRes, catRes, postRes] = await Promise.all([
-        supabase.from('settings').select('key, value'),
-        supabase.from('makelaars').select('id, naam, actief, rol, area_manager_id').order('naam'),
-        supabase.from('kosten_categorieen').select('id, naam, volgorde, actief').order('volgorde'),
-        supabase.from('kosten_posten').select('id, categorie_id, naam, volgorde, actief').order('volgorde'),
-      ])
+      try {
+        const [settingsRes, makelaarsRes, catRes, postRes] = await Promise.allSettled([
+          supabase.from('settings').select('key, value'),
+          supabase.from('makelaars').select('id, naam, actief, rol, area_manager_id').order('naam'),
+          supabase.from('kosten_categorieen').select('id, naam, volgorde, actief').order('volgorde'),
+          supabase.from('kosten_posten').select('id, categorie_id, naam, volgorde, actief').order('volgorde'),
+        ])
+        const settingsData = settingsRes.status === 'fulfilled' ? (settingsRes.value.data ?? []) : []
+        const makelaarsData = makelaarsRes.status === 'fulfilled' ? (makelaarsRes.value.data ?? []) : []
+        const catData = catRes.status === 'fulfilled' ? (catRes.value.data ?? []) : []
+        const postData = postRes.status === 'fulfilled' ? (postRes.value.data ?? []) : []
 
-      if (settingsRes.data && settingsRes.data.length > 0) {
-        const map: Record<string, unknown> = {}
-        ;(settingsRes.data as { key: string; value: unknown }[]).forEach((row) => { map[row.key] = row.value })
-        setSettings({
-          minimum_fee: Number(map.minimum_fee) || 6000,
-          makelaar_commissie_pct: Number(map.makelaar_commissie_pct) || 0.4,
-          partner_commissie_pct: Number(map.partner_commissie_pct) || 0.2,
-          commissie_per_type: (map.commissie_per_type as Record<string, number>) || {},
-          regios: (map.regios as string[]) || [],
-          deal_types: (map.deal_types as string[]) || [],
-          bronnen: (map.bronnen as string[]) || [],
-          afspraak_types: (map.afspraak_types as string[]) || [],
-          targets: (map.targets as { deals_2026: number; netto_omzet_2026: number }) || defaultSettings.targets,
-          pipedrive_sync_interval: Number(map.pipedrive_sync_interval) || 15,
-          pipedrive_activiteit_namen: (map.pipedrive_activiteit_namen as string[]) || [],
-        })
-        // Load field mapping
-        if (map.pipedrive_deal_field_mapping) {
-          setFieldMapping(map.pipedrive_deal_field_mapping as Record<string, string>)
+        if (settingsData && settingsData.length > 0) {
+          const map: Record<string, unknown> = {}
+          ;(settingsData as { key: string; value: unknown }[]).forEach((row) => { map[row.key] = row.value })
+          setSettings({
+            minimum_fee: Number(map.minimum_fee) || 6000,
+            makelaar_commissie_pct: Number(map.makelaar_commissie_pct) || 0.4,
+            partner_commissie_pct: Number(map.partner_commissie_pct) || 0.2,
+            commissie_per_type: (map.commissie_per_type as Record<string, number>) || {},
+            regios: (map.regios as string[]) || [],
+            deal_types: (map.deal_types as string[]) || [],
+            bronnen: (map.bronnen as string[]) || [],
+            afspraak_types: (map.afspraak_types as string[]) || [],
+            targets: (map.targets as { deals_2026: number; netto_omzet_2026: number }) || defaultSettings.targets,
+            pipedrive_sync_interval: Number(map.pipedrive_sync_interval) || 15,
+            pipedrive_activiteit_namen: (map.pipedrive_activiteit_namen as string[]) || [],
+          })
+          // Load field mapping
+          if (map.pipedrive_deal_field_mapping) {
+            setFieldMapping(map.pipedrive_deal_field_mapping as Record<string, string>)
+          }
         }
-      }
 
-      if (makelaarsRes.data) {
-        setMakelaars((makelaarsRes.data as MakelaarRow[]).map(m => ({
-          ...m, rol: m.rol || 'consultant', area_manager_id: m.area_manager_id || null,
-        })))
+        if (makelaarsData) {
+          setMakelaars((makelaarsData as MakelaarRow[]).map(m => ({
+            ...m, rol: m.rol || 'consultant', area_manager_id: m.area_manager_id || null,
+          })))
+        }
+        if (catData) setCategorieen(catData as CategorieRow[])
+        if (postData) setPosten(postData as PostRow[])
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
       }
-      if (catRes.data) setCategorieen(catRes.data as CategorieRow[])
-      if (postRes.data) setPosten(postRes.data as PostRow[])
-      setLoading(false)
     }
     load()
   }, [])

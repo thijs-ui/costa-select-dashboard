@@ -38,52 +38,59 @@ export default function PLPage() {
 
   useEffect(() => {
     async function load() {
-      const [dealsRes, kostenRes] = await Promise.all([
-        supabase.from('deals').select('datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, partner_commissie, netto_commissie_cs, regio'),
-        supabase.from('maandkosten').select('maand, bedrag, entiteit').eq('jaar', jaar),
-      ])
+      try {
+        const [dealsRes, kostenRes] = await Promise.allSettled([
+          supabase.from('deals').select('datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, partner_commissie, netto_commissie_cs, regio'),
+          supabase.from('maandkosten').select('maand, bedrag, entiteit').eq('jaar', jaar),
+        ])
+        const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []
+        const kostenData2 = kostenRes.status === 'fulfilled' ? (kostenRes.value.data ?? []) : []
 
-      const allDeals = (dealsRes.data ?? []) as Deal[]
-      const allKosten = (kostenRes.data ?? []) as { maand: number; bedrag: number; entiteit?: string }[]
+        const allDeals = dealsData as Deal[]
+        const allKosten = kostenData2 as { maand: number; bedrag: number; entiteit?: string }[]
 
-      const deals = allDeals.filter((d) => matchesEntity(d.regio, entity))
-      const kostenData = allKosten.filter((k) => (k.entiteit ?? 'overig') === entity)
+        const deals = allDeals.filter((d) => matchesEntity(d.regio, entity))
+        const kostenData = allKosten.filter((k) => (k.entiteit ?? 'overig') === entity)
 
-      const kostenPerMaand: Record<number, number> = {}
-      kostenData.forEach((k) => {
-        kostenPerMaand[k.maand] = (kostenPerMaand[k.maand] ?? 0) + Number(k.bedrag)
-      })
+        const kostenPerMaand: Record<number, number> = {}
+        kostenData.forEach((k) => {
+          kostenPerMaand[k.maand] = (kostenPerMaand[k.maand] ?? 0) + Number(k.bedrag)
+        })
 
-      let cumulatief = 0
-      const data: MaandRow[] = MAANDEN.map((_, i) => {
-        const maand = i + 1
-        const maandDeals = deals.filter(
-          (d) => new Date(d.datum_passering).getMonth() === i &&
-            new Date(d.datum_passering).getFullYear() === jaar
-        )
-        const bruto = maandDeals.reduce((s, d) => s + Number(d.bruto_commissie ?? 0), 0)
-        const mak = maandDeals.reduce((s, d) => s + Number(d.makelaar_commissie ?? 0), 0)
-        const part = maandDeals.reduce((s, d) => s + Number(d.partner_commissie ?? 0), 0)
-        const netto = maandDeals.reduce((s, d) => s + Number(d.netto_commissie_cs ?? 0), 0)
-        const kosten = kostenPerMaand[maand] ?? 0
-        const winst = netto - kosten
-        cumulatief += winst
-        return {
-          maand,
-          deals: maandDeals.length,
-          aankoopwaarde: maandDeals.reduce((s, d) => s + Number(d.aankoopprijs), 0),
-          bruto_commissie: bruto,
-          makelaar_commissie: mak,
-          partner_commissie: part,
-          netto_omzet: netto,
-          kosten,
-          brutowinst: winst,
-          marge_pct: bruto > 0 ? (netto / bruto) * 100 : 0,
-          cumulatief,
-        }
-      })
-      setRows(data)
-      setLoading(false)
+        let cumulatief = 0
+        const data: MaandRow[] = MAANDEN.map((_, i) => {
+          const maand = i + 1
+          const maandDeals = deals.filter(
+            (d) => new Date(d.datum_passering).getMonth() === i &&
+              new Date(d.datum_passering).getFullYear() === jaar
+          )
+          const bruto = maandDeals.reduce((s, d) => s + Number(d.bruto_commissie ?? 0), 0)
+          const mak = maandDeals.reduce((s, d) => s + Number(d.makelaar_commissie ?? 0), 0)
+          const part = maandDeals.reduce((s, d) => s + Number(d.partner_commissie ?? 0), 0)
+          const netto = maandDeals.reduce((s, d) => s + Number(d.netto_commissie_cs ?? 0), 0)
+          const kosten = kostenPerMaand[maand] ?? 0
+          const winst = netto - kosten
+          cumulatief += winst
+          return {
+            maand,
+            deals: maandDeals.length,
+            aankoopwaarde: maandDeals.reduce((s, d) => s + Number(d.aankoopprijs), 0),
+            bruto_commissie: bruto,
+            makelaar_commissie: mak,
+            partner_commissie: part,
+            netto_omzet: netto,
+            kosten,
+            brutowinst: winst,
+            marge_pct: bruto > 0 ? (netto / bruto) * 100 : 0,
+            cumulatief,
+          }
+        })
+        setRows(data)
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps

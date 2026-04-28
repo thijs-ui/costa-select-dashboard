@@ -49,23 +49,33 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const [dealsRes, kostenRes, settingsRes, leadsRes, afsprakenRes] = await Promise.all([
-        supabase.from('deals').select('aankoopprijs, bruto_commissie, netto_commissie_cs, datum_passering, regio'),
-        supabase.from('maandkosten').select('bedrag, jaar, maand, entiteit, kosten_posten(naam)'),
-        supabase.from('settings').select('key, value'),
-        fetch('/api/pipedrive/leads').then(r => (r.ok ? r.json() : null)).catch(() => null),
-        supabase.from('afspraken').select('bron, datum, regio'),
-      ])
-      setDeals((dealsRes.data ?? []) as DealRow[])
-      setMaandkosten((kostenRes.data ?? []) as unknown as KostenRow[])
-      if (leadsRes?.leads) setLeads(leadsRes.leads as { regio: string; add_time: string }[])
-      setAfspraken((afsprakenRes.data ?? []) as { bron: string | null; datum: string; regio: string | null }[])
-      const map: Record<string, unknown> = {}
-      ;((settingsRes.data ?? []) as SettingRow[]).forEach(r => {
-        map[r.key] = r.value
-      })
-      if (map.targets) setTargets(map.targets as typeof targets)
-      setLoading(false)
+      try {
+        const [dealsRes, kostenRes, settingsRes, leadsRes, afsprakenRes] = await Promise.allSettled([
+          supabase.from('deals').select('aankoopprijs, bruto_commissie, netto_commissie_cs, datum_passering, regio'),
+          supabase.from('maandkosten').select('bedrag, jaar, maand, entiteit, kosten_posten(naam)'),
+          supabase.from('settings').select('key, value'),
+          fetch('/api/pipedrive/leads').then(r => (r.ok ? r.json() : null)).catch(() => null),
+          supabase.from('afspraken').select('bron, datum, regio'),
+        ])
+        const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []
+        const kostenData = kostenRes.status === 'fulfilled' ? (kostenRes.value.data ?? []) : []
+        const settingsData = settingsRes.status === 'fulfilled' ? (settingsRes.value.data ?? []) : []
+        const leadsData = leadsRes.status === 'fulfilled' ? (leadsRes.value ?? null) : null
+        const afsprakenData = afsprakenRes.status === 'fulfilled' ? (afsprakenRes.value.data ?? []) : []
+        setDeals(dealsData as DealRow[])
+        setMaandkosten(kostenData as unknown as KostenRow[])
+        if (leadsData?.leads) setLeads(leadsData.leads as { regio: string; add_time: string }[])
+        setAfspraken(afsprakenData as { bron: string | null; datum: string; regio: string | null }[])
+        const map: Record<string, unknown> = {}
+        ;(settingsData as SettingRow[]).forEach(r => {
+          map[r.key] = r.value
+        })
+        if (map.targets) setTargets(map.targets as typeof targets)
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     void load()
   }, [])

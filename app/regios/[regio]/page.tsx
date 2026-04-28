@@ -56,22 +56,31 @@ export default function RegioDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [salesRes, makelaarsRes, dealsRes, leadsRes] = await Promise.all([
-      supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, netto_commissie_cs, type_deal, makelaar_id, regio'),
-      supabase.from('makelaars').select('id, naam'),
-      fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
-      fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
-    ])
+    try {
+      const [salesRes, makelaarsRes, dealsRes, leadsRes] = await Promise.allSettled([
+        supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, netto_commissie_cs, type_deal, makelaar_id, regio'),
+        supabase.from('makelaars').select('id, naam'),
+        fetch('/api/pipedrive/open-deals').then(r => r.ok ? r.json() : { allDeals: [] }),
+        fetch('/api/pipedrive/leads').then(r => r.ok ? r.json() : { leads: [] }),
+      ])
+      const salesData = salesRes.status === 'fulfilled' ? (salesRes.value.data ?? []) : []
+      const makelaarsData = makelaarsRes.status === 'fulfilled' ? (makelaarsRes.value.data ?? []) : []
+      const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value ?? { allDeals: [] }) : { allDeals: [] }
+      const leadsData = leadsRes.status === 'fulfilled' ? (leadsRes.value ?? { leads: [] }) : { leads: [] }
 
-    const mList = (makelaarsRes.data ?? []) as Makelaar[]
-    setMakelaars(mList)
+      const mList = makelaarsData as Makelaar[]
+      setMakelaars(mList)
 
-    const mMap = new Map(mList.map(m => [m.id, m.naam]))
-    const rawSales = (salesRes.data ?? []) as (Sale & { makelaar_id?: string | null })[]
-    setSales(rawSales.map(s => ({ ...s, makelaar_naam: s.makelaar_id ? mMap.get(s.makelaar_id) ?? null : null })))
-    setOpenDeals((dealsRes.allDeals ?? []) as OpenDeal[])
-    setLeads((leadsRes.leads ?? []) as Lead[])
-    setLoading(false)
+      const mMap = new Map(mList.map(m => [m.id, m.naam]))
+      const rawSales = salesData as (Sale & { makelaar_id?: string | null })[]
+      setSales(rawSales.map(s => ({ ...s, makelaar_naam: s.makelaar_id ? mMap.get(s.makelaar_id) ?? null : null })))
+      setOpenDeals((dealsData.allDeals ?? []) as OpenDeal[])
+      setLeads((leadsData.leads ?? []) as Lead[])
+    } catch (e) {
+      console.error('[load] failed:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])

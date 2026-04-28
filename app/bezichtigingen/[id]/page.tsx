@@ -131,23 +131,24 @@ export default function BezichtigingDetailPage({
   // ─── Load ─────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
-      const [tripRes, stopsRes] = await Promise.all([
+      const [tripRes, stopsRes] = await Promise.allSettled([
         fetch(`/api/bezichtigingen?id=${id}`, { credentials: 'include' }),
         fetch(`/api/bezichtigingen/stops?trip_id=${id}`, { credentials: 'include' }),
       ])
-      if (tripRes.ok) {
-        const trips = await tripRes.json()
+      if (tripRes.status === 'fulfilled' && tripRes.value.ok) {
+        const trips = await tripRes.value.json()
         const found = Array.isArray(trips) ? trips.find((t: Trip) => t.id === id) : null
         setTrip(found ?? null)
       }
-      if (stopsRes.ok) {
-        const data = await stopsRes.json()
+      if (stopsRes.status === 'fulfilled' && stopsRes.value.ok) {
+        const data = await stopsRes.value.json()
         setStops(Array.isArray(data) ? data : [])
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('[loadData] failed:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [id])
 
   useEffect(() => {

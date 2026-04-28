@@ -46,38 +46,44 @@ export default function PartnerDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [pRes, aRes] = await Promise.all([
-        supabase.from('partners').select('id, naam, email, land').eq('id', id).single(),
-        supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio, bron').eq('partner_id', id).order('datum', { ascending: false }),
-      ])
-      const partnerData = pRes.data as Partner | null
-      setPartner(partnerData)
-      setAfspraken((aRes.data ?? []) as Afspraak[])
+      try {
+        const [pRes, aRes] = await Promise.allSettled([
+          supabase.from('partners').select('id, naam, email, land').eq('id', id).single(),
+          supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio, bron').eq('partner_id', id).order('datum', { ascending: false }),
+        ])
+        const pData = pRes.status === 'fulfilled' ? (pRes.value.data ?? null) : null
+        const aData = aRes.status === 'fulfilled' ? (aRes.value.data ?? []) : []
+        const partnerData = pData as Partner | null
+        setPartner(partnerData)
+        setAfspraken(aData as Afspraak[])
 
-      // Fetch deals by partner name match
-      if (partnerData) {
-        const { data: dData } = await supabase
-          .from('deals')
-          .select('id, datum_passering, aankoopprijs, partner_commissie, regio, type_deal')
-          .eq('partner_deal', true)
-          .order('datum_passering', { ascending: false })
-        const matched = ((dData ?? []) as Deal[]).filter(
-          d => {
-            // We'll also check via partner_naam since old deals may not have partner_id
-            return true
-          }
-        )
-        // Filter by partner name via a separate query
-        const { data: dByName } = await supabase
-          .from('deals')
-          .select('id, datum_passering, aankoopprijs, partner_commissie, regio, type_deal, partner_naam')
-          .eq('partner_deal', true)
-          .ilike('partner_naam', partnerData.naam)
-          .order('datum_passering', { ascending: false })
-        setDeals((dByName ?? []) as Deal[])
+        // Fetch deals by partner name match
+        if (partnerData) {
+          const { data: dData } = await supabase
+            .from('deals')
+            .select('id, datum_passering, aankoopprijs, partner_commissie, regio, type_deal')
+            .eq('partner_deal', true)
+            .order('datum_passering', { ascending: false })
+          const matched = ((dData ?? []) as Deal[]).filter(
+            d => {
+              // We'll also check via partner_naam since old deals may not have partner_id
+              return true
+            }
+          )
+          // Filter by partner name via a separate query
+          const { data: dByName } = await supabase
+            .from('deals')
+            .select('id, datum_passering, aankoopprijs, partner_commissie, regio, type_deal, partner_naam')
+            .eq('partner_deal', true)
+            .ilike('partner_naam', partnerData.naam)
+            .order('datum_passering', { ascending: false })
+          setDeals((dByName ?? []) as Deal[])
+        }
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
     load()
   }, [id])

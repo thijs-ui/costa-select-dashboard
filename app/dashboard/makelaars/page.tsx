@@ -77,23 +77,32 @@ export default function MakelaarsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [mRes, dRes, aRes, pdRes] = await Promise.all([
-      supabase
-        .from('makelaars')
-        .select('id, naam, rol, area_manager_id, pipedrive_naam')
-        .eq('actief', true)
-        .order('naam'),
-      supabase
-        .from('deals')
-        .select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
-      supabase.from('afspraken').select('makelaar_id, datum, status, type'),
-      fetch('/api/pipedrive/consultant-funnel').then(r => (r.ok ? r.json() : { perUser: {} })),
-    ])
-    setMakelaars((mRes.data ?? []) as Makelaar[])
-    setDeals((dRes.data ?? []) as Deal[])
-    setAfspraken((aRes.data ?? []) as Afspraak[])
-    setPipedrivePerUser(((pdRes as { perUser: Record<string, PipedriveStats> }).perUser ?? {}))
-    setLoading(false)
+    try {
+      const [mRes, dRes, aRes, pdRes] = await Promise.allSettled([
+        supabase
+          .from('makelaars')
+          .select('id, naam, rol, area_manager_id, pipedrive_naam')
+          .eq('actief', true)
+          .order('naam'),
+        supabase
+          .from('deals')
+          .select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
+        supabase.from('afspraken').select('makelaar_id, datum, status, type'),
+        fetch('/api/pipedrive/consultant-funnel').then(r => (r.ok ? r.json() : { perUser: {} })),
+      ])
+      const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
+      const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []
+      const aData = aRes.status === 'fulfilled' ? (aRes.value.data ?? []) : []
+      const pdData = pdRes.status === 'fulfilled' ? (pdRes.value ?? { perUser: {} }) : { perUser: {} }
+      setMakelaars(mData as Makelaar[])
+      setDeals(dData as Deal[])
+      setAfspraken(aData as Afspraak[])
+      setPipedrivePerUser(((pdData as { perUser: Record<string, PipedriveStats> }).perUser ?? {}))
+    } catch (e) {
+      console.error('[load] failed:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {

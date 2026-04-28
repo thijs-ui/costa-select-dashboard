@@ -73,22 +73,31 @@ export default function CommissiesPage() {
 
   useEffect(() => {
     async function load() {
-      const [mRes, dRes, uRes, wRes] = await Promise.all([
-        supabase.from('makelaars').select('id, naam, rol, area_manager_id').eq('actief', true),
-        supabase
-          .from('deals')
-          .select(
-            'id, datum_passering, aankoopprijs, bruto_commissie, makelaar_id, makelaar_commissie, makelaar2_id, makelaar2_commissie, area_manager_id, area_manager_commissie, netto_commissie_cs, regio'
-          )
-          .order('datum_passering', { ascending: false }),
-        supabase.from('commissie_uitbetalingen').select('*'),
-        supabase.from('werving_bonussen').select('*').order('startdatum', { ascending: false }),
-      ])
-      setMakelaars((mRes.data ?? []) as Makelaar[])
-      setDeals((dRes.data ?? []) as Deal[])
-      setUitbetalingen((uRes.data ?? []) as Uitbetaling[])
-      setWervingBonussen((wRes.data ?? []) as WervingBonus[])
-      setLoading(false)
+      try {
+        const [mRes, dRes, uRes, wRes] = await Promise.allSettled([
+          supabase.from('makelaars').select('id, naam, rol, area_manager_id').eq('actief', true),
+          supabase
+            .from('deals')
+            .select(
+              'id, datum_passering, aankoopprijs, bruto_commissie, makelaar_id, makelaar_commissie, makelaar2_id, makelaar2_commissie, area_manager_id, area_manager_commissie, netto_commissie_cs, regio'
+            )
+            .order('datum_passering', { ascending: false }),
+          supabase.from('commissie_uitbetalingen').select('*'),
+          supabase.from('werving_bonussen').select('*').order('startdatum', { ascending: false }),
+        ])
+        const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
+        const dData = dRes.status === 'fulfilled' ? (dRes.value.data ?? []) : []
+        const uData = uRes.status === 'fulfilled' ? (uRes.value.data ?? []) : []
+        const wData = wRes.status === 'fulfilled' ? (wRes.value.data ?? []) : []
+        setMakelaars(mData as Makelaar[])
+        setDeals(dData as Deal[])
+        setUitbetalingen(uData as Uitbetaling[])
+        setWervingBonussen(wData as WervingBonus[])
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     void load()
   }, [])

@@ -34,24 +34,29 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [projRes, usersRes] = await Promise.all([
-        fetch(`/api/projecten?id=${id}`),
-        fetch('/api/todos/users'),
-      ])
-      if (cancelled) return
-      if (projRes.ok) {
-        const data: PjProjectDetail = await projRes.json()
-        setProject(data)
-        setName(data.name)
-        setDescription(data.description ?? '')
-        setStatus(data.status)
-        setTargetDate(data.target_date ?? '')
+      try {
+        const [projRes, usersRes] = await Promise.allSettled([
+          fetch(`/api/projecten?id=${id}`),
+          fetch('/api/todos/users'),
+        ])
+        if (cancelled) return
+        if (projRes.status === 'fulfilled' && projRes.value.ok) {
+          const data: PjProjectDetail = await projRes.value.json()
+          setProject(data)
+          setName(data.name)
+          setDescription(data.description ?? '')
+          setStatus(data.status)
+          setTargetDate(data.target_date ?? '')
+        }
+        if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+          const data = await usersRes.value.json()
+          setUsers(data.users ?? [])
+        }
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
       }
-      if (usersRes.ok) {
-        const data = await usersRes.json()
-        setUsers(data.users ?? [])
-      }
-      setLoading(false)
     }
     load()
     return () => { cancelled = true }

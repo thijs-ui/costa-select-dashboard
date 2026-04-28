@@ -25,20 +25,25 @@ export default function ProjectenPage() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [projRes, usersRes] = await Promise.all([
-        fetch('/api/projecten'),
-        fetch('/api/todos/users'),
-      ])
-      if (cancelled) return
-      if (projRes.ok) {
-        const raw: PjProjectDetail[] = await projRes.json()
-        setProjects(raw.map(computeProject))
+      try {
+        const [projRes, usersRes] = await Promise.allSettled([
+          fetch('/api/projecten'),
+          fetch('/api/todos/users'),
+        ])
+        if (cancelled) return
+        if (projRes.status === 'fulfilled' && projRes.value.ok) {
+          const raw: PjProjectDetail[] = await projRes.value.json()
+          setProjects(raw.map(computeProject))
+        }
+        if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
+          const data = await usersRes.value.json()
+          setUsers(data.users ?? [])
+        }
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
       }
-      if (usersRes.ok) {
-        const data = await usersRes.json()
-        setUsers(data.users ?? [])
-      }
-      setLoading(false)
     }
     load()
     return () => { cancelled = true }

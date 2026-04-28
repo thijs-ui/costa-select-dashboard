@@ -105,31 +105,40 @@ export default function TodosPage() {
   }, [user, role])
 
   async function loadData() {
-    const [todosRes, settingsRes, projectsRes, phasesRes] = await Promise.all([
-      supabase
-        .from('todos')
-        .select('*')
-        .order('deadline', { ascending: true, nullsFirst: false }),
-      supabase.from('settings').select('key, value').eq('key', 'todo_labels'),
-      supabase.from('projects').select('id, name, color').eq('status', 'actief').order('name'),
-      supabase.from('project_phases').select('id, project_id, name').order('sort_order'),
-    ])
-    setTodos((todosRes.data ?? []) as Todo[])
-    setProjects((projectsRes.data ?? []) as Project[])
-    setPhases((phasesRes.data ?? []) as Phase[])
-    if (settingsRes.data?.[0]?.value) {
-      setLabels(settingsRes.data[0].value as string[])
-    }
     try {
-      const res = await fetch('/api/todos/users')
-      if (res.ok) {
-        const data = await res.json()
-        setUsers((data.users ?? []) as UserInfo[])
+      const [todosRes, settingsRes, projectsRes, phasesRes] = await Promise.allSettled([
+        supabase
+          .from('todos')
+          .select('*')
+          .order('deadline', { ascending: true, nullsFirst: false }),
+        supabase.from('settings').select('key, value').eq('key', 'todo_labels'),
+        supabase.from('projects').select('id, name, color').eq('status', 'actief').order('name'),
+        supabase.from('project_phases').select('id, project_id, name').order('sort_order'),
+      ])
+      const todosData = todosRes.status === 'fulfilled' ? (todosRes.value.data ?? []) : []
+      const settingsData = settingsRes.status === 'fulfilled' ? (settingsRes.value.data ?? null) : null
+      const projectsData = projectsRes.status === 'fulfilled' ? (projectsRes.value.data ?? []) : []
+      const phasesData = phasesRes.status === 'fulfilled' ? (phasesRes.value.data ?? []) : []
+      setTodos(todosData as Todo[])
+      setProjects(projectsData as Project[])
+      setPhases(phasesData as Phase[])
+      if (settingsData?.[0]?.value) {
+        setLabels(settingsData[0].value as string[])
       }
-    } catch {
-      if (user) setUsers([{ id: user.id, email: user.email ?? 'Onbekend', naam: null }])
+      try {
+        const res = await fetch('/api/todos/users')
+        if (res.ok) {
+          const data = await res.json()
+          setUsers((data.users ?? []) as UserInfo[])
+        }
+      } catch {
+        if (user) setUsers([{ id: user.id, email: user.email ?? 'Onbekend', naam: null }])
+      }
+    } catch (e) {
+      console.error('[loadData] failed:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function getUserName(userId: string) {

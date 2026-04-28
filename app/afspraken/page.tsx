@@ -80,32 +80,41 @@ export default function AfsprakenPage() {
   useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
-    const [aRes, mRes, sRes, kRes, pRes] = await Promise.all([
-      supabase.from('afspraken').select('*').order('datum', { ascending: false }),
-      supabase.from('makelaars').select('id, naam').eq('actief', true),
-      supabase.from('settings').select('key, value'),
-      supabase.from('maandkosten')
-        .select('bedrag, entiteit, kosten_posten(naam)')
-        .eq('jaar', new Date().getFullYear()),
-      supabase.from('partners').select('id, naam').eq('actief', true).order('naam'),
-    ])
+    try {
+      const [aRes, mRes, sRes, kRes, pRes] = await Promise.allSettled([
+        supabase.from('afspraken').select('*').order('datum', { ascending: false }),
+        supabase.from('makelaars').select('id, naam').eq('actief', true),
+        supabase.from('settings').select('key, value'),
+        supabase.from('maandkosten')
+          .select('bedrag, entiteit, kosten_posten(naam)')
+          .eq('jaar', new Date().getFullYear()),
+        supabase.from('partners').select('id, naam').eq('actief', true).order('naam'),
+      ])
+      const aData = aRes.status === 'fulfilled' ? (aRes.value.data ?? []) : []
+      const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
+      const sData = sRes.status === 'fulfilled' ? (sRes.value.data ?? null) : null
+      const kData = kRes.status === 'fulfilled' ? (kRes.value.data ?? []) : []
+      const pData = pRes.status === 'fulfilled' ? (pRes.value.data ?? []) : []
 
-    setAfspraken((aRes.data ?? []) as Afspraak[])
-    setMakelaars((mRes.data ?? []) as Makelaar[])
-    setPartners((pRes.data ?? []) as Partner[])
-    setAllAdPosten((kRes.data ?? []) as unknown as AdPost[])
+      setAfspraken(aData as Afspraak[])
+      setMakelaars(mData as Makelaar[])
+      setPartners(pData as Partner[])
+      setAllAdPosten(kData as unknown as AdPost[])
 
-    if (sRes.data) {
-      const map: Record<string, unknown> = {}
-      ;(sRes.data as { key: string; value: unknown }[]).forEach((r) => { map[r.key] = r.value })
-      setSettings({
-        regios: (map.regios as string[]) || settings.regios,
-        bronnen: (map.bronnen as string[]) || settings.bronnen,
-        afspraak_types: (map.afspraak_types as string[]) || settings.afspraak_types,
-      })
+      if (sData) {
+        const map: Record<string, unknown> = {}
+        ;(sData as { key: string; value: unknown }[]).forEach((r) => { map[r.key] = r.value })
+        setSettings({
+          regios: (map.regios as string[]) || settings.regios,
+          bronnen: (map.bronnen as string[]) || settings.bronnen,
+          afspraak_types: (map.afspraak_types as string[]) || settings.afspraak_types,
+        })
+      }
+    } catch (e) {
+      console.error('[loadAll] failed:', e)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   function startEdit(a: Afspraak) {

@@ -50,15 +50,22 @@ export default function PLPage() {
 
   useEffect(() => {
     async function load() {
-      const [dealsRes, kostenRes] = await Promise.all([
-        supabase
-          .from('deals')
-          .select('datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, partner_commissie, netto_commissie_cs, regio'),
-        supabase.from('maandkosten').select('maand, bedrag, entiteit').eq('jaar', jaar),
-      ])
-      setAllDeals((dealsRes.data ?? []) as Deal[])
-      setAllKosten((kostenRes.data ?? []) as KostenRow[])
-      setLoading(false)
+      try {
+        const [dealsRes, kostenRes] = await Promise.allSettled([
+          supabase
+            .from('deals')
+            .select('datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, partner_commissie, netto_commissie_cs, regio'),
+          supabase.from('maandkosten').select('maand, bedrag, entiteit').eq('jaar', jaar),
+        ])
+        const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []
+        const kostenData = kostenRes.status === 'fulfilled' ? (kostenRes.value.data ?? []) : []
+        setAllDeals(dealsData as Deal[])
+        setAllKosten(kostenData as KostenRow[])
+      } catch (e) {
+        console.error('[load] failed:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     void load()
   }, [jaar])
