@@ -290,7 +290,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Brand */}
         <div className="sb-brand">
-          <div className="sb-brand-inner">
+          <Link href="/" className="sb-brand-inner" aria-label="Naar homepage">
             <Image
               src="/brand/beeldmerk-on-deepsea.svg"
               alt="Costa Select"
@@ -298,7 +298,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               height={52}
               priority
             />
-          </div>
+          </Link>
         </div>
 
         {/* Collapse toggle — desktop only */}
