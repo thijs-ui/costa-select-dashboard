@@ -28,6 +28,12 @@ export const docs: KennisbankDoc[] = [
     title: 'Microklimaten in Spanje',
     category: "Regio's",
   },
+  {
+    slug: 'CS-prijzen-regios',
+    code: 'CS-PRIJZEN',
+    title: 'Prijzen & marktcontext per regio',
+    category: "Regio's",
+  },
 ]
 
 export function getDocsByCategory(): Record<string, KennisbankDoc[]> {
