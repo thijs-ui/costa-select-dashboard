@@ -7,11 +7,20 @@ import { requireAuth } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
-function getLogoBase64(filename: string): string | undefined {
+function getAssetBase64(filename: string): string | undefined {
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'brand', filename)
-    const svg = fs.readFileSync(logoPath)
-    return `data:image/svg+xml;base64,${svg.toString('base64')}`
+    const assetPath = path.join(process.cwd(), 'public', 'brand', filename)
+    const buf = fs.readFileSync(assetPath)
+    const ext = filename.split('.').pop()?.toLowerCase()
+    const mime =
+      ext === 'svg'
+        ? 'image/svg+xml'
+        : ext === 'png'
+          ? 'image/png'
+          : ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : 'application/octet-stream'
+    return `data:${mime};base64,${buf.toString('base64')}`
   } catch {
     return undefined
   }
@@ -51,13 +60,13 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth
 
   const data: DossierData = await request.json()
-  const wordmarkSrc = getLogoBase64('costa-select-wordmark-white.svg')
-  const iconSrc = getLogoBase64('costa-select-icon-white.svg')
+  const beeldmerkSrc = getAssetBase64('beeldmerk-sun.png')
+  const wordmarkSrc = getAssetBase64('wordmark-deepsea-v2.svg')
 
-  // Max 16 foto's: 1 cover + 1 mosaic (3) + 3 grids × 4 = 16
+  // Nieuwe presentatie-design gebruikt 4 foto's: 1 cover + 3 mosaic.
   // Idealista URLs via weserv.nl proxy → base64
   if (data.property.fotos?.length > 0) {
-    const maxPhotos = Math.min(data.property.fotos.length, 16)
+    const maxPhotos = Math.min(data.property.fotos.length, 4)
     const convertedPhotos: string[] = []
 
     for (const url of data.property.fotos.slice(0, maxPhotos)) {
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
 
   try {
     const buffer = await renderToBuffer(
-      <DossierPDF data={data} wordmarkSrc={wordmarkSrc} iconSrc={iconSrc} />
+      <DossierPDF data={data} beeldmerkSrc={beeldmerkSrc} wordmarkSrc={wordmarkSrc} />
     )
 
     const filename = data.property.adres
