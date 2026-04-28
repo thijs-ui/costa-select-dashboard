@@ -292,7 +292,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="sb-brand">
           <Link href="/" className="sb-brand-inner" aria-label="Naar homepage">
             <Image
-              src="/brand/beeldmerk-on-deepsea.svg"
+              src="/brand/beeldmerk-no-bg.png"
               alt="Costa Select"
               width={52}
               height={52}
