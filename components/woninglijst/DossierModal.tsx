@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Eye, Megaphone, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export interface DossierModalItem {
@@ -16,7 +16,6 @@ interface DossierModalProps {
 
 export function DossierModal({ item, onClose }: DossierModalProps) {
   const router = useRouter()
-  const [mode, setMode] = useState<'' | 'presentatie' | 'pitch'>('')
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState<{ id: string } | null>(null)
   const [error, setError] = useState('')
@@ -24,14 +23,13 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
   if (!item) return null
 
   async function generate() {
-    if (!mode) return
     setGenerating(true)
     setError('')
     try {
       const res = await fetch('/api/dossier/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'url', url: item!.url, brochure_type: mode }),
+        body: JSON.stringify({ mode: 'url', url: item!.url, brochure_type: 'presentatie' }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: 'Mislukt' }))
@@ -119,24 +117,18 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
             </div>
 
             <div style={{ padding: '22px 24px' }}>
-              <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
-                <ModeCard
-                  icon={<Eye size={18} strokeWidth={1.8} />}
-                  title="Presenteren"
-                  desc="Feitelijke woningpresentatie — kenmerken, prijs, ligging. Voor de klantpitch."
-                  selected={mode === 'presentatie'}
-                  disabled={generating}
-                  onClick={() => setMode('presentatie')}
-                />
-                <ModeCard
-                  icon={<Megaphone size={18} strokeWidth={1.8} />}
-                  title="Pitchen"
-                  desc="Met voordelen, nadelen & Costa-advies. Voor intern gesprek of follow-up."
-                  selected={mode === 'pitch'}
-                  disabled={generating}
-                  onClick={() => setMode('pitch')}
-                />
-              </div>
+              <p
+                className="font-body"
+                style={{
+                  fontSize: 13.5,
+                  color: '#5F7472',
+                  lineHeight: 1.5,
+                  margin: 0,
+                }}
+              >
+                Costa Select genereert een woningpresentatie met kenmerken,
+                prijs, ligging en foto&apos;s. Klaar om te delen met je klant.
+              </p>
               {error && (
                 <div
                   className="font-body"
@@ -184,7 +176,7 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
               <WlButton variant="subtle" disabled={generating} onClick={onClose}>
                 Annuleren
               </WlButton>
-              <WlButton variant="primary" disabled={!mode || generating} onClick={generate}>
+              <WlButton variant="primary" disabled={generating} onClick={generate}>
                 Genereer
               </WlButton>
             </div>
@@ -262,76 +254,6 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
         )}
       </div>
     </div>
-  )
-}
-
-// ───────── Mode card ─────────
-function ModeCard({
-  icon,
-  title,
-  desc,
-  selected,
-  disabled,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc: string
-  selected: boolean
-  disabled: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex flex-col text-left cursor-pointer disabled:cursor-not-allowed transition-all"
-      style={{
-        padding: '18px 16px',
-        background: selected ? '#E6F0EF' : '#FFFFFF',
-        border: selected ? '1.5px solid #004B46' : '1.5px solid rgba(0,75,70,0.14)',
-        borderRadius: 12,
-        gap: 10,
-        boxShadow: selected ? '0 0 0 3px rgba(0,75,70,0.08)' : 'none',
-        opacity: disabled && !selected ? 0.6 : 1,
-      }}
-      onMouseEnter={e => {
-        if (!selected && !disabled) {
-          e.currentTarget.style.borderColor = 'rgba(0,75,70,0.3)'
-          e.currentTarget.style.background = '#FFFAEF'
-        }
-      }}
-      onMouseLeave={e => {
-        if (!selected && !disabled) {
-          e.currentTarget.style.borderColor = 'rgba(0,75,70,0.14)'
-          e.currentTarget.style.background = '#FFFFFF'
-        }
-      }}
-    >
-      <span
-        className="flex items-center justify-center"
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: selected ? '#F5AF40' : '#FEF6E4',
-          color: selected ? '#004B46' : '#D4921A',
-        }}
-      >
-        {icon}
-      </span>
-      <span>
-        <div
-          className="font-heading font-bold text-deepsea"
-          style={{ fontSize: 15, letterSpacing: '-0.005em', marginBottom: 4 }}
-        >
-          {title}
-        </div>
-        <div className="font-body" style={{ fontSize: 12, color: '#5F7472', lineHeight: 1.4 }}>
-          {desc}
-        </div>
-      </span>
-    </button>
   )
 }
 
