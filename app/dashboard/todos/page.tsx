@@ -502,10 +502,33 @@ export default function TodosPage() {
                     <tr>
                       <td
                         colSpan={isAdmin ? 7 : 6}
-                        style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg-subtle)' }}
+                        style={{ padding: '60px 0', color: 'var(--fg-subtle)' }}
                       >
-                        <ClipboardList size={28} style={{ marginBottom: 8 }} />
-                        <div style={{ fontSize: 13 }}>Geen openstaande taken</div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 12,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 12,
+                              background: 'rgba(0,75,70,0.06)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#9DAFAE',
+                            }}
+                          >
+                            <ClipboardList size={22} strokeWidth={1.6} />
+                          </div>
+                          <div style={{ fontSize: 13 }}>Geen openstaande taken</div>
+                        </div>
                       </td>
                     </tr>
                   )}
