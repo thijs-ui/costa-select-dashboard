@@ -778,6 +778,24 @@ function BulletItem({ text, color }: { text: string; color: string }) {
   )
 }
 
+// Knipt op zin-grens (laatste . ! of ?) ipv blindelings substring,
+// zodat de PDF nooit eindigt met 'Beneden delen twee'.
+function truncateAtSentence(text: string, max: number): string {
+  if (!text || text.length <= max) return text
+  const slice = text.slice(0, max)
+  const lastPunct = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+    slice.lastIndexOf('.\n'),
+  )
+  // Alleen knippen op zin-grens als die niet te ver weg ligt (>50% van max).
+  if (lastPunct > max * 0.5) return slice.slice(0, lastPunct + 1)
+  // Anders fallback: knip op laatste woord-grens.
+  const lastSpace = slice.lastIndexOf(' ')
+  return lastSpace > 0 ? slice.slice(0, lastSpace) + '…' : slice
+}
+
 // ─── MAIN ────────────────────────────────────────────────────────────────
 export function DossierPDF({
   data,
@@ -995,14 +1013,14 @@ export function DossierPDF({
                 <View style={s.presColMain}>
                   <Text style={s.presEyebrow}>Beschrijving</Text>
                   <Text style={s.presH3}>Over deze woning</Text>
-                  <Text style={s.presBody}>{property.omschrijving.substring(0, 800)}</Text>
+                  <Text style={s.presBody}>{truncateAtSentence(property.omschrijving, 800)}</Text>
                 </View>
               )}
               {regioInfo && (
                 <View style={s.presColSide}>
                   <Text style={s.presEyebrow}>Locatie</Text>
                   <Text style={s.presH3}>{property.regio}</Text>
-                  <Text style={s.presBody}>{regioInfo.substring(0, 600)}</Text>
+                  <Text style={s.presBody}>{truncateAtSentence(regioInfo, 600)}</Text>
                 </View>
               )}
             </View>
@@ -1166,7 +1184,7 @@ export function DossierPDF({
 
       {/* ─── FOTO'S A — hero mosaic ─────────────────────────── */}
       {photoSlices[0] && (
-        <Page size="A4" orientation="landscape" style={s.page}>
+        <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
           <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <View style={s.photoHeroLayout}>
@@ -1195,7 +1213,7 @@ export function DossierPDF({
 
       {/* ─── FOTO'S B/C/D — 2×2 grids ─────────────────────────── */}
       {[1, 2, 3].map(idx => photoSlices[idx] ? (
-        <Page key={`photos-${idx}`} size="A4" orientation="landscape" style={s.page}>
+        <Page key={`photos-${idx}`} size="A4" orientation="landscape" style={s.page} wrap={false}>
           <HeaderBar iconSrc={iconSrc} />
           <View style={s.contentBody}>
             <View style={s.photoGrid2x2}>

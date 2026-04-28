@@ -212,7 +212,7 @@ export async function POST(request: Request) {
     const cleanRegio = cleanRegioForCustomer(regioContent)
     const dossierResult = {
       property: propertyData,
-      regioInfo: cleanRegio ? cleanRegio.substring(0, 500) : '',
+      regioInfo: cleanRegio ? cleanRegio.substring(0, 1500) : '',
       brochure_type: 'presentatie' as const,
       generatedAt: new Date().toISOString(),
     }
@@ -340,7 +340,7 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
   const cleanRegio = cleanRegioForCustomer(regioContent)
   const dossierResult = {
     property: propertyData,
-    regioInfo: cleanRegio ? cleanRegio.substring(0, 500) : aiRegioInfo,
+    regioInfo: cleanRegio ? cleanRegio.substring(0, 1500) : aiRegioInfo,
     analyse,
     pitch_content: pitchContent,
     brochure_type: 'pitch' as const,
