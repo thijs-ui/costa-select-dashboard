@@ -45,15 +45,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Eén centrale role-loader. Frontend gebruikt NOOIT supabase.from('user_roles')
   // direct — alle role/naam data komt via /api/users/me (service-client).
+  // Fail-hard: bij elke fetchMe-fout volgt forced logout + redirect.
   async function loadRole() {
     try {
       const me = await withTimeout(fetchMe(), 5000, 'fetchMe')
       setRole(me.role)
       setNaam(me.naam)
     } catch (e) {
-      console.warn('[auth] fetchMe failed/timeout:', e)
+      console.error('[auth] critical failure', e)
+      setUser(null)
       setRole(null)
       setNaam(null)
+      await supabase.auth.signOut()
+      window.location.href = '/login'
     }
   }
 
@@ -75,12 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u)
         if (u) await loadRole()
       } catch (e) {
-        console.error('[auth] bootstrap failed:', e)
-        if (!cancelled) {
-          setUser(null)
-          setRole(null)
-          setNaam(null)
-        }
+        console.error('[auth] critical failure', e)
+        setUser(null)
+        setRole(null)
+        setNaam(null)
+        await supabase.auth.signOut()
+        window.location.href = '/login'
       } finally {
         if (!cancelled) {
           bootstrapped = true
