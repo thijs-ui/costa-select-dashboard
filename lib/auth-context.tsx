@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase-browser'
 import type { User } from '@supabase/supabase-js'
 import type { Role } from '@/lib/auth/roles'
+import { fetchMe } from '@/lib/auth-fetch'
 
 interface AuthContextType {
   user: User | null
@@ -33,7 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [supabase] = useState(() => createBrowserClient())
 
   // Race-helper: faalt na `ms` als de promise niet eerst resolveert.
-  // Voorkomt dat een hangende fetch/query auth-context oneindig blokkeert.
   function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     return Promise.race([
       p,
@@ -43,28 +43,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ])
   }
 
-  async function loadUserRole(_u: User) {
-    // Primaire path was: direct via browser-client + `read_own_role` RLS.
-    // Bleek 5s+ te hangen (zie commit 5ef1e71 logs). Verwijderd, gaat nu
-    // direct via service-client (bypasst RLS, sub-100ms latency).
-    // De RLS-policy `read_own_role` op user_roles wordt binnen Supabase
-    // nog onderzocht; tot dan is de service-client path de enige.
+  // Eén centrale role-loader. Frontend gebruikt NOOIT supabase.from('user_roles')
+  // direct — alle role/naam data komt via /api/users/me (service-client).
+  async function loadRole() {
     try {
-      const res = await withTimeout(fetch('/api/users/me'), 5000, '/api/users/me')
-      if (res.ok) {
-        const me = await res.json()
-        if (me?.role) {
-          setRole(me.role as Role)
-          setNaam(me.naam ?? null)
-        }
-      }
+      const me = await withTimeout(fetchMe(), 5000, 'fetchMe')
+      setRole(me.role)
+      setNaam(me.naam)
     } catch (e) {
-      console.warn('[auth] /api/users/me failed/timeout:', e)
+      console.warn('[auth] fetchMe failed/timeout:', e)
+      setRole(null)
+      setNaam(null)
     }
   }
 
   useEffect(() => {
     let cancelled = false
+    let bootstrapped = false
 
     // Watchdog: garandeer dat loading=false na 8s, ongeacht wat hangt.
     const watchdog = setTimeout(() => {
@@ -74,27 +69,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }, 8000)
 
-    async function getUser() {
-      console.log('[auth] getUser start')
+    async function bootstrap() {
+      console.log('[auth] bootstrap start')
       try {
         const result = await withTimeout(
           supabase.auth.getUser() as Promise<{ data: { user: User | null } }>,
           6000,
           'getUser'
         )
-        const user = result.data.user
         if (cancelled) return
-        console.log('[auth] getUser resolved, user=', !!user)
-        setUser(user)
-        if (user) await loadUserRole(user)
+        const u = result.data.user
+        console.log('[auth] getUser resolved, user=', !!u)
+        setUser(u)
+        if (u) await loadRole()
       } catch (e) {
-        console.error('[auth] getUser failed:', e)
+        console.error('[auth] bootstrap failed:', e)
         if (!cancelled) {
           setUser(null)
           setRole(null)
+          setNaam(null)
         }
       } finally {
         if (!cancelled) {
+          bootstrapped = true
           clearTimeout(watchdog)
           console.log('[auth] setLoading(false)')
           setLoading(false)
@@ -102,26 +99,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    getUser()
+    bootstrap()
 
+    // Reageer alleen op echte sign-in/sign-out events. INITIAL_SESSION fired
+    // óók bij mount en zou loadRole dubbel triggeren — bootstrap() doet dat
+    // al, dus we negeren INITIAL_SESSION expliciet.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: any, session: any) => {
-        const currentUser = session?.user ?? null
+      async (event: string, session: { user?: User | null } | null) => {
+        if (cancelled) return
 
-        // Alleen bij echte sign-in/out het user-object én de rol updaten.
-        // TOKEN_REFRESHED en USER_UPDATED raken de rol niet en moeten geen
-        // reload van user_roles triggeren (race + flicker).
-        if (event === 'SIGNED_OUT' || !currentUser) {
+        if (event === 'SIGNED_OUT') {
           setUser(null)
           setRole(null)
           setNaam(null)
           return
         }
 
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          setUser(currentUser)
-          await loadUserRole(currentUser)
+        if (event === 'SIGNED_IN') {
+          // Skip als bootstrap dit al heeft gedaan voor dezelfde user.
+          if (!bootstrapped || session?.user?.id !== user?.id) {
+            setUser(session?.user ?? null)
+            if (session?.user) await loadRole()
+          }
         }
+        // TOKEN_REFRESHED / USER_UPDATED / INITIAL_SESSION: niks doen.
       }
     )
 
