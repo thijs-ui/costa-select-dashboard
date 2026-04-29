@@ -51,11 +51,14 @@ const RED = '#B81D13'
 const INK = '#1B2A28'
 const INK_SOFT = '#4A5A57'
 const INK_MUTE = '#8A9794'
-const RULE = 'rgba(7,42,36,0.10)'
-const RULE_STRONG = 'rgba(7,42,36,0.20)'
-const ON_DARK_55 = 'rgba(255,250,239,0.55)'
-const ON_DARK_45 = 'rgba(255,250,239,0.45)'
-const ON_DARK_20 = 'rgba(255,250,239,0.20)'
+// Hex met alpha — react-pdf parser struikelt op rgba() zonder spaces en
+// renderde alle rgba-borders als rood. Deze waarden komen overeen met de
+// originele rgba's uit de handoff (alpha = 0.10 → 0x19, 0.20 → 0x33, etc.)
+const RULE = '#07242419' // rgba(7,42,36,0.10)
+const RULE_STRONG = '#07242433' // rgba(7,42,36,0.20)
+const ON_DARK_55 = '#FFFAEF8C' // rgba(255,250,239,0.55)
+const ON_DARK_45 = '#FFFAEF73' // rgba(255,250,239,0.45)
+const ON_DARK_20 = '#FFFAEF33' // rgba(255,250,239,0.20)
 
 const PAD_X = 64
 
@@ -101,7 +104,31 @@ function fmtEuro(n: number): string {
 }
 
 function capitalize(s: string): string {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+  if (!s) return ''
+  const lower = s.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
+
+// Map technische scraper-keys naar nette NL labels. Onbekende waardes
+// vallen door capitalize().
+const TYPE_LABELS: Record<string, string> = {
+  newdevelopment: 'Nieuwbouw',
+  nieuwbouw: 'Nieuwbouw',
+  villa: 'Villa',
+  apartment: 'Appartement',
+  appartement: 'Appartement',
+  house: 'Woning',
+  woning: 'Woning',
+  detachedhouse: 'Vrijstaande woning',
+  townhouse: 'Townhouse',
+  penthouse: 'Penthouse',
+  finca: 'Finca',
+  studio: 'Studio',
+}
+function formatType(s: string | undefined): string {
+  if (!s) return ''
+  const key = s.toLowerCase().replace(/[^a-z]/g, '')
+  return TYPE_LABELS[key] ?? capitalize(s)
 }
 
 function fmtDate(iso?: string): string {
@@ -488,6 +515,9 @@ const s = StyleSheet.create({
   },
 
   // ── Pitch callout ──
+  // marginTop: auto verwijderd — react-pdf flex-overflow detection
+  // genereerde phantom blank pagina's. Callout volgt nu de pitch grid
+  // direct met een kleine gap.
   pitchCallout: {
     backgroundColor: SUN_TINT,
     borderWidth: 1,
@@ -495,7 +525,7 @@ const s = StyleSheet.create({
     borderColor: SUN_FRAME_BD,
     borderRadius: 2,
     padding: 18,
-    marginTop: 'auto',
+    marginTop: 12,
     flexDirection: 'row',
   },
   calloutGlyph: { width: 56, flexDirection: 'column' },
@@ -601,14 +631,16 @@ const s = StyleSheet.create({
   adviesSignoffName: { color: SUN, marginLeft: 6, marginRight: 6 },
 
   // ── Foto-mosaic page ──
+  // A4 landscape = 595pt hoog. Header 56 + body padding 12+44 = 112pt.
+  // Photos krijgen height: 480 (= 595 - 56 - 12 - 44 - 3 safety).
   photosBody: {
     flex: 1,
     paddingHorizontal: PAD_X,
-    paddingTop: 16,
-    paddingBottom: 72,
+    paddingTop: 12,
+    paddingBottom: 44,
     flexDirection: 'column',
   },
-  photosHero: { flexDirection: 'row', height: 650 },
+  photosHero: { flexDirection: 'row', height: 480 },
   phHeroLeft: {
     flex: 1.35,
     backgroundColor: DEEPSEA_DEEP,
@@ -654,16 +686,15 @@ function SectionTitle({
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────
-// Wordmark op pagina 2-5; bij asset-failure → tekst-fallback (handoff §7).
-function Header({ wordmarkSrc }: { wordmarkSrc?: string }) {
+// react-pdf <Image> SVG-rendering is wankel (multi-path SVGs renderen vaak
+// leeg). Tekst-rendering 'Costa Select' is visueel dichter bij de wordmark
+// dan een lege header en is 100% betrouwbaar — dus altijd tekst, geen SVG.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function Header(_props: { wordmarkSrc?: string }) {
   return (
     <View style={s.hbar}>
       <View style={s.hWordmark}>
-        {wordmarkSrc ? (
-          <Image src={wordmarkSrc} style={s.hWordmarkImg} />
-        ) : (
-          <Text style={s.hWordmarkFallback}>Costa Select</Text>
-        )}
+        <Text style={s.hWordmarkFallback}>Costa Select</Text>
       </View>
     </View>
   )
@@ -779,27 +810,38 @@ export function DossierPDF({
               </View>
 
               <View style={s.coverSpecs}>
-                <View style={[s.coverSpec, s.coverSpecFirst]}>
-                  <Text style={s.coverSpecLabel}>Slaapkamers</Text>
-                  <Text style={s.coverSpecValue}>{property.slaapkamers || '—'}</Text>
-                </View>
-                <View style={s.coverSpec}>
-                  <Text style={s.coverSpecLabel}>Badkamers</Text>
-                  <Text style={s.coverSpecValue}>{property.badkamers || '—'}</Text>
-                </View>
-                <View style={s.coverSpec}>
-                  <Text style={s.coverSpecLabel}>Woonopp.</Text>
-                  <Text style={s.coverSpecValue}>
-                    {property.oppervlakte || '—'}
-                    <Text style={s.coverSpecUnit}>m²</Text>
-                  </Text>
-                </View>
-                {property.bouwjaar ? (
-                  <View style={s.coverSpec}>
-                    <Text style={s.coverSpecLabel}>Bouwjaar</Text>
-                    <Text style={s.coverSpecValue}>{String(property.bouwjaar)}</Text>
-                  </View>
-                ) : null}
+                {(() => {
+                  // Build only the specs we have data for — geen lege '—' velden.
+                  const specs: Array<{ label: string; value: string; unit?: string }> = []
+                  if (property.slaapkamers) {
+                    specs.push({ label: 'Slaapkamers', value: String(property.slaapkamers) })
+                  }
+                  if (property.badkamers) {
+                    specs.push({ label: 'Badkamers', value: String(property.badkamers) })
+                  }
+                  if (property.oppervlakte) {
+                    specs.push({
+                      label: 'Woonopp.',
+                      value: String(property.oppervlakte),
+                      unit: 'm²',
+                    })
+                  }
+                  if (property.bouwjaar) {
+                    specs.push({ label: 'Bouwjaar', value: String(property.bouwjaar) })
+                  }
+                  return specs.map((sp, i) => (
+                    <View
+                      key={sp.label}
+                      style={i === 0 ? [s.coverSpec, s.coverSpecFirst] : s.coverSpec}
+                    >
+                      <Text style={s.coverSpecLabel}>{sp.label}</Text>
+                      <Text style={s.coverSpecValue}>
+                        {sp.value}
+                        {sp.unit ? <Text style={s.coverSpecUnit}>{sp.unit}</Text> : null}
+                      </Text>
+                    </View>
+                  ))
+                })()}
               </View>
             </View>
           </View>
@@ -827,29 +869,39 @@ export function DossierPDF({
                 {fmtEuro(property.vraagprijs)}
               </Text>
             </View>
-            <View style={s.presSpec}>
-              <Text style={s.presSpecLabel}>Oppervlakte</Text>
-              <Text style={s.presSpecValue}>
-                {property.oppervlakte || '—'}
-                <Text style={s.presSpecUnit}>m²</Text>
-              </Text>
-            </View>
-            <View style={s.presSpec}>
-              <Text style={s.presSpecLabel}>Slaapkamers</Text>
-              <Text style={s.presSpecValue}>{property.slaapkamers || '—'}</Text>
-            </View>
-            <View style={[s.presSpec, s.presSpecSm]}>
-              <Text style={s.presSpecLabel}>Badkamers</Text>
-              <Text style={s.presSpecValue}>{property.badkamers || '—'}</Text>
-            </View>
-            <View style={[s.presSpec, s.presSpecSm]}>
-              <Text style={s.presSpecLabel}>Type</Text>
-              <Text style={s.presSpecValue}>{capitalize(property.type)}</Text>
-            </View>
-            <View style={[s.presSpec, s.presSpecSm]}>
-              <Text style={s.presSpecLabel}>Regio</Text>
-              <Text style={s.presSpecValue}>{property.regio}</Text>
-            </View>
+            {property.oppervlakte ? (
+              <View style={s.presSpec}>
+                <Text style={s.presSpecLabel}>Oppervlakte</Text>
+                <Text style={s.presSpecValue}>
+                  {property.oppervlakte}
+                  <Text style={s.presSpecUnit}>m²</Text>
+                </Text>
+              </View>
+            ) : null}
+            {property.slaapkamers ? (
+              <View style={s.presSpec}>
+                <Text style={s.presSpecLabel}>Slaapkamers</Text>
+                <Text style={s.presSpecValue}>{property.slaapkamers}</Text>
+              </View>
+            ) : null}
+            {property.badkamers ? (
+              <View style={[s.presSpec, s.presSpecSm]}>
+                <Text style={s.presSpecLabel}>Badkamers</Text>
+                <Text style={s.presSpecValue}>{property.badkamers}</Text>
+              </View>
+            ) : null}
+            {property.type ? (
+              <View style={[s.presSpec, s.presSpecSm]}>
+                <Text style={s.presSpecLabel}>Type</Text>
+                <Text style={s.presSpecValue}>{formatType(property.type)}</Text>
+              </View>
+            ) : null}
+            {property.regio ? (
+              <View style={[s.presSpec, s.presSpecSm]}>
+                <Text style={s.presSpecLabel}>Regio</Text>
+                <Text style={s.presSpecValue}>{property.regio}</Text>
+              </View>
+            ) : null}
             {property.terras ? (
               <View style={[s.presSpec, s.presSpecSm]}>
                 <Text style={s.presSpecLabel}>Terras</Text>

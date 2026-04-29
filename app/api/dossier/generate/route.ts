@@ -204,14 +204,16 @@ export async function POST(request: Request) {
 
   const regioContent = getRegioContent(String(propertyData.regio))
 
-  // Presentatie-modus: feitelijke data + Claude-vertaling van omschrijving.
-  // Beschrijving van bron (Idealista/CS-website) is vaak Spaans/Engels of
-  // slecht vertaald NL — kleine Haiku-call zorgt voor cleane klant-tekst.
+  // Beschrijving uit bron (Idealista/CS-website) is vaak Spaans/Engels of
+  // slecht vertaald NL — Haiku-call voor cleane klant-tekst. Werkt voor
+  // beide modes, niet alleen presentatie.
+  const cleanedDescription = await rewriteDescriptionToDutch(
+    String(propertyData.omschrijving || '')
+  )
+  propertyData.omschrijving = cleanedDescription
+
+  // Presentatie-modus: feitelijke data + cleane omschrijving.
   if (brochureType === 'presentatie') {
-    const cleanedDescription = await rewriteDescriptionToDutch(
-      String(propertyData.omschrijving || '')
-    )
-    propertyData.omschrijving = cleanedDescription
 
     const cleanRegio = cleanRegioForCustomer(regioContent)
     const dossierResult = {
