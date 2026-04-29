@@ -3,7 +3,7 @@
 // ============================================================================
 'use client'
 
-import { Search, Waves } from 'lucide-react'
+import { Search } from 'lucide-react'
 import type { ListingFilters } from '@/components/nieuwbouw-types'
 
 interface Props {
@@ -74,20 +74,6 @@ export default function NieuwbouwFilterbar({ filters, setFilters, provinces, pro
         />
       </div>
 
-      <button
-        onClick={() => upd('nearBeach', !filters.nearBeach)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 12, padding: '7px 10px', borderRadius: 8,
-          border: '1px solid rgba(0,75,70,0.15)',
-          background: filters.nearBeach ? '#004B46' : '#fff',
-          color: filters.nearBeach ? '#fff' : '#7A8C8B',
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}
-      >
-        <Waves size={13} />
-        Nabij strand
-      </button>
     </div>
   )
 }

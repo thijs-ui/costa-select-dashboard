@@ -96,5 +96,4 @@ export interface ListingFilters {
   priceMax: number | null
   roomsMin: number | null
   roomsMax: number | null
-  nearBeach: boolean
 }

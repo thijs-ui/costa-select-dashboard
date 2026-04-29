@@ -45,7 +45,6 @@ function mapAmenities(raw: unknown): Amenity[] {
 const emptyFilters: ListingFilters = {
   search: '', province: '', propertyType: '',
   priceMin: null, priceMax: null, roomsMin: null, roomsMax: null,
-  nearBeach: false,
 }
 
 // Module-level in-memory cache — overleeft SPA-navigatie binnen één session
@@ -120,10 +119,6 @@ export default function NieuwbouwkaartPage() {
     if (filters.propertyType && l.property_type !== filters.propertyType) return false
     if (filters.priceMin != null && (l.price ?? 0) < filters.priceMin) return false
     if (filters.priceMax != null && (l.price ?? Infinity) > filters.priceMax) return false
-    if (filters.nearBeach) {
-      const beach = (l.amenities ?? []).find(a => a.kind === 'beach')
-      if (!beach || beach.distance_km > 2) return false
-    }
     return true
   }), [listings, filters])
 
