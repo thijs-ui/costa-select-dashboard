@@ -70,6 +70,76 @@ function renderInline(text: string): string {
   return out
 }
 
+function splitTableRow(line: string): string[] {
+  let s = line.trim()
+  if (s.startsWith('|')) s = s.slice(1)
+  if (s.endsWith('|')) s = s.slice(0, -1)
+  return s.split('|').map(c => c.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  // Bv. "| --- | :---: | ---: |" — minstens één kolom met 3+ streepjes en optionele alignment-colons
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+}
+
+function tryParseTable(
+  lines: string[],
+  i: number
+): { html: string; next: number } | null {
+  const headerLine = lines[i]
+  const sepLine = lines[i + 1]
+  if (!headerLine || !sepLine) return null
+  if (!/^\s*\|.*\|\s*$/.test(headerLine.trim())) return null
+  if (!isTableSeparator(sepLine)) return null
+
+  const headers = splitTableRow(headerLine)
+  const sepCells = splitTableRow(sepLine)
+  if (sepCells.length !== headers.length) return null
+
+  const aligns: (string | null)[] = sepCells.map(c => {
+    const left = c.startsWith(':')
+    const right = c.endsWith(':')
+    if (left && right) return 'center'
+    if (right) return 'right'
+    if (left) return 'left'
+    return null
+  })
+
+  const rows: string[][] = []
+  let j = i + 2
+  while (j < lines.length && /^\s*\|.*\|\s*$/.test(lines[j].trim())) {
+    rows.push(splitTableRow(lines[j]))
+    j++
+  }
+
+  const alignAttr = (idx: number) =>
+    aligns[idx] ? ` style="text-align:${aligns[idx]}"` : ''
+  const thead =
+    '<thead><tr>' +
+    headers
+      .map((h, idx) => `<th${alignAttr(idx)}>${renderInline(h)}</th>`)
+      .join('') +
+    '</tr></thead>'
+  const tbody =
+    '<tbody>' +
+    rows
+      .map(
+        r =>
+          '<tr>' +
+          r
+            .map((c, idx) => `<td${alignAttr(idx)}>${renderInline(c)}</td>`)
+            .join('') +
+          '</tr>'
+      )
+      .join('') +
+    '</tbody>'
+
+  return {
+    html: `<div class="kb-table-wrap"><table>${thead}${tbody}</table></div>`,
+    next: j,
+  }
+}
+
 function markdownToHtml(markdown: string): string {
   const lines = markdown.replace(/\\([._\-()[\]])/g, '$1').split('\n')
   const out: string[] = []
@@ -89,12 +159,21 @@ function markdownToHtml(markdown: string): string {
     }
   }
 
-  for (const raw of lines) {
-    const line = raw
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     // empty line — flush
     if (/^\s*$/.test(line)) {
       flushParagraph()
       closeList()
+      continue
+    }
+    // Table — eerst proberen, want pipe-regels mogen niet als paragraaf eindigen
+    const table = tryParseTable(lines, i)
+    if (table) {
+      flushParagraph()
+      closeList()
+      out.push(table.html)
+      i = table.next - 1
       continue
     }
     const h2 = /^##\s+(.+)$/.exec(line)
