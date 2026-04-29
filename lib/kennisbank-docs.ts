@@ -4,6 +4,7 @@ export interface KennisbankDoc {
   title: string
   category: string
   tags?: string[]
+  created_at: string // ISO-datum (YYYY-MM-DD), bepaalt 'nieuw'-vlag en activity-sortering
 }
 
 export const categories = [
@@ -27,12 +28,14 @@ export const docs: KennisbankDoc[] = [
     code: 'CS-MICRO',
     title: 'Microklimaten in Spanje',
     category: "Regio's",
+    created_at: '2026-04-22',
   },
   {
     slug: 'CS-prijzen-regios',
     code: 'CS-PRIJZEN',
     title: 'Prijzen & marktcontext per regio',
     category: "Regio's",
+    created_at: '2026-04-28',
   },
 ]
 
@@ -111,9 +114,12 @@ export function getSummary(doc: KennisbankDoc): string {
   return SUMMARIES[hash % SUMMARIES.length]
 }
 
-// Nieuw-vlag (binnen X dagen). Statisch want we hebben nog geen updated_at.
-// Laat alleen 'CS-052' en hoger als 'nieuw' zien (latere additions).
+// Nieuw-vlag — doc telt als 'nieuw' als 'ie binnen de laatste 14 dagen is toegevoegd.
+const NEW_WINDOW_DAYS = 14
+
 export function isNew(doc: KennisbankDoc): boolean {
-  const num = parseInt(doc.code.replace(/\D/g, ''), 10)
-  return num >= 50
+  const created = new Date(doc.created_at).getTime()
+  if (Number.isNaN(created)) return false
+  const ageDays = (Date.now() - created) / 86_400_000
+  return ageDays >= 0 && ageDays <= NEW_WINDOW_DAYS
 }

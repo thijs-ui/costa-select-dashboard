@@ -227,7 +227,9 @@ export default function HomePage() {
     : null
 
   // Hero pills
-  const newKb = kbDocs.filter(isKbNew)
+  const newKb = kbDocs
+    .filter(isKbNew)
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
   const newTraining = TR_VIDEOS.filter(trIsVideoNew)
   const pills: HmPill[] = [
     {
@@ -404,7 +406,7 @@ export default function HomePage() {
       iconName: 'book-open',
       actor: 'Kennisbank',
       text: <>nieuwe documenten toegevoegd — {newKb[0].title}.</>,
-      timeLabel: 'Deze week',
+      timeLabel: relativeTime(newKb[0].created_at),
       href: '/kennisbank',
     })
   }
