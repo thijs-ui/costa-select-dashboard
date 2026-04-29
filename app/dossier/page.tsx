@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   AlignLeft,
   Building2,
-  Calculator,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -36,8 +35,6 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react'
-import FinancialOverview from '@/components/dossier/FinancialOverview'
-import { supabase } from '@/lib/supabase'
 
 // ───────── Constants ─────────
 const REGIOS = [
@@ -198,50 +195,6 @@ function DossierPageInner() {
   const [historyPdfLoading, setHistoryPdfLoading] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState('')
-
-  // Regional settings for FinancialOverview
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [regions, setRegions] = useState<any[]>([])
-  const [renoDefaults, setRenoDefaults] = useState({
-    cosmetic: 300, partial: 600, full: 1000, luxury: 1500,
-    contingency: 15, architect: 3000, terrace: 150, garden: 80, pool: 400,
-  })
-
-  // Load regions + renovation settings
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        const res = await fetch('/api/regional-settings')
-        if (res.ok) setRegions(await res.json())
-      } catch { /* ignore */ }
-      try {
-        const { data } = await supabase
-          .from('settings')
-          .select('key, value')
-          .in('key', [
-            'renovation_cosmetic_per_m2', 'renovation_partial_per_m2', 'renovation_full_per_m2',
-            'renovation_luxury_per_m2', 'renovation_contingency_pct', 'renovation_architect_fee',
-            'renovation_terrace_per_m2', 'renovation_garden_per_m2', 'renovation_pool_per_m2',
-          ])
-        if (data) {
-          const m: Record<string, number> = {}
-          for (const r of data as { key: string; value: number }[]) m[r.key] = Number(r.value)
-          setRenoDefaults({
-            cosmetic: m.renovation_cosmetic_per_m2 || 300,
-            partial: m.renovation_partial_per_m2 || 600,
-            full: m.renovation_full_per_m2 || 1000,
-            luxury: m.renovation_luxury_per_m2 || 1500,
-            contingency: m.renovation_contingency_pct || 15,
-            architect: m.renovation_architect_fee || 3000,
-            terrace: m.renovation_terrace_per_m2 || 150,
-            garden: m.renovation_garden_per_m2 || 80,
-            pool: m.renovation_pool_per_m2 || 400,
-          })
-        }
-      } catch { /* ignore */ }
-    }
-    loadSettings()
-  }, [])
 
   // History fetch
   const loadHistory = useCallback(async () => {
@@ -521,8 +474,6 @@ function DossierPageInner() {
                   onMail={() => (window.location.href = getMailtoUrl())}
                   internalNotes={internalNotes}
                   onInternalNotes={setInternalNotes}
-                  regions={regions}
-                  renoDefaults={renoDefaults}
                 />
               )}
             </>
@@ -965,8 +916,6 @@ function ResultBlock({
   onMail,
   internalNotes,
   onInternalNotes,
-  regions,
-  renoDefaults,
 }: {
   dossier: DossierResult
   editProperty: DossierResult['property'] | null
@@ -984,12 +933,6 @@ function ResultBlock({
   onMail: () => void
   internalNotes: string
   onInternalNotes: (v: string) => void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  regions: any[]
-  renoDefaults: {
-    cosmetic: number; partial: number; full: number; luxury: number;
-    contingency: number; architect: number; terrace: number; garden: number; pool: number
-  }
 }) {
   const isPitch = dossier.brochure_type === 'pitch'
   const hasUnits = (dossier.units_data?.length ?? 0) > 0
@@ -1010,7 +953,6 @@ function ResultBlock({
       )
     }
     items.push(
-      { id: 'financieel', icon: <Calculator size={14} strokeWidth={1.8} />, label: 'Financieel' },
       { id: 'notities', icon: <Lock size={14} strokeWidth={1.8} />, label: 'Interne notities' },
     )
     return items
@@ -1067,31 +1009,6 @@ function ResultBlock({
             startNum={hasUnits ? 4 : 3}
           />
         )}
-
-        <div id="financieel">
-          <CollapsibleSection
-            id="financieel-section"
-            num={String(sections.findIndex(s => s.id === 'financieel') + 1).padStart(2, '0')}
-            title="Financieel overzicht"
-            defaultOpen={false}
-          >
-            {regions.length > 0 ? (
-              <FinancialOverview
-                price={dossier.property.vraagprijs || 0}
-                regio={dossier.property.regio || ''}
-                oppervlakte={dossier.property.oppervlakte || 0}
-                type={dossier.property.type || 'woning'}
-                regions={regions}
-                renovationDefaults={renoDefaults}
-                onSave={() => {}}
-              />
-            ) : (
-              <div className="font-body" style={{ fontSize: 13, color: '#7A8C8B' }}>
-                Regio-settings worden geladen...
-              </div>
-            )}
-          </CollapsibleSection>
-        </div>
 
         <div
           id="notities"
