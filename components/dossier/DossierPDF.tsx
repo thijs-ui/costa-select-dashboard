@@ -312,7 +312,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hWordmarkImg: { height: 14, width: 190, objectFit: 'contain' },
+  hWordmarkImg: { height: 10.5, width: 142, objectFit: 'contain' },
   // height-constraint weggelaten — react-pdf klipt anders fontSize 12 binnen
   // height 11 container. fontSize iets opgehoogd voor leesbaarheid.
   hWordmarkFallback: {
