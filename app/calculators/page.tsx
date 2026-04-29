@@ -85,6 +85,7 @@ interface CalcState {
   rate: number
   years: number
   amortType: 'annuity' | 'linear' | 'interest-only'
+  noFinancing: boolean
 
   ibiMonthly: number
   vveMonthly: number
@@ -119,6 +120,7 @@ const DEFAULT_STATE: CalcState = {
   rate: 4.0,
   years: 20,
   amortType: 'annuity',
+  noFinancing: false,
   ibiMonthly: 85,
   vveMonthly: 170,
   insuranceMonthly: 45,
@@ -307,7 +309,7 @@ function calcRental(state: CalcState, buyer: BuyerCosts) {
   const annualRent = state.monthlyRent * 12
   const management = annualRent * (state.managementPct / 100)
   const maintenance = annualRent * (state.maintenancePct / 100)
-  const mortgage = Math.max(0, state.price - state.downPayment)
+  const mortgage = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
   const monthlyPayment = monthlyAnnuity(mortgage, state.rate, state.years)
   const annualInterestApprox = monthlyPayment * 12 * 0.6
   const fixedCostsYear = (state.ibiMonthly + state.vveMonthly + state.insuranceMonthly) * 12
@@ -362,7 +364,7 @@ interface ProjectionRow {
 
 function calcProjection(state: CalcState, years = 10): ProjectionRow[] {
   const rows: ProjectionRow[] = []
-  const mortgage0 = Math.max(0, state.price - state.downPayment)
+  const mortgage0 = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
   const monthlyPayment = monthlyAnnuity(mortgage0, state.rate, state.years)
   const rIdx = 1 + state.rentIndex / 100
   let cumulative = 0
@@ -449,7 +451,7 @@ export default function CalculatorPage() {
 
   const region = useMemo(() => regions.find(r => r.id === state.regionId) || null, [regions, state.regionId])
 
-  const mortgage = Math.max(0, state.price - state.downPayment)
+  const mortgage = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
   const hasMortgage = mortgage > 0
   const maxLTV = state.isResident ? MAX_LTV_RESIDENT : MAX_LTV_NON_RESIDENT
   const ltv = state.price > 0 ? (mortgage / state.price) * 100 : 0
@@ -579,60 +581,81 @@ export default function CalculatorPage() {
               {/* 3 — Financiering */}
               {state.mode !== 'flip' && (
                 <Section num={3} title="Financiering">
-                  <Grid cols={4}>
-                    <Field label="Eigen geld (€)">
-                      <MoneyInput value={state.downPayment} onChange={v => patch({ downPayment: v })} />
-                    </Field>
-                    <Field label="Looptijd (jaar)">
-                      <CalcInput
-                        type="number"
-                        min={5}
-                        max={30}
-                        value={state.years}
-                        onChange={e => patch({ years: Number(e.target.value) || 20 })}
-                      />
-                    </Field>
-                    <Field label="Rente">
-                      <RateSlider
-                        value={state.rate}
-                        onChange={v => patch({ rate: v })}
-                        resident={state.isResident}
-                        warn={false}
-                      />
-                    </Field>
-                    <Field label="Aflossing">
-                      <CalcSelect
-                        value={state.amortType}
-                        onChange={e => patch({ amortType: e.target.value as CalcState['amortType'] })}
-                      >
-                        <option value="annuity">Annuïtair</option>
-                        <option value="linear" disabled>Lineair</option>
-                        <option value="interest-only" disabled>Aflossingsvrij</option>
-                      </CalcSelect>
-                    </Field>
-                  </Grid>
+                  <NoFinancingToggle
+                    checked={state.noFinancing}
+                    onChange={v =>
+                      patch(
+                        v
+                          ? { noFinancing: true, downPayment: state.price }
+                          : { noFinancing: false }
+                      )
+                    }
+                  />
 
-                  <DerivedRow>
-                    <DerivedItem label="Hypotheek" sub="Prijs − eigen geld" value={fmtEUR(fin.mortgage)} />
-                    <DerivedItem
-                      label="LTV"
-                      sub={`Max ${fin.maxLTV}% · ${state.isResident ? 'resident' : 'non-resident'}`}
-                      value={fmtPct(fin.ltv)}
-                      warn={fin.ltvWarn}
-                    />
-                    <DerivedItem
-                      label="Maandlast hypotheek"
-                      sub={`Annuïtair · ${state.years} jaar`}
-                      value={fmtEUR(fin.monthlyPayment)}
-                      accent="sea"
-                    />
-                  </DerivedRow>
+                  {state.noFinancing ? (
+                    <Grid cols={4}>
+                      <Field label="Eigen geld ex. K.K. (€)">
+                        <MoneyInput value={state.downPayment} onChange={v => patch({ downPayment: v })} />
+                      </Field>
+                    </Grid>
+                  ) : (
+                    <>
+                      <Grid cols={4}>
+                        <Field label="Eigen geld ex. K.K. (€)">
+                          <MoneyInput value={state.downPayment} onChange={v => patch({ downPayment: v })} />
+                        </Field>
+                        <Field label="Looptijd (jaar)">
+                          <CalcInput
+                            type="number"
+                            min={5}
+                            max={30}
+                            value={state.years}
+                            onChange={e => patch({ years: Number(e.target.value) || 20 })}
+                          />
+                        </Field>
+                        <Field label="Rente">
+                          <RateSlider
+                            value={state.rate}
+                            onChange={v => patch({ rate: v })}
+                            resident={state.isResident}
+                            warn={false}
+                          />
+                        </Field>
+                        <Field label="Aflossing">
+                          <CalcSelect
+                            value={state.amortType}
+                            onChange={e => patch({ amortType: e.target.value as CalcState['amortType'] })}
+                          >
+                            <option value="annuity">Annuïtair</option>
+                            <option value="linear" disabled>Lineair</option>
+                            <option value="interest-only" disabled>Aflossingsvrij</option>
+                          </CalcSelect>
+                        </Field>
+                      </Grid>
 
-                  {fin.ltvWarn && (
-                    <Warning>
-                      <b>LTV overschrijdt maximum</b> voor {state.isResident ? 'resident' : 'niet-resident'} (
-                      {fin.maxLTV}%). Spaanse banken financieren max {fin.maxLTV}%.
-                    </Warning>
+                      <DerivedRow>
+                        <DerivedItem label="Hypotheek" sub="Prijs − eigen geld" value={fmtEUR(fin.mortgage)} />
+                        <DerivedItem
+                          label="LTV"
+                          sub={`Max ${fin.maxLTV}% · ${state.isResident ? 'resident' : 'non-resident'}`}
+                          value={fmtPct(fin.ltv)}
+                          warn={fin.ltvWarn}
+                        />
+                        <DerivedItem
+                          label="Maandlast hypotheek"
+                          sub={`Annuïtair · ${state.years} jaar`}
+                          value={fmtEUR(fin.monthlyPayment)}
+                          accent="sea"
+                        />
+                      </DerivedRow>
+
+                      {fin.ltvWarn && (
+                        <Warning>
+                          <b>LTV overschrijdt maximum</b> voor {state.isResident ? 'resident' : 'niet-resident'} (
+                          {fin.maxLTV}%). Spaanse banken financieren max {fin.maxLTV}%.
+                        </Warning>
+                      )}
+                    </>
                   )}
                 </Section>
               )}
@@ -1977,6 +2000,44 @@ function DerivedItem({
 }
 
 // ════════════════════ WARNING / FOOTNOTE ════════════════════
+function NoFinancingToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label
+      className="flex items-center font-body cursor-pointer"
+      style={{
+        gap: 10,
+        marginBottom: 16,
+        padding: '10px 14px',
+        background: checked ? 'rgba(245,175,64,0.10)' : 'rgba(0,75,70,0.04)',
+        border: `1px solid ${checked ? 'rgba(245,175,64,0.45)' : 'rgba(0,75,70,0.12)'}`,
+        borderRadius: 10,
+        fontSize: 13,
+        color: '#004B46',
+        transition: 'background 120ms, border-color 120ms',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={e => onChange(e.target.checked)}
+        style={{ width: 16, height: 16, accentColor: '#F5AF40', cursor: 'pointer' }}
+      />
+      <span>
+        <b>Cash-koper</b> — geen financiering nodig
+        <span style={{ marginLeft: 8, fontSize: 11, color: '#7A8C8B' }}>
+          eigen geld dekt de hele aankoopprijs
+        </span>
+      </span>
+    </label>
+  )
+}
+
 function Warning({ children }: { children: React.ReactNode }) {
   return (
     <div
