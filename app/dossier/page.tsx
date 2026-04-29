@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
   AlignLeft,
@@ -160,7 +161,19 @@ function sourceLabel(s: string | null | undefined): string {
 
 // ───────── Page ─────────
 export default function DossierPage() {
-  const [tab, setTab] = useState<Tab>('new')
+  return (
+    <Suspense fallback={null}>
+      <DossierPageInner />
+    </Suspense>
+  )
+}
+
+function DossierPageInner() {
+  const searchParams = useSearchParams()
+  const focusId = searchParams.get('id')
+  const initialTab: Tab = searchParams.get('tab') === 'history' ? 'history' : 'new'
+  const [tab, setTab] = useState<Tab>(initialTab)
+  const focusedRef = useRef<string | null>(null)
   // Pitch is tijdelijk uitgeschakeld in de creatie-flow — alleen presentatie.
   // History toont nog wel oude pitches (filter onder Geschiedenis-tab).
   const [brochure] = useState<BrochureType>('presentatie')
@@ -246,6 +259,22 @@ export default function DossierPage() {
   useEffect(() => {
     if (tab === 'history') loadHistory()
   }, [tab, loadHistory])
+
+  // ?id=<id> in de URL — na laden van history scrollen + tijdelijke pulse-
+  // highlight op die rij. focusedRef voorkomt dat we 'm telkens opnieuw
+  // afspelen bij elke history-refresh in dezelfde sessie.
+  useEffect(() => {
+    if (tab !== 'history' || !focusId || focusedRef.current === focusId) return
+    if (history.length === 0) return
+    const found = history.some(h => h.id === focusId)
+    if (!found) return
+    focusedRef.current = focusId
+    const el = document.querySelector(`[data-history-id="${focusId}"]`) as HTMLElement | null
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('dossier-row-pulse')
+    setTimeout(() => el.classList.remove('dossier-row-pulse'), 2400)
+  }, [tab, focusId, history])
 
   function setManualField(k: keyof ManualForm, v: string) {
     setManualForm(prev => ({ ...prev, [k]: v }))
@@ -548,10 +577,10 @@ function Header({
           className="font-heading font-bold text-deepsea"
           style={{ fontSize: 30, lineHeight: 1, letterSpacing: '-0.01em', margin: '0 0 4px' }}
         >
-          Woningdossier.
+          Woningpresentatie.
         </h1>
         <p className="font-body" style={{ fontSize: 13, color: '#7A8C8B', margin: 0 }}>
-          Genereer een professioneel dossier voor je klant.
+          Genereer een professionele presentatie voor je klant.
         </p>
       </div>
       <div
@@ -564,7 +593,7 @@ function Header({
         }}
       >
         <TabButton active={tab === 'new'} onClick={() => onTab('new')}>
-          <FilePlus2 size={14} strokeWidth={2} /> Nieuw dossier
+          <FilePlus2 size={14} strokeWidth={2} /> Nieuwe presentatie
         </TabButton>
         <TabButton active={tab === 'history'} onClick={() => onTab('history')}>
           <Clock size={14} strokeWidth={2} /> Geschiedenis
@@ -2204,10 +2233,10 @@ function History({
           className="font-heading font-bold text-deepsea"
           style={{ fontSize: 18, margin: '0 0 6px' }}
         >
-          Nog geen dossiers
+          Nog geen presentaties
         </h3>
         <p className="font-body" style={{ fontSize: 13, color: '#5F7472', margin: 0 }}>
-          Maak je eerste dossier aan via de tab Nieuw dossier.
+          Maak je eerste presentatie aan via de tab Nieuwe presentatie.
         </p>
       </Card>
     )
@@ -2343,6 +2372,7 @@ function HistoryRow({
   const isPitch = item.brochure_type === 'pitch'
   return (
     <div
+      data-history-id={item.id}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className="flex items-center transition-colors"

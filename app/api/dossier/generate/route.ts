@@ -217,23 +217,30 @@ export async function POST(request: Request) {
       generatedAt: new Date().toISOString(),
     }
 
-    // Save to history
+    // Save to history en geef id terug zodat de client kan redirecten naar
+    // /dossier?tab=history&id=<id>.
+    let historyId: string | null = null
     try {
       const supabase = createServiceClient()
-      await supabase.from('dossier_history').insert({
-        adres: String(propertyData.adres || 'Onbekend'),
-        regio: String(propertyData.regio || ''),
-        type: String(propertyData.type || ''),
-        vraagprijs: Number(propertyData.vraagprijs) || 0,
-        url: String(propertyData.url || ''),
-        dossier_data: dossierResult,
-        brochure_type: 'presentatie',
-      })
+      const { data: row } = await supabase
+        .from('dossier_history')
+        .insert({
+          adres: String(propertyData.adres || 'Onbekend'),
+          regio: String(propertyData.regio || ''),
+          type: String(propertyData.type || ''),
+          vraagprijs: Number(propertyData.vraagprijs) || 0,
+          url: String(propertyData.url || ''),
+          dossier_data: dossierResult,
+          brochure_type: 'presentatie',
+        })
+        .select('id')
+        .single()
+      historyId = row?.id ?? null
     } catch (err) {
       console.error('Failed to save dossier to history:', err)
     }
 
-    return NextResponse.json(dossierResult)
+    return NextResponse.json({ ...dossierResult, id: historyId })
   }
 
   // Pitch-modus: scrapen + Claude analyse
@@ -347,23 +354,29 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
     generatedAt: new Date().toISOString(),
   }
 
-  // Save to history
+  // Save to history en geef id terug.
+  let historyId: string | null = null
   try {
     const supabase = createServiceClient()
-    await supabase.from('dossier_history').insert({
-      adres: String(propertyData.adres || 'Onbekend'),
-      regio: String(propertyData.regio || ''),
-      type: String(propertyData.type || ''),
-      vraagprijs: Number(propertyData.vraagprijs) || 0,
-      url: String(propertyData.url || ''),
-      dossier_data: dossierResult,
-      brochure_type: 'pitch',
-      pitch_content: pitchContent,
-      pitch_generated_at: new Date().toISOString(),
-    })
+    const { data: row } = await supabase
+      .from('dossier_history')
+      .insert({
+        adres: String(propertyData.adres || 'Onbekend'),
+        regio: String(propertyData.regio || ''),
+        type: String(propertyData.type || ''),
+        vraagprijs: Number(propertyData.vraagprijs) || 0,
+        url: String(propertyData.url || ''),
+        dossier_data: dossierResult,
+        brochure_type: 'pitch',
+        pitch_content: pitchContent,
+        pitch_generated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    historyId = row?.id ?? null
   } catch (err) {
     console.error('Failed to save dossier to history:', err)
   }
 
-  return NextResponse.json(dossierResult)
+  return NextResponse.json({ ...dossierResult, id: historyId })
 }

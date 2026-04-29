@@ -64,7 +64,7 @@ const SECTIONS: NavSection[] = [
       { href: '/calculators', label: 'Calculators', icon: Calculator },
       { href: '/samenwerkingen', label: 'Samenwerkingen', icon: Building2 },
       { href: '/nieuwbouwkaart', label: 'Nieuwbouwkaart', icon: MapPin },
-      { href: '/dossier', label: 'Dossier', icon: FileText },
+      { href: '/dossier', label: 'Presentatie', icon: FileText },
       { href: '/kennisbank', label: 'Kennisbank', icon: BookOpen },
       { href: '/training', label: 'Training', icon: GraduationCap },
       { href: '/kompas-v2', label: 'Costa Kompas', icon: Compass },

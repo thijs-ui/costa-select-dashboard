@@ -270,7 +270,7 @@ export default function HomePage() {
   if (dossiers.length > 0) {
     pills.push({
       kind: 'dossier',
-      label: `${dossiers.length} recente dossiers`,
+      label: `${dossiers.length} recente presentaties`,
       meta: 'overzicht',
       tone: 'deepsea',
       href: '/dossier',
@@ -394,7 +394,7 @@ export default function HomePage() {
     activity.push({
       id: `dossier-${d.id}`,
       iconName: 'file-text',
-      actor: 'Dossier',
+      actor: 'Presentatie',
       text: <>{d.adres} — {d.regio ?? 'regio onbekend'}.</>,
       timeLabel: relativeTime(d.created_at),
       href: '/dossier',

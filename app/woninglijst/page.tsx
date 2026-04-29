@@ -482,7 +482,7 @@ function OverviewView({
           </h1>
           <p className="a-sub">
             Beheer shortlists voor je klanten — voeg woningen toe via URL, markeer
-            favorieten, genereer dossiers.
+            favorieten, genereer presentaties.
           </p>
         </div>
         <div className="a-actions">
@@ -1297,7 +1297,7 @@ function PropertyCard({
 
       <div className="c-actions-stack">
         <button type="button" className="c-act-dossier" onClick={onOpenDossier}>
-          <FileText size={12} strokeWidth={2} /> Dossier
+          <FileText size={12} strokeWidth={2} /> Presentatie
         </button>
         <div className="c-iconrow">
           <button

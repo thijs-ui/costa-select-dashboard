@@ -9482,3 +9482,11 @@ tr.fin-spread-post:hover .fin-vaste-btn { opacity: 1; }
   .c-card .c-thumb { display: none; }
   .c-card .c-actions-stack { grid-column: 1 / -1; flex-direction: row; }
 }
+
+/* Dossier history-rij — pulse-highlight bij landing via ?id=<id> */
+@keyframes dossier-row-pulse {
+  0%   { background-color: rgba(245,175,64,0.32); box-shadow: inset 4px 0 0 #F5AF40; }
+  60%  { background-color: rgba(245,175,64,0.18); box-shadow: inset 4px 0 0 #F5AF40; }
+  100% { background-color: transparent; box-shadow: inset 4px 0 0 transparent; }
+}
+.dossier-row-pulse { animation: dossier-row-pulse 2.4s ease-out; }

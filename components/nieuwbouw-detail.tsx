@@ -448,7 +448,7 @@ function Footer({
           gap: 6, fontFamily: 'inherit', border: 'none', background: '#004B46', color: '#fff',
         }}
       >
-        <FileDown size={14} />Genereer dossier
+        <FileDown size={14} />Genereer presentatie
       </button>
     </div>
   )

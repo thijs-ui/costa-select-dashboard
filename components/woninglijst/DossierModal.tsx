@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export interface DossierModalItem {
@@ -12,12 +12,18 @@ export interface DossierModalItem {
 interface DossierModalProps {
   item: DossierModalItem | null
   onClose: () => void
+  /**
+   * Optionele override van de generate-aanroep. Default-flow stuurt naar
+   * /api/dossier/generate met url+brochure_type='presentatie'. Voor de
+   * nieuwbouwkaart geef je een eigen functie mee die /generate-from-newbuild
+   * aanroept en {id} teruggeeft.
+   */
+  onGenerate?: () => Promise<{ id: string | null }>
 }
 
-export function DossierModal({ item, onClose }: DossierModalProps) {
+export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
   const router = useRouter()
   const [generating, setGenerating] = useState(false)
-  const [result, setResult] = useState<{ id: string } | null>(null)
   const [error, setError] = useState('')
 
   if (!item) return null
@@ -26,25 +32,34 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
     setGenerating(true)
     setError('')
     try {
-      const res = await fetch('/api/dossier/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'url', url: item!.url, brochure_type: 'presentatie' }),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: 'Mislukt' }))
-        throw new Error(d.error || 'Mislukt')
+      let id: string | null = null
+      if (onGenerate) {
+        const r = await onGenerate()
+        id = r.id
+      } else {
+        const res = await fetch('/api/dossier/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'url', url: item!.url, brochure_type: 'presentatie' }),
+        })
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({ error: 'Mislukt' }))
+          throw new Error(d.error || 'Mislukt')
+        }
+        const data = await res.json()
+        id = data.id ?? null
       }
-      const data = await res.json()
-      setResult({ id: data.id || 'created' })
+      // Direct doorlinken naar de presentatie-pagina; modal hoeft geen
+      // success-state te tonen.
+      onClose()
+      const target = id
+        ? `/dossier?tab=history&id=${encodeURIComponent(id)}`
+        : '/dossier?tab=history'
+      router.push(target)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dossier genereren mislukt')
+      setError(err instanceof Error ? err.message : 'Genereren mislukt')
+      setGenerating(false)
     }
-    setGenerating(false)
-  }
-
-  function goToDossier() {
-    router.push('/dossier')
   }
 
   const subjText = item.title || item.url
@@ -64,194 +79,120 @@ export function DossierModal({ item, onClose }: DossierModalProps) {
         }}
         onClick={e => e.stopPropagation()}
       >
-        {!result ? (
-          <>
+        <div
+          className="flex justify-between items-start"
+          style={{
+            padding: '22px 24px 14px',
+            borderBottom: '1px solid rgba(0,75,70,0.08)',
+          }}
+        >
+          <div className="min-w-0">
             <div
-              className="flex justify-between items-start"
+              className="font-body font-bold uppercase text-sun-dark"
+              style={{ fontSize: 10, letterSpacing: '0.18em', marginBottom: 6 }}
+            >
+              AI-presentatie
+            </div>
+            <h3
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 22, letterSpacing: '-0.01em', margin: '0 0 4px' }}
+            >
+              Woningpresentatie genereren
+            </h3>
+            <div
+              className="font-body truncate"
+              style={{ fontSize: 12.5, color: '#5F7472', maxWidth: 420 }}
+            >
+              {subjText}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center cursor-pointer transition-colors"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              background: 'transparent',
+              color: '#7A8C8B',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#E6F0EF'
+              e.currentTarget.style.color = '#004B46'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = '#7A8C8B'
+            }}
+          >
+            <X size={16} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div style={{ padding: '22px 24px' }}>
+          <p
+            className="font-body"
+            style={{
+              fontSize: 13.5,
+              color: '#5F7472',
+              lineHeight: 1.5,
+              margin: 0,
+            }}
+          >
+            Costa Select genereert een woningpresentatie met kenmerken,
+            prijs, ligging en foto&apos;s. Klaar om te delen met je klant.
+          </p>
+          {error && (
+            <div
+              className="font-body"
               style={{
-                padding: '22px 24px 14px',
-                borderBottom: '1px solid rgba(0,75,70,0.08)',
+                marginTop: 14,
+                padding: '10px 12px',
+                background: 'rgba(224,82,82,0.1)',
+                border: '1px solid rgba(224,82,82,0.25)',
+                borderRadius: 8,
+                fontSize: 12.5,
+                color: '#c24040',
               }}
             >
-              <div className="min-w-0">
-                <div
-                  className="font-body font-bold uppercase text-sun-dark"
-                  style={{ fontSize: 10, letterSpacing: '0.18em', marginBottom: 6 }}
-                >
-                  AI-dossier
-                </div>
-                <h3
-                  className="font-heading font-bold text-deepsea"
-                  style={{ fontSize: 22, letterSpacing: '-0.01em', margin: '0 0 4px' }}
-                >
-                  Dossier genereren
-                </h3>
-                <div
-                  className="font-body truncate"
-                  style={{ fontSize: 12.5, color: '#5F7472', maxWidth: 420 }}
-                >
-                  {subjText}
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="flex items-center justify-center cursor-pointer transition-colors"
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: 'transparent',
-                  color: '#7A8C8B',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = '#E6F0EF'
-                  e.currentTarget.style.color = '#004B46'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = '#7A8C8B'
-                }}
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
+              {error}
             </div>
+          )}
+        </div>
 
-            <div style={{ padding: '22px 24px' }}>
-              <p
-                className="font-body"
-                style={{
-                  fontSize: 13.5,
-                  color: '#5F7472',
-                  lineHeight: 1.5,
-                  margin: 0,
-                }}
-              >
-                Costa Select genereert een woningpresentatie met kenmerken,
-                prijs, ligging en foto&apos;s. Klaar om te delen met je klant.
-              </p>
-              {error && (
-                <div
-                  className="font-body"
-                  style={{
-                    marginTop: 14,
-                    padding: '10px 12px',
-                    background: 'rgba(224,82,82,0.1)',
-                    border: '1px solid rgba(224,82,82,0.25)',
-                    borderRadius: 8,
-                    fontSize: 12.5,
-                    color: '#c24040',
-                  }}
-                >
-                  {error}
-                </div>
-              )}
-            </div>
-
-            <div
-              className="flex justify-end items-center"
-              style={{
-                gap: 8,
-                padding: '14px 24px 20px',
-                borderTop: '1px solid rgba(0,75,70,0.08)',
-              }}
+        <div
+          className="flex justify-end items-center"
+          style={{
+            gap: 8,
+            padding: '14px 24px 20px',
+            borderTop: '1px solid rgba(0,75,70,0.08)',
+          }}
+        >
+          {generating && (
+            <span
+              className="inline-flex items-center font-body"
+              style={{ gap: 8, fontSize: 12, color: '#5F7472', marginRight: 'auto' }}
             >
-              {generating && (
-                <span
-                  className="inline-flex items-center font-body"
-                  style={{ gap: 8, fontSize: 12, color: '#5F7472', marginRight: 'auto' }}
-                >
-                  <span
-                    className="wl-spinner inline-block"
-                    style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: 999,
-                      border: '2px solid rgba(0,75,70,0.14)',
-                      borderTopColor: '#004B46',
-                    }}
-                  />
-                  Genereren...
-                </span>
-              )}
-              <WlButton variant="subtle" disabled={generating} onClick={onClose}>
-                Annuleren
-              </WlButton>
-              <WlButton variant="primary" disabled={generating} onClick={generate}>
-                Genereer
-              </WlButton>
-            </div>
-          </>
-        ) : (
-          <>
-            <div
-              className="flex justify-between items-start"
-              style={{ padding: '22px 24px 0' }}
-            >
-              <div style={{ flex: 1 }} />
-              <button
-                onClick={onClose}
-                className="flex items-center justify-center cursor-pointer transition-colors"
+              <span
+                className="wl-spinner inline-block"
                 style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: 'transparent',
-                  color: '#7A8C8B',
+                  width: 14,
+                  height: 14,
+                  borderRadius: 999,
+                  border: '2px solid rgba(0,75,70,0.14)',
+                  borderTopColor: '#004B46',
                 }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = '#E6F0EF'
-                  e.currentTarget.style.color = '#004B46'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = '#7A8C8B'
-                }}
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
-            <div className="text-center" style={{ padding: '40px 32px 28px' }}>
-              <div
-                className="inline-flex items-center justify-center"
-                style={{
-                  width: 68,
-                  height: 68,
-                  borderRadius: '50%',
-                  background: 'rgba(16,185,129,0.12)',
-                  color: '#10b981',
-                  marginBottom: 16,
-                }}
-              >
-                <Check size={34} strokeWidth={2.5} />
-              </div>
-              <h3
-                className="font-heading font-bold text-deepsea"
-                style={{ fontSize: 24, letterSpacing: '-0.01em', margin: '0 0 6px' }}
-              >
-                Dossier aangemaakt!
-              </h3>
-              <p
-                className="font-body mx-auto"
-                style={{
-                  fontSize: 13.5,
-                  color: '#5F7472',
-                  margin: '0 auto 22px',
-                  maxWidth: 360,
-                }}
-              >
-                {subjText}
-              </p>
-              <div className="flex justify-center" style={{ gap: 10 }}>
-                <WlButton variant="primary" onClick={goToDossier}>
-                  Bekijk dossier
-                </WlButton>
-                <WlButton variant="ghost" onClick={onClose}>
-                  Blijf hier
-                </WlButton>
-              </div>
-            </div>
-          </>
-        )}
+              />
+              Genereren...
+            </span>
+          )}
+          <WlButton variant="subtle" disabled={generating} onClick={onClose}>
+            Annuleren
+          </WlButton>
+          <WlButton variant="primary" disabled={generating} onClick={generate}>
+            Genereer
+          </WlButton>
+        </div>
       </div>
     </div>
   )

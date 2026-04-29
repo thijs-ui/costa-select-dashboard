@@ -9,13 +9,13 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { PageLayout } from '@/components/page-layout'
 import NieuwbouwFilterbar from '@/components/nieuwbouw-filterbar'
 import NieuwbouwDetail from '@/components/nieuwbouw-detail'
 import NieuwbouwMap from '@/components/nieuwbouw-map'
 import { CircleCheck, TrendingUp } from 'lucide-react'
 import type { Amenity, Listing, ListingFilters } from '@/components/nieuwbouw-types'
+import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
 
 // nearby_amenities gebruikt NL-keys in de DB. We mappen naar EN-kinds voor de icon-lookup
 // in amenityMeta() en zetten `name` op basis van NL-labels.
@@ -49,11 +49,14 @@ const emptyFilters: ListingFilters = {
 }
 
 export default function NieuwbouwkaartPage() {
-  const router = useRouter()
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<ListingFilters>(emptyFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [presentatieTarget, setPresentatieTarget] = useState<
+    | (DossierModalItem & { listing_id: string })
+    | null
+  >(null)
 
   // Listings komen uit het Bots-Supabase project via /api/nieuwbouw.
   // nearby_amenities (JSONB) → amenities[] client-side.
@@ -102,19 +105,27 @@ export default function NieuwbouwkaartPage() {
 
   const selected = selectedId ? filtered.find(l => l.id === selectedId) ?? null : null
 
-  async function handleGenerateDossier(listing: Listing) {
+  function openPresentatieModal(listing: Listing) {
+    setPresentatieTarget({
+      title: listing.title || 'Nieuwbouwproject',
+      url: '',
+      listing_id: listing.id,
+    })
+  }
+
+  async function generateNewbuildPresentatie(): Promise<{ id: string | null }> {
+    if (!presentatieTarget) return { id: null }
     const res = await fetch('/api/dossier/generate-from-newbuild', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ listing_id: listing.id, mode: 'pitch' }),
+      body: JSON.stringify({ listing_id: presentatieTarget.listing_id, mode: 'pitch' }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
-      alert(d.error || 'Dossier genereren mislukt')
-      return
+      throw new Error(d.error || 'Genereren mislukt')
     }
     const data = await res.json()
-    router.push(`/dossier?id=${data.id}`)
+    return { id: data.id ?? null }
   }
 
   return (
@@ -156,9 +167,15 @@ export default function NieuwbouwkaartPage() {
           <NieuwbouwDetail
             listing={selected}
             onClose={() => setSelectedId(null)}
-            onGenerateDossier={handleGenerateDossier}
+            onGenerateDossier={openPresentatieModal}
           />
         )}
+
+        <DossierModal
+          item={presentatieTarget}
+          onClose={() => setPresentatieTarget(null)}
+          onGenerate={generateNewbuildPresentatie}
+        />
 
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
