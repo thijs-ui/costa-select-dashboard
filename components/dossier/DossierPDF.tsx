@@ -708,15 +708,18 @@ function SectionTitle({
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────
-// react-pdf <Image> SVG-rendering is wankel (multi-path SVGs renderen vaak
-// leeg). Tekst-rendering 'Costa Select' is visueel dichter bij de wordmark
-// dan een lege header en is 100% betrouwbaar — dus altijd tekst, geen SVG.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function Header(_props: { wordmarkSrc?: string }) {
+// SVG-wordmark wordt server-side naar PNG geconverteerd (zie /api/dossier/pdf
+// route — resvg-js). Daardoor kan react-pdf <Image> 'm betrouwbaar renderen.
+// Tekst-fallback alleen als de PNG-conversie zou falen.
+function Header({ wordmarkSrc }: { wordmarkSrc?: string }) {
   return (
     <View style={s.hbar}>
       <View style={s.hWordmark}>
-        <Text style={s.hWordmarkFallback}>Costa Select</Text>
+        {wordmarkSrc ? (
+          <Image src={wordmarkSrc} style={s.hWordmarkImg} />
+        ) : (
+          <Text style={s.hWordmarkFallback}>Costa Select</Text>
+        )}
       </View>
     </View>
   )
@@ -784,13 +787,17 @@ export function DossierPDF({
   const { property, regioInfo } = data
   const fotos = property.fotos || []
   const heroFoto = fotos[0]
-  const mosaicFotos = [fotos[1], fotos[2], fotos[3]]
-  const hasMosaic = mosaicFotos.some(Boolean)
-  // Gallery: foto's 5-15 in 2x3 grid (6 per pagina). Tot 11 extra foto's.
-  const galleryFotos = fotos.slice(4, 15).filter(Boolean)
-  const galleryPages: string[][] = []
-  for (let i = 0; i < galleryFotos.length; i += 6) {
-    galleryPages.push(galleryFotos.slice(i, i + 6))
+  // Foto-pagina's: 3 foto's per pagina, overal dezelfde mosaic-layout
+  // (1 grote links + 2 kleine rechts). Cover gebruikt fotos[0].
+  // Pagina 5+: groepen van 3 vanaf fotos[1].
+  const photoTriplets: Array<[string?, string?, string?]> = []
+  for (let i = 1; i < Math.min(fotos.length, 16); i += 3) {
+    const triplet: [string?, string?, string?] = [
+      fotos[i],
+      fotos[i + 1],
+      fotos[i + 2],
+    ]
+    if (triplet.some(Boolean)) photoTriplets.push(triplet)
   }
 
   const isPitch = data.brochure_type === 'pitch'
@@ -1119,65 +1126,35 @@ export function DossierPDF({
         </Page>
       )}
 
-      {/* ─── 05 FOTO-MOSAIC ────────────────────────────────────── */}
-      {hasMosaic && (
-        <Page size="A4" orientation="landscape" style={s.page}>
-          <Header wordmarkSrc={wordmarkSrc} />
-          <View style={s.photosBody}>
-            <View style={s.photosHero}>
-              <View style={s.phHeroLeft}>
-                {mosaicFotos[0] ? (
-                  <Image src={mosaicFotos[0]} style={s.photoImg} />
-                ) : null}
-              </View>
-              <View style={s.phHeroRight}>
-                <View style={s.phHeroSmall}>
-                  {mosaicFotos[1] ? (
-                    <Image src={mosaicFotos[1]} style={s.photoImg} />
-                  ) : null}
-                </View>
-                <View style={s.phHeroSmallSpacer} />
-                <View style={s.phHeroSmall}>
-                  {mosaicFotos[2] ? (
-                    <Image src={mosaicFotos[2]} style={s.photoImg} />
-                  ) : null}
-                </View>
-              </View>
-            </View>
-          </View>
-        </Page>
-      )}
-
-      {/* ─── 06+ FOTO-GALLERY (2 cols × 3 rows = 6 per page) ────── */}
-      {galleryPages.map((pageFotos, pageIdx) => (
+      {/* ─── 05+ FOTO-PAGINA's (3 per page, mosaic-layout) ─────── */}
+      {photoTriplets.map((triplet, idx) => (
         <Page
-          key={`gallery-${pageIdx}`}
+          key={`photos-${idx}`}
           size="A4"
           orientation="landscape"
           style={s.page}
         >
           <Header wordmarkSrc={wordmarkSrc} />
           <View style={s.photosBody}>
-            <View style={s.galleryGrid}>
-              {[0, 1, 2].map(rowIdx => {
-                const left = pageFotos[rowIdx * 2]
-                const right = pageFotos[rowIdx * 2 + 1]
-                if (!left && !right) return null
-                return (
-                  <View key={rowIdx} style={{ flexDirection: 'column', flex: 1 }}>
-                    <View style={s.galleryRow}>
-                      <View style={left ? s.galleryCell : s.galleryCellEmpty}>
-                        {left ? <Image src={left} style={s.photoImg} /> : null}
-                      </View>
-                      <View style={s.galleryColSpacer} />
-                      <View style={right ? s.galleryCell : s.galleryCellEmpty}>
-                        {right ? <Image src={right} style={s.photoImg} /> : null}
-                      </View>
-                    </View>
-                    {rowIdx < 2 ? <View style={s.galleryRowSpacer} /> : null}
-                  </View>
-                )
-              })}
+            <View style={s.photosHero}>
+              <View style={s.phHeroLeft}>
+                {triplet[0] ? (
+                  <Image src={triplet[0]} style={s.photoImg} />
+                ) : null}
+              </View>
+              <View style={s.phHeroRight}>
+                <View style={s.phHeroSmall}>
+                  {triplet[1] ? (
+                    <Image src={triplet[1]} style={s.photoImg} />
+                  ) : null}
+                </View>
+                <View style={s.phHeroSmallSpacer} />
+                <View style={s.phHeroSmall}>
+                  {triplet[2] ? (
+                    <Image src={triplet[2]} style={s.photoImg} />
+                  ) : null}
+                </View>
+              </View>
             </View>
           </View>
         </Page>

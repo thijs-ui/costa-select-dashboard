@@ -1,5 +1,6 @@
 import { renderToBuffer } from '@react-pdf/renderer'
 import { DossierPDF, type DossierData } from '@/components/dossier/DossierPDF'
+import { Resvg } from '@resvg/resvg-js'
 import fs from 'fs'
 import path from 'path'
 import { NextResponse } from 'next/server'
@@ -7,29 +8,42 @@ import { requireAuth } from '@/lib/auth/permissions'
 
 export const maxDuration = 120
 
+// Cache geconverteerde PNG-buffers per request-cycle. SVG → PNG via resvg
+// loopt < 50ms maar geen reden 'm bij elke pagina opnieuw te draaien.
+const pngCache = new Map<string, string>()
+
 function getAssetBase64(filename: string): string | undefined {
   try {
+    const cached = pngCache.get(filename)
+    if (cached) return cached
+
     const assetPath = path.join(process.cwd(), 'public', 'brand', filename)
-    let buf = fs.readFileSync(assetPath)
+    const buf = fs.readFileSync(assetPath)
     const ext = filename.split('.').pop()?.toLowerCase()
-    const mime =
-      ext === 'svg'
-        ? 'image/svg+xml'
-        : ext === 'png'
-          ? 'image/png'
-          : ext === 'jpg' || ext === 'jpeg'
-            ? 'image/jpeg'
-            : 'application/octet-stream'
-    // react-pdf SVG-rendering struikelt over <g clip-path> + <defs>-wrappers.
-    // Strippen geeft simpele path-set in viewBox — visueel identiek.
+
+    // SVG's worden naar PNG geconverteerd (react-pdf <Image> rendert
+    // multi-path SVGs met clip-path onbetrouwbaar; PNG werkt 100%).
     if (ext === 'svg') {
-      let svg = buf.toString('utf8')
-      svg = svg.replace(/<g\b[^>]*clip-path=[^>]*>/g, '<g>')
-      svg = svg.replace(/<defs\b[\s\S]*?<\/defs>/g, '')
-      buf = Buffer.from(svg, 'utf8')
+      const resvg = new Resvg(buf, {
+        fitTo: { mode: 'width', value: 1600 }, // hoge resolutie zodat 't crisp blijft
+      })
+      const png = resvg.render().asPng()
+      const dataUrl = `data:image/png;base64,${Buffer.from(png).toString('base64')}`
+      pngCache.set(filename, dataUrl)
+      return dataUrl
     }
-    return `data:${mime};base64,${buf.toString('base64')}`
-  } catch {
+
+    const mime =
+      ext === 'png'
+        ? 'image/png'
+        : ext === 'jpg' || ext === 'jpeg'
+          ? 'image/jpeg'
+          : 'application/octet-stream'
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`
+    pngCache.set(filename, dataUrl)
+    return dataUrl
+  } catch (err) {
+    console.error(`[PDF] getAssetBase64 ${filename} failed:`, err)
     return undefined
   }
 }

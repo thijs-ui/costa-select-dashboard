@@ -1335,6 +1335,33 @@ function FactsSection({
 }) {
   return (
     <>
+      <div style={{ marginBottom: 16 }}>
+        <div
+          className="font-body font-bold uppercase"
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            color: '#7A8C8B',
+            marginBottom: 6,
+          }}
+        >
+          Titel — verschijnt op de cover van de presentatie
+        </div>
+        <input
+          type="text"
+          value={property.adres || ''}
+          placeholder="Bv. Villa Marea, Nueva Andalucía"
+          onChange={e => onPatch({ adres: e.target.value })}
+          className="font-heading font-bold text-deepsea bg-transparent outline-none w-full"
+          style={{
+            fontSize: 22,
+            letterSpacing: '-0.01em',
+            border: '1px solid transparent',
+            borderBottom: '1.5px solid rgba(0,75,70,0.18)',
+            padding: '6px 0',
+          }}
+        />
+      </div>
       <div
         className="grid"
         style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}

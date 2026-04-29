@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.82.0",
     "@react-google-maps/api": "^2.20.8",
     "@react-pdf/renderer": "^4.3.3",
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "@upstash/ratelimit": "^2.0.8",
