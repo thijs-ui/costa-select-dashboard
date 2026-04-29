@@ -102,7 +102,11 @@ async function rewriteDescriptionToDutch(raw: string): Promise<string> {
       max_tokens: 600,
       messages: [{
         role: 'user',
-        content: `Herschrijf onderstaande woningbeschrijving naar vloeiend Nederlands voor een klantpresentatie. Bewaar alle feiten (kamers, oppervlaktes, ligging, voorzieningen). Geen marketingtaal, geen "ideaal" of "perfect". Maximaal 150 woorden. Geef ALLEEN de herschreven tekst terug, geen toelichting.
+        content: `Herschrijf onderstaande woningbeschrijving naar vloeiend Nederlands voor een klantpresentatie. Bewaar alle feiten (kamers, oppervlaktes, ligging, voorzieningen). Geen marketingtaal, geen "ideaal" of "perfect". Maximaal 150 woorden.
+
+BELANGRIJK: lever PLAIN TEXT — geen Markdown, geen # headings, geen *bold*, geen lijst-streepjes. Schrijf gewoon doorlopende paragrafen gescheiden door een lege regel.
+
+Geef ALLEEN de herschreven tekst terug, geen toelichting.
 
 ORIGINELE TEKST:
 ${raw.substring(0, 1500)}`,

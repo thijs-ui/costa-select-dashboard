@@ -137,6 +137,31 @@ function truncateAtSentence(text: string, max: number): string {
   return lastSpace > 0 ? slice.slice(0, lastSpace) + '…' : slice
 }
 
+// Strip basic Markdown markers — handoff §strict rule: body-tekst is plain text.
+// Idealista/AI-rewrite kan soms '#'-headings of '*'-emphasis terugsturen.
+function stripMarkdown(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/^\s*#{1,6}\s+/gm, '') // headings
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+    .replace(/__([^_]+)__/g, '$1') // bold underscore
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1') // italic
+    .replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, '$1') // italic underscore
+    .replace(/`([^`]+)`/g, '$1') // inline code
+    .replace(/^\s*[-*+]\s+/gm, '') // unordered list markers
+    .replace(/^\s*>\s?/gm, '') // blockquote
+    .replace(/\n{3,}/g, '\n\n') // collapse 3+ blank lines
+    .trim()
+}
+
+function toParagraphs(text: string): string[] {
+  if (!text) return []
+  const cleaned = stripMarkdown(text)
+  if (!cleaned) return []
+  const parts = cleaned.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
+  return parts.length > 0 ? parts : [cleaned]
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   page: {
@@ -257,7 +282,22 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hWordmarkImg: { height: 11, objectFit: 'contain' },
+  hWordmarkImg: { height: 11, width: 149, objectFit: 'contain' },
+  hWordmarkFallback: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 11,
+    letterSpacing: 1.98,
+    textTransform: 'uppercase',
+    color: DEEPSEA,
+  },
+  // Cover beeldmerk fallback — sun-circle (handoff asset checklist)
+  coverBeeldmerkFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: SUN,
+  },
 
   // ── Body container ──
   pdfBody: {
@@ -397,6 +437,7 @@ const s = StyleSheet.create({
     lineHeight: 1.65,
     color: INK,
   },
+  blockBodyPara: { marginBottom: 8 },
 
   // ── Pitch grid ──
   lede: {
@@ -613,11 +654,16 @@ function SectionTitle({
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────
+// Wordmark op pagina 2-5; bij asset-failure → tekst-fallback (handoff §7).
 function Header({ wordmarkSrc }: { wordmarkSrc?: string }) {
   return (
     <View style={s.hbar}>
       <View style={s.hWordmark}>
-        {wordmarkSrc ? <Image src={wordmarkSrc} style={s.hWordmarkImg} /> : null}
+        {wordmarkSrc ? (
+          <Image src={wordmarkSrc} style={s.hWordmarkImg} />
+        ) : (
+          <Text style={s.hWordmarkFallback}>Costa Select</Text>
+        )}
       </View>
     </View>
   )
@@ -695,10 +741,17 @@ export function DossierPDF({
   const hasPitchB = isPitch && pitch?.advies
   const juridischeRisicos = data.analyse?.juridische_risicos ?? []
 
-  const omschrijving = truncateAtSentence(property.omschrijving ?? '', 720)
-  const regioText = truncateAtSentence(regioInfo ?? '', 600)
-  const lede = firstSentences(pitch?.buurtcontext, 2)
+  // Body-tekst: Markdown strippen, splitsen op paragrafen, dan begrenzen.
+  const omschrijvingParas = toParagraphs(
+    truncateAtSentence(property.omschrijving ?? '', 720)
+  )
+  const regioParas = toParagraphs(truncateAtSentence(regioInfo ?? '', 600))
+  const hasOmschrijving = omschrijvingParas.length > 0
+  const hasRegio = regioParas.length > 0
+  const lede = firstSentences(stripMarkdown(pitch?.buurtcontext ?? ''), 2)
   const adviesDate = fmtDate(data.generatedAt)
+  const adviesText = stripMarkdown(pitch?.advies ?? '')
+  const investeringText = stripMarkdown(pitch?.investering ?? '')
 
   return (
     <Document>
@@ -709,7 +762,9 @@ export function DossierPDF({
             <View style={s.coverBeeldmerk}>
               {beeldmerkSrc ? (
                 <Image src={beeldmerkSrc} style={s.coverBeeldmerkImg} />
-              ) : null}
+              ) : (
+                <View style={s.coverBeeldmerkFallback} />
+              )}
             </View>
 
             <View style={s.coverBody}>
@@ -807,26 +862,52 @@ export function DossierPDF({
           </View>
 
           <View style={s.presCols}>
-            <View style={s.presColsLeft}>
-              <View style={s.blockH}>
-                <Text style={s.blockHNum}>01 / Beschrijving</Text>
+            {hasOmschrijving && (
+              <View style={s.presColsLeft}>
+                <View style={s.blockH}>
+                  <Text style={s.blockHNum}>01 / Beschrijving</Text>
+                </View>
+                <Text style={s.blockTitle}>
+                  Over deze woning
+                  <Text style={s.stitleTerminal}>.</Text>
+                </Text>
+                {omschrijvingParas.map((p, i) => (
+                  <Text
+                    key={i}
+                    style={
+                      i < omschrijvingParas.length - 1
+                        ? [s.blockBody, s.blockBodyPara]
+                        : s.blockBody
+                    }
+                  >
+                    {p}
+                  </Text>
+                ))}
               </View>
-              <Text style={s.blockTitle}>
-                Over deze woning
-                <Text style={s.stitleTerminal}>.</Text>
-              </Text>
-              {omschrijving ? <Text style={s.blockBody}>{omschrijving}</Text> : null}
-            </View>
-            <View style={s.presColsRight}>
-              <View style={s.blockH}>
-                <Text style={s.blockHNum}>02 / Locatie</Text>
+            )}
+            {hasRegio && (
+              <View style={s.presColsRight}>
+                <View style={s.blockH}>
+                  <Text style={s.blockHNum}>02 / Locatie</Text>
+                </View>
+                <Text style={s.blockTitle}>
+                  {property.regio}
+                  <Text style={s.stitleTerminal}>.</Text>
+                </Text>
+                {regioParas.map((p, i) => (
+                  <Text
+                    key={i}
+                    style={
+                      i < regioParas.length - 1
+                        ? [s.blockBody, s.blockBodyPara]
+                        : s.blockBody
+                    }
+                  >
+                    {p}
+                  </Text>
+                ))}
               </View>
-              <Text style={s.blockTitle}>
-                {property.regio}
-                <Text style={s.stitleTerminal}>.</Text>
-              </Text>
-              {regioText ? <Text style={s.blockBody}>{regioText}</Text> : null}
-            </View>
+            )}
           </View>
         </View>
       </Page>
@@ -855,7 +936,10 @@ export function DossierPDF({
                   <Text style={s.stitleTerminal}>.</Text>
                 </Text>
                 <PitchList
-                  items={(pitch?.voordelen ?? []).slice(0, 5)}
+                  items={(pitch?.voordelen ?? [])
+                    .slice(0, 5)
+                    .map(stripMarkdown)
+                    .filter(Boolean)}
                   kind="pos"
                 />
               </View>
@@ -870,13 +954,16 @@ export function DossierPDF({
                   <Text style={s.stitleTerminal}>.</Text>
                 </Text>
                 <PitchList
-                  items={(pitch?.nadelen ?? []).slice(0, 3)}
+                  items={(pitch?.nadelen ?? [])
+                    .slice(0, 3)
+                    .map(stripMarkdown)
+                    .filter(Boolean)}
                   kind="neg"
                 />
               </View>
             </View>
 
-            {pitch?.investering ? (
+            {investeringText ? (
               <View style={s.pitchCallout}>
                 <View style={s.calloutGlyph}>
                   <Text style={s.calloutGlyphLabel}>Callout</Text>
@@ -886,7 +973,7 @@ export function DossierPDF({
                   <Text style={s.calloutLabel}>
                     Prijsanalyse & verhuurpotentieel
                   </Text>
-                  <Text style={s.calloutText}>{pitch.investering}</Text>
+                  <Text style={s.calloutText}>{investeringText}</Text>
                 </View>
               </View>
             ) : null}
@@ -914,7 +1001,7 @@ export function DossierPDF({
                     <Text style={s.adviesMeta}>— Geüpdatet {adviesDate}</Text>
                   ) : null}
                 </View>
-                <Text style={s.adviesText}>{pitch?.advies}</Text>
+                <Text style={s.adviesText}>{adviesText}</Text>
                 <View style={s.adviesSignoff}>
                   <Text style={s.adviesSignoffText}>—</Text>
                   <Text style={[s.adviesSignoffText, s.adviesSignoffName]}>
@@ -938,7 +1025,13 @@ export function DossierPDF({
                     Due-diligence checklist
                     <Text style={s.stitleTerminal}>.</Text>
                   </Text>
-                  <PitchList items={juridischeRisicos.slice(0, 5)} kind="warn" />
+                  <PitchList
+                    items={juridischeRisicos
+                      .slice(0, 5)
+                      .map(stripMarkdown)
+                      .filter(Boolean)}
+                    kind="warn"
+                  />
                 </View>
               </View>
             ) : null}
