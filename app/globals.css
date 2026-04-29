@@ -9208,18 +9208,6 @@ tr.fin-spread-post:hover .fin-vaste-btn { opacity: 1; }
   justify-content: center;
   color: rgba(0,75,70,0.30);
 }
-.c-source-tag {
-  position: absolute;
-  top: 8px; left: 8px;
-  background: var(--sun);
-  color: var(--deepsea-deep);
-  font-family: 'JetBrains Mono', var(--font-mono), ui-monospace, monospace;
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 3px 8px;
-  border-radius: 999px;
-}
 
 .c-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .c-loc {

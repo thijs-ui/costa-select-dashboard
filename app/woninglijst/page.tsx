@@ -8,6 +8,8 @@ import {
   ArrowRight,
   Bath,
   Bed,
+  Bell,
+  BellOff,
   Download,
   ExternalLink,
   FileText,
@@ -23,6 +25,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
@@ -87,16 +90,6 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-function sourceFromUrl(url: string, fallback: string): string {
-  if (!url) return fallback || ''
-  try {
-    const host = new URL(url).host.replace(/^www\./, '')
-    return host
-  } catch {
-    return fallback || ''
-  }
-}
-
 // ───────── Page ─────────
 export default function WoninglijstPage() {
   const { user } = useAuth()
@@ -123,6 +116,22 @@ export default function WoninglijstPage() {
 
   // Dossier modal
   const [dossierItem, setDossierItem] = useState<DossierModalItem | null>(null)
+
+  // Alert state per geselecteerde shortlist
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alertQueryText, setAlertQueryText] = useState('')
+  const [alertSaving, setAlertSaving] = useState(false)
+  const [alertError, setAlertError] = useState<string | null>(null)
+  const [activeAlerts, setActiveAlerts] = useState<Array<{
+    id: string
+    query_text: string
+    created_at: string
+    last_checked_at: string | null
+    location: string | null
+    max_price: number | null
+    min_rooms: number | null
+  }>>([])
+  const [alertToast, setAlertToast] = useState<string | null>(null)
 
   // ─── Load overview ─────────────────────────────────────────
   const loadOverview = useCallback(async () => {
@@ -158,6 +167,72 @@ export default function WoninglijstPage() {
     if (selectedId) loadDetail(selectedId)
     else setDetail(null)
   }, [selectedId, loadDetail])
+
+  // ─── Alerts: load + create + deactivate ────────────────────
+  const loadAlerts = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/woninglijst/${id}/alert`, {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setActiveAlerts(Array.isArray(data) ? data : [])
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedId) loadAlerts(selectedId)
+    else setActiveAlerts([])
+  }, [selectedId, loadAlerts])
+
+  async function submitAlert() {
+    if (!selectedId || !alertQueryText.trim()) return
+    setAlertSaving(true)
+    setAlertError(null)
+    try {
+      const res = await fetch(`/api/woninglijst/${selectedId}/alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query_text: alertQueryText.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setAlertError(data.error || `Fout (${res.status})`)
+      } else {
+        setAlertToast('Alert aangemaakt — je krijgt elke ochtend een Slack-DM bij nieuwe matches.')
+        setAlertQueryText('')
+        setShowAlertModal(false)
+        await loadAlerts(selectedId)
+        setTimeout(() => setAlertToast(null), 4000)
+      }
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : 'Onbekende fout')
+    }
+    setAlertSaving(false)
+  }
+
+  async function deactivateAlert(alertId: string) {
+    if (!selectedId) return
+    if (!confirm('Alert deactiveren?')) return
+    try {
+      const res = await fetch(
+        `/api/woninglijst/${selectedId}/alert?alert_id=${encodeURIComponent(alertId)}`,
+        { method: 'DELETE', credentials: 'include' },
+      )
+      if (res.ok) {
+        await loadAlerts(selectedId)
+        setAlertToast('Alert gedeactiveerd.')
+        setTimeout(() => setAlertToast(null), 3000)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   // ─── CRUD ──────────────────────────────────────────────────
   async function createCustomer(name: string) {
@@ -340,6 +415,16 @@ export default function WoninglijstPage() {
             onDownloadPdf={downloadPdf}
             pdfLoading={pdfLoading}
             onOpenDossier={setDossierItem}
+            activeAlerts={activeAlerts}
+            showAlertModal={showAlertModal}
+            setShowAlertModal={setShowAlertModal}
+            alertQueryText={alertQueryText}
+            setAlertQueryText={setAlertQueryText}
+            alertSaving={alertSaving}
+            alertError={alertError}
+            onSubmitAlert={submitAlert}
+            onDeactivateAlert={deactivateAlert}
+            alertToast={alertToast}
           />
         )}
       </div>
@@ -582,6 +667,16 @@ function DetailView({
   onDownloadPdf,
   pdfLoading,
   onOpenDossier,
+  activeAlerts,
+  showAlertModal,
+  setShowAlertModal,
+  alertQueryText,
+  setAlertQueryText,
+  alertSaving,
+  alertError,
+  onSubmitAlert,
+  onDeactivateAlert,
+  alertToast,
 }: {
   detail: ShortlistDetail | null
   loading: boolean
@@ -602,6 +697,24 @@ function DetailView({
   onDownloadPdf: () => void
   pdfLoading: boolean
   onOpenDossier: (item: DossierModalItem) => void
+  activeAlerts: Array<{
+    id: string
+    query_text: string
+    created_at: string
+    last_checked_at: string | null
+    location: string | null
+    max_price: number | null
+    min_rooms: number | null
+  }>
+  showAlertModal: boolean
+  setShowAlertModal: (v: boolean) => void
+  alertQueryText: string
+  setAlertQueryText: (v: string) => void
+  alertSaving: boolean
+  alertError: string | null
+  onSubmitAlert: () => void
+  onDeactivateAlert: (id: string) => void
+  alertToast: string | null
 }) {
   const [addUrl, setAddUrl] = useState('')
   const [addTitle, setAddTitle] = useState('')
@@ -643,6 +756,7 @@ function DetailView({
   const subtitle = detail?.notities || 'Shortlist — beheer, markeer favorieten en genereer dossiers.'
 
   return (
+    <>
     <div className="a-page">
       <div className="a-header-row">
         <div style={{ minWidth: 0 }}>
@@ -661,6 +775,21 @@ function DetailView({
           <p className="a-sub">{subtitle}</p>
         </div>
         <div className="a-actions">
+          <button
+            type="button"
+            className="a-btn a-btn-ghost"
+            onClick={() => setShowAlertModal(true)}
+          >
+            {activeAlerts.length > 0 ? (
+              <>
+                <Bell size={14} strokeWidth={2} fill="#004B46" /> Alert actief ({activeAlerts.length})
+              </>
+            ) : (
+              <>
+                <Bell size={14} strokeWidth={2} /> Alert aanzetten
+              </>
+            )}
+          </button>
           <button
             type="button"
             className="a-btn a-btn-ghost"
@@ -812,6 +941,245 @@ function DetailView({
         </>
       )}
     </div>
+
+    {/* ── Alert toast ── */}
+    {alertToast && (
+      <div
+        className="font-body"
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: '#004B46',
+          color: 'white',
+          padding: '12px 18px',
+          borderRadius: 8,
+          fontSize: 13,
+          boxShadow: '0 4px 16px rgba(0,0,0,.18)',
+          zIndex: 60,
+          maxWidth: 360,
+        }}
+      >
+        {alertToast}
+      </div>
+    )}
+
+    {/* ── Alert modal ── */}
+    {showAlertModal && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,32,30,.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 70,
+          padding: 20,
+        }}
+        onClick={() => setShowAlertModal(false)}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            background: 'white',
+            borderRadius: 12,
+            maxWidth: 560,
+            width: '100%',
+            padding: 28,
+            boxShadow: '0 12px 48px rgba(0,0,0,.25)',
+          }}
+        >
+          <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+            <h2
+              className="font-heading font-bold text-deepsea"
+              style={{ fontSize: 20, margin: 0 }}
+            >
+              Alert voor {detail?.klant_naam}
+            </h2>
+            <button
+              onClick={() => setShowAlertModal(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7A8C8B' }}
+            >
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+          <p
+            className="font-body"
+            style={{ fontSize: 13, color: '#7A8C8B', margin: '0 0 18px', lineHeight: 1.55 }}
+          >
+            Beschrijf de zoekcriteria voor deze klant. De woningbot checkt elke ochtend of er
+            nieuwe matches zijn en stuurt je een Slack-DM bij hits.
+          </p>
+
+          {activeAlerts.length > 0 && (
+            <div
+              style={{
+                background: '#F4F7F6',
+                borderRadius: 8,
+                padding: 14,
+                marginBottom: 18,
+              }}
+            >
+              <div
+                className="font-body"
+                style={{ fontSize: 11, color: '#7A8C8B', marginBottom: 8, fontWeight: 600 }}
+              >
+                ACTIEVE ALERT{activeAlerts.length > 1 ? 'S' : ''}
+              </div>
+              {activeAlerts.map(a => {
+                const filterParts: string[] = []
+                if (a.location) filterParts.push(a.location)
+                if (a.max_price)
+                  filterParts.push(`max €${Number(a.max_price).toLocaleString('nl-NL')}`)
+                if (a.min_rooms) filterParts.push(`${a.min_rooms}+ slpk`)
+
+                const lastCheckText = a.last_checked_at
+                  ? `Laatst gecheckt: ${new Date(a.last_checked_at).toLocaleDateString('nl-NL', {
+                      day: '2-digit',
+                      month: 'short',
+                    })}`
+                  : 'Nog niet gecheckt — eerste run komende ochtend'
+
+                return (
+                  <div
+                    key={a.id}
+                    className="flex items-start justify-between"
+                    style={{
+                      gap: 10,
+                      marginBottom: 10,
+                      paddingBottom: 8,
+                      borderBottom: '1px solid #E8EEED',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        className="font-body"
+                        style={{ fontSize: 13, color: '#1A2E2C', marginBottom: 2 }}
+                      >
+                        &ldquo;{a.query_text}&rdquo;
+                      </div>
+                      {filterParts.length > 0 && (
+                        <div
+                          className="font-body"
+                          style={{ fontSize: 11, color: '#7A8C8B', marginBottom: 2 }}
+                        >
+                          {filterParts.join(' • ')}
+                        </div>
+                      )}
+                      <div
+                        className="font-body"
+                        style={{ fontSize: 10, color: '#9CA9A8' }}
+                      >
+                        {lastCheckText}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onDeactivateAlert(a.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#B14747',
+                        fontSize: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <BellOff size={12} strokeWidth={2} /> stoppen
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <label
+            className="font-body"
+            style={{
+              fontSize: 12,
+              color: '#1A2E2C',
+              fontWeight: 600,
+              display: 'block',
+              marginBottom: 6,
+            }}
+          >
+            Nieuwe alert — zoekcriteria
+          </label>
+          <textarea
+            value={alertQueryText}
+            onChange={e => setAlertQueryText(e.target.value)}
+            placeholder="bv. villa Estepona max 700k, 3+ slaapkamers, zicht op zee, instapklaar"
+            className="font-body"
+            style={{
+              width: '100%',
+              minHeight: 90,
+              padding: 12,
+              fontSize: 13,
+              border: '1px solid #D4DDDB',
+              borderRadius: 8,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+            }}
+          />
+
+          {alertError && (
+            <div
+              className="font-body"
+              style={{ marginTop: 10, fontSize: 12, color: '#B14747' }}
+            >
+              {alertError}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end" style={{ gap: 10, marginTop: 18 }}>
+            <button
+              onClick={() => setShowAlertModal(false)}
+              className="font-body"
+              style={{
+                background: 'none',
+                border: '1px solid #D4DDDB',
+                borderRadius: 8,
+                padding: '8px 14px',
+                fontSize: 13,
+                color: '#1A2E2C',
+                cursor: 'pointer',
+              }}
+            >
+              Annuleren
+            </button>
+            <button
+              onClick={onSubmitAlert}
+              disabled={!alertQueryText.trim() || alertSaving}
+              className="font-body"
+              style={{
+                background: '#004B46',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 13,
+                cursor: alertSaving || !alertQueryText.trim() ? 'not-allowed' : 'pointer',
+                opacity: alertSaving || !alertQueryText.trim() ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {alertSaving ? (
+                <Loader2 size={14} className="animate-spin" strokeWidth={2} />
+              ) : (
+                <Bell size={14} strokeWidth={2} />
+              )}
+              Alert aanmaken
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
@@ -842,7 +1210,6 @@ function PropertyCard({
   const kk = item.price ? Math.round(item.price * 0.1) : null
   const hasTitle = !!item.title
   const cardClass = 'c-card' + (item.is_favorite ? ' fav' : '')
-  const sourceLabel = sourceFromUrl(item.url, item.source)
 
   return (
     <div className={cardClass}>
@@ -857,7 +1224,6 @@ function PropertyCard({
         ) : (
           <ImageIcon size={38} strokeWidth={1.4} />
         )}
-        {sourceLabel && <span className="c-source-tag">{sourceLabel}</span>}
       </div>
 
       <div className="c-body">
