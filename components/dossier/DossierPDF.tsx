@@ -678,6 +678,27 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   phHeroSmallSpacer: { height: 14 },
+  // Duo-layout (2 foto's side-by-side, gelijke breedte)
+  phHeroDuoLeft: {
+    flex: 1,
+    backgroundColor: DEEPSEA_DEEP,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginRight: 14,
+  },
+  phHeroDuoRight: {
+    flex: 1,
+    backgroundColor: DEEPSEA_DEEP,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  // Solo-layout (1 foto full-width)
+  phHeroSolo: {
+    flex: 1,
+    backgroundColor: DEEPSEA_DEEP,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
   photoImg: { width: '100%', height: '100%', objectFit: 'cover' },
 })
 
@@ -1126,39 +1147,54 @@ export function DossierPDF({
         </Page>
       )}
 
-      {/* ─── 05+ FOTO-PAGINA's (3 per page, mosaic-layout) ─────── */}
-      {photoTriplets.map((triplet, idx) => (
-        <Page
-          key={`photos-${idx}`}
-          size="A4"
-          orientation="landscape"
-          style={s.page}
-        >
-          <Header wordmarkSrc={wordmarkSrc} />
-          <View style={s.photosBody}>
-            <View style={s.photosHero}>
-              <View style={s.phHeroLeft}>
-                {triplet[0] ? (
-                  <Image src={triplet[0]} style={s.photoImg} />
-                ) : null}
-              </View>
-              <View style={s.phHeroRight}>
-                <View style={s.phHeroSmall}>
-                  {triplet[1] ? (
-                    <Image src={triplet[1]} style={s.photoImg} />
-                  ) : null}
+      {/* ─── 05+ FOTO-PAGINA's — adaptieve layout obv aantal foto's ── */}
+      {photoTriplets.map((triplet, idx) => {
+        const filled = triplet.filter((p): p is string => Boolean(p))
+        if (filled.length === 0) return null
+        return (
+          <Page
+            key={`photos-${idx}`}
+            size="A4"
+            orientation="landscape"
+            style={s.page}
+          >
+            <Header wordmarkSrc={wordmarkSrc} />
+            <View style={s.photosBody}>
+              {filled.length === 3 ? (
+                <View style={s.photosHero}>
+                  <View style={s.phHeroLeft}>
+                    <Image src={filled[0]} style={s.photoImg} />
+                  </View>
+                  <View style={s.phHeroRight}>
+                    <View style={s.phHeroSmall}>
+                      <Image src={filled[1]} style={s.photoImg} />
+                    </View>
+                    <View style={s.phHeroSmallSpacer} />
+                    <View style={s.phHeroSmall}>
+                      <Image src={filled[2]} style={s.photoImg} />
+                    </View>
+                  </View>
                 </View>
-                <View style={s.phHeroSmallSpacer} />
-                <View style={s.phHeroSmall}>
-                  {triplet[2] ? (
-                    <Image src={triplet[2]} style={s.photoImg} />
-                  ) : null}
+              ) : filled.length === 2 ? (
+                <View style={s.photosHero}>
+                  <View style={s.phHeroDuoLeft}>
+                    <Image src={filled[0]} style={s.photoImg} />
+                  </View>
+                  <View style={s.phHeroDuoRight}>
+                    <Image src={filled[1]} style={s.photoImg} />
+                  </View>
                 </View>
-              </View>
+              ) : (
+                <View style={s.photosHero}>
+                  <View style={s.phHeroSolo}>
+                    <Image src={filled[0]} style={s.photoImg} />
+                  </View>
+                </View>
+              )}
             </View>
-          </View>
-        </Page>
-      ))}
+          </Page>
+        )
+      })}
     </Document>
   )
 }
