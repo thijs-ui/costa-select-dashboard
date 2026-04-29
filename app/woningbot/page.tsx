@@ -24,6 +24,7 @@ import {
   Trash2,
   TrendingUp,
   User as UserIcon,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
@@ -341,6 +342,32 @@ export default function WoningbotPage() {
     setSaving(false)
   }
 
+  async function createAndAddToShortlist(name: string) {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/woninglijst', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ klant_naam: name.trim() }),
+      })
+      if (!res.ok) {
+        setSaving(false)
+        return
+      }
+      const created = await res.json()
+      if (!created?.id) {
+        setSaving(false)
+        return
+      }
+      setCustomers(prev => [{ id: created.id, klant_naam: created.klant_naam, item_count: 0 }, ...prev])
+      setSaving(false)
+      await addToShortlist(created.id)
+    } catch {
+      setSaving(false)
+    }
+  }
+
   function pickSuggestion(text: string) {
     setInput(text)
     inputRef.current?.focus()
@@ -601,6 +628,7 @@ export default function WoningbotPage() {
               customers={customers}
               saving={saving}
               onPick={addToShortlist}
+              onCreateAndPick={createAndAddToShortlist}
               onCancel={() => setPickerOpen(false)}
             />
           )}
@@ -1296,13 +1324,23 @@ function ShortlistPicker({
   customers,
   saving,
   onPick,
+  onCreateAndPick,
   onCancel,
 }: {
   customers: Customer[]
   saving: boolean
   onPick: (id: string) => void
+  onCreateAndPick: (name: string) => Promise<void>
   onCancel: () => void
 }) {
+  const [mode, setMode] = useState<'list' | 'new'>(customers.length === 0 ? 'new' : 'list')
+  const [newName, setNewName] = useState('')
+
+  function submitNew() {
+    if (!newName.trim() || saving) return
+    onCreateAndPick(newName.trim())
+  }
+
   return (
     <div
       className="wb-anim-picker absolute bg-white overflow-hidden"
@@ -1326,29 +1364,107 @@ function ShortlistPicker({
           className="font-heading font-bold text-deepsea mt-1"
           style={{ fontSize: 16, letterSpacing: '-0.005em' }}
         >
-          Kies een klant.
+          {mode === 'new' ? 'Nieuwe klant aanmaken.' : 'Kies een klant.'}
         </h4>
       </div>
 
-      {customers.length === 0 ? (
-        <div
-          className="font-body"
-          style={{ padding: '18px 16px', fontSize: 13, color: '#5F7472' }}
-        >
-          Geen klanten gevonden.
-          <br />
-          Maak er eerst een aan op de{' '}
-          <a
-            href="/woninglijst"
-            className="text-deepsea underline"
-            style={{ textDecorationColor: 'rgba(0,75,70,0.4)' }}
+      {mode === 'new' ? (
+        <div style={{ padding: '14px 16px 6px' }}>
+          <label
+            className="font-body font-bold uppercase text-sun-dark"
+            style={{ fontSize: 10, letterSpacing: '0.18em', display: 'block', marginBottom: 6 }}
           >
-            Woninglijsten
-          </a>
-          -pagina.
+            Naam van de klant
+          </label>
+          <input
+            autoFocus
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') submitNew()
+              if (e.key === 'Escape') {
+                if (customers.length > 0) {
+                  setMode('list')
+                  setNewName('')
+                } else {
+                  onCancel()
+                }
+              }
+            }}
+            placeholder="bv. Familie Janssen"
+            disabled={saving}
+            className="font-body w-full outline-none"
+            style={{
+              padding: '9px 12px',
+              fontSize: 13,
+              border: '1.5px solid rgba(0,75,70,0.16)',
+              borderRadius: 8,
+              color: '#004B46',
+            }}
+          />
+          {customers.length > 0 && (
+            <button
+              onClick={() => {
+                setMode('list')
+                setNewName('')
+              }}
+              disabled={saving}
+              className="font-body cursor-pointer transition-colors"
+              style={{
+                marginTop: 8,
+                padding: '4px 0',
+                fontSize: 11,
+                color: '#5F7472',
+                background: 'transparent',
+                border: 'none',
+              }}
+            >
+              ← Toch een bestaande klant kiezen
+            </button>
+          )}
         </div>
       ) : (
         <div className="overflow-y-auto" style={{ maxHeight: 280, padding: 6 }}>
+          <button
+            disabled={saving}
+            onClick={() => setMode('new')}
+            className="w-full flex items-center gap-3 text-left transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-50"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'transparent',
+            }}
+            onMouseEnter={e => {
+              if (!saving) e.currentTarget.style.background = '#FEF6E4'
+            }}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <span
+              className="shrink-0 flex items-center justify-center"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 999,
+                background: '#FEF6E4',
+                color: '#D4921A',
+              }}
+            >
+              <UserPlus size={15} strokeWidth={2} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <div
+                className="font-body font-semibold text-deepsea"
+                style={{ fontSize: 13 }}
+              >
+                Nieuwe klant aanmaken
+              </div>
+              <div className="font-body" style={{ fontSize: 11, color: '#7A8C8B' }}>
+                Direct toevoegen aan nieuwe shortlist
+              </div>
+            </span>
+            <ChevronRight size={14} strokeWidth={1.8} color="#7A8C8B" className="shrink-0" />
+          </button>
+          <div style={{ height: 1, background: 'rgba(0,75,70,0.08)', margin: '4px 8px' }} />
           {customers.map(c => (
             <button
               key={c.id}
@@ -1398,7 +1514,7 @@ function ShortlistPicker({
       )}
 
       <div
-        className="flex justify-end"
+        className="flex justify-end items-center gap-2"
         style={{ padding: '10px 16px', borderTop: '1px solid rgba(0,75,70,0.12)' }}
       >
         <button
@@ -1417,6 +1533,33 @@ function ShortlistPicker({
         >
           Annuleren
         </button>
+        {mode === 'new' && (
+          <button
+            onClick={submitNew}
+            disabled={saving || !newName.trim()}
+            className="inline-flex items-center gap-1.5 font-body font-bold uppercase text-deepsea cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              background: '#F5AF40',
+              border: '1.5px solid #F5AF40',
+            }}
+            onMouseEnter={e => {
+              if (!saving && newName.trim()) {
+                e.currentTarget.style.background = '#D4921A'
+                e.currentTarget.style.borderColor = '#D4921A'
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#F5AF40'
+              e.currentTarget.style.borderColor = '#F5AF40'
+            }}
+          >
+            <Plus size={12} strokeWidth={2.2} /> Aanmaken & toevoegen
+          </button>
+        )}
       </div>
     </div>
   )
