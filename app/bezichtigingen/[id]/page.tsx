@@ -18,9 +18,7 @@ import {
   Flag,
   GripVertical,
   Loader2,
-  Mail,
   MapPin,
-  MessageCircle,
   Plus,
   Play,
   Printer,
@@ -322,50 +320,6 @@ export default function BezichtigingDetailPage({
     }
   }
 
-  // ─── Share ────────────────────────────────────
-  function getWhatsAppUrl(): string {
-    if (!trip) return ''
-    const route = trip.route_data
-    const dateStr = new Date(trip.trip_date).toLocaleDateString('nl-NL', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    })
-    const firstName = trip.client_name?.split(/\s+/)[0] || 'klant'
-
-    const lines = [
-      `Hi ${firstName}, hierbij je programma voor ${dateStr}:`,
-      '',
-      ...(route?.stops ?? []).map(rs => {
-        const s = stops.find(x => x.id === rs.stop_id)
-        return `${rs.estimated_arrival} — ${s?.property_title || s?.address}\n${s?.address ?? ''}`
-      }),
-    ]
-    if (route?.lunch) {
-      lines.push('', `Lunch ${route.lunch.start_time}–${route.lunch.end_time}`)
-    }
-    if (route) {
-      lines.push(`Einde rond ${route.estimated_end_time}.`)
-    }
-    const phone = trip.client_phone?.replace(/\D/g, '') || ''
-    return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`
-  }
-
-  function getEmailUrl(): string {
-    if (!trip) return ''
-    const dateStr = new Date(trip.trip_date).toLocaleDateString('nl-NL', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
-    const subject = `Bezichtigingsplanning ${dateStr} — Costa Select`
-    const body = `Beste ${trip.client_name},\n\nHierbij de planning voor onze bezichtigingsdag op ${dateStr}.\n\nWe bekijken ${stops.length} woningen. De dag begint om ${formatTime(trip.start_time)}${
-      trip.start_address ? ` bij ${trip.start_address}` : ''
-    }.\n\nMet vriendelijke groet,\nCosta Select`
-    return `mailto:${trip.client_email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  }
-
   // ─── Render ───────────────────────────────────
   if (loading) {
     return (
@@ -493,34 +447,6 @@ export default function BezichtigingDetailPage({
                     </>
                   )}
                 </BzButton>
-                <a
-                  href={getWhatsAppUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex-1 ${!route || !trip.client_phone ? 'pointer-events-none' : ''}`}
-                  aria-disabled={!route || !trip.client_phone}
-                >
-                  <BzButton
-                    variant="whatsapp"
-                    disabled={!route || !trip.client_phone}
-                    className="w-full"
-                  >
-                    <MessageCircle size={14} strokeWidth={2} /> WhatsApp
-                  </BzButton>
-                </a>
-                <a
-                  href={getEmailUrl()}
-                  className={`flex-1 ${!route || !trip.client_email ? 'pointer-events-none' : ''}`}
-                  aria-disabled={!route || !trip.client_email}
-                >
-                  <BzButton
-                    variant="ghost"
-                    disabled={!route || !trip.client_email}
-                    className="w-full"
-                  >
-                    <Mail size={14} strokeWidth={2} /> E-mail
-                  </BzButton>
-                </a>
                 <BzButton
                   variant="ghost"
                   disabled={!route}

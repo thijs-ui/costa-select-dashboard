@@ -23,10 +23,8 @@ import {
   List,
   Loader2,
   Lock,
-  Mail,
   Map as MapIcon,
   Megaphone,
-  MessageCircle,
   Pencil,
   Plus,
   RotateCcw,
@@ -336,22 +334,6 @@ function DossierPageInner() {
     setPdfLoading(false)
   }
 
-  // Share
-  function getWhatsAppUrl(): string {
-    if (!dossier) return ''
-    const p = dossier.property
-    const msg = `Hoi, hierbij een woning die goed bij je zoekopdracht past: ${p.adres} in ${p.regio} — ${fmtPrice(p.vraagprijs)}. ${p.url ? `Bekijk: ${p.url}` : ''}`
-    return `https://wa.me/?text=${encodeURIComponent(msg)}`
-  }
-
-  function getMailtoUrl(): string {
-    if (!dossier) return ''
-    const p = dossier.property
-    const subject = `Woningvoorstel: ${p.adres} in ${p.regio}`
-    const body = `Beste,\n\nHierbij een woningvoorstel:\n\n${p.adres}\n${p.regio} — ${fmtPrice(p.vraagprijs)}\n${p.url ? `\nListing: ${p.url}` : ''}\n\nMet vriendelijke groet,\nCosta Select`
-    return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  }
-
   // History actions
   async function openFromHistory(id: string) {
     try {
@@ -470,8 +452,6 @@ function DossierPageInner() {
                   }}
                   onDownloadPdf={handleDownloadPdf}
                   pdfLoading={pdfLoading}
-                  onWhatsapp={() => window.open(getWhatsAppUrl(), '_blank')}
-                  onMail={() => (window.location.href = getMailtoUrl())}
                   internalNotes={internalNotes}
                   onInternalNotes={setInternalNotes}
                 />
@@ -912,8 +892,6 @@ function ResultBlock({
   onReset,
   onDownloadPdf,
   pdfLoading,
-  onWhatsapp,
-  onMail,
   internalNotes,
   onInternalNotes,
 }: {
@@ -929,8 +907,6 @@ function ResultBlock({
   onReset: () => void
   onDownloadPdf: () => void
   pdfLoading: boolean
-  onWhatsapp: () => void
-  onMail: () => void
   internalNotes: string
   onInternalNotes: (v: string) => void
 }) {
@@ -973,8 +949,6 @@ function ResultBlock({
           onReset={onReset}
           onDownloadPdf={onDownloadPdf}
           pdfLoading={pdfLoading}
-          onWhatsapp={onWhatsapp}
-          onMail={onMail}
         />
 
         <CollapsibleSection id="feiten" num="01" title="Feiten" defaultOpen>
@@ -1162,15 +1136,11 @@ function ResultHeader({
   onReset,
   onDownloadPdf,
   pdfLoading,
-  onWhatsapp,
-  onMail,
 }: {
   dossier: DossierResult
   onReset: () => void
   onDownloadPdf: () => void
   pdfLoading: boolean
-  onWhatsapp: () => void
-  onMail: () => void
 }) {
   const isPitch = dossier.brochure_type === 'pitch'
   return (
@@ -1224,12 +1194,6 @@ function ResultHeader({
       <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
         <DsButton variant="subtle" onClick={onReset}>
           <RotateCcw size={13} strokeWidth={2} /> Opnieuw
-        </DsButton>
-        <DsButton variant="whatsapp" onClick={onWhatsapp}>
-          <MessageCircle size={13} strokeWidth={2} /> WhatsApp
-        </DsButton>
-        <DsButton variant="ghost" onClick={onMail}>
-          <Mail size={13} strokeWidth={2} /> E-mail
         </DsButton>
         <DsButton variant="sun" disabled={pdfLoading} onClick={onDownloadPdf}>
           {pdfLoading ? (
@@ -2582,7 +2546,7 @@ function DsButton({
   onClick,
   children,
 }: {
-  variant: 'primary' | 'sun' | 'ghost' | 'subtle' | 'whatsapp'
+  variant: 'primary' | 'sun' | 'ghost' | 'subtle'
   disabled?: boolean
   onClick?: () => void
   children: React.ReactNode
@@ -2619,14 +2583,6 @@ function DsButton({
       fontWeight: 500,
       hoverBg: '#E6F0EF',
       hoverBorder: 'transparent',
-    },
-    whatsapp: {
-      background: '#25D366',
-      color: '#FFFFFF',
-      border: '1.5px solid #25D366',
-      fontWeight: 700,
-      hoverBg: '#1fb557',
-      hoverBorder: '#1fb557',
     },
   }[variant]
 

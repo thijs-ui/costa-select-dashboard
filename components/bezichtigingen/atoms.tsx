@@ -57,7 +57,7 @@ export function BzButton({
   children,
   className,
 }: {
-  variant: 'primary' | 'sun' | 'ghost' | 'subtle' | 'whatsapp'
+  variant: 'primary' | 'sun' | 'ghost' | 'subtle'
   disabled?: boolean
   onClick?: () => void
   children: React.ReactNode
@@ -92,13 +92,6 @@ export function BzButton({
       fontWeight: 500,
       hoverBg: '#E6F0EF',
     },
-    whatsapp: {
-      background: '#25D366',
-      color: '#FFFFFF',
-      border: '1.5px solid #25D366',
-      fontWeight: 700,
-      hoverBg: '#1fb557',
-    },
   }[variant]
 
   return (
@@ -120,7 +113,7 @@ export function BzButton({
       onMouseEnter={e => {
         if (disabled) return
         e.currentTarget.style.background = styles.hoverBg
-        if (variant === 'primary' || variant === 'sun' || variant === 'whatsapp') {
+        if (variant === 'primary' || variant === 'sun') {
           e.currentTarget.style.borderColor = styles.hoverBg
         } else if (variant === 'ghost') {
           e.currentTarget.style.borderColor = '#004B46'
