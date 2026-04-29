@@ -81,11 +81,10 @@ interface CalcState {
   propType: 'existing' | 'new'
   isResident: boolean
 
-  downPayment: number
+  ltvPct: number // 0–100, stap 5 — bron-van-waarheid voor financiering. Eigen geld + hypotheek worden hieruit afgeleid.
   rate: number
   years: number
   amortType: 'annuity' | 'linear' | 'interest-only'
-  noFinancing: boolean
 
   ibiMonthly: number
   vveMonthly: number
@@ -116,11 +115,10 @@ const DEFAULT_STATE: CalcState = {
   regionId: '',
   propType: 'existing',
   isResident: false,
-  downPayment: 194000,
+  ltvPct: 60,
   rate: 4.0,
   years: 20,
   amortType: 'annuity',
-  noFinancing: false,
   ibiMonthly: 85,
   vveMonthly: 170,
   insuranceMonthly: 45,
@@ -144,13 +142,13 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
     {
       label: 'Villa Marbella — 2e woning',
       price: 485000, propType: 'existing', isResident: false,
-      downPayment: 200000, rate: 4.0, years: 20,
+      ltvPct: 60, rate: 4.0, years: 20,
       ibiMonthly: 90, vveMonthly: 180, insuranceMonthly: 45,
     },
     {
       label: 'Appartement Jávea — eigen gebruik',
       price: 320000, propType: 'existing', isResident: false,
-      downPayment: 128000, rate: 4.0, years: 25,
+      ltvPct: 60, rate: 4.0, years: 25,
       ibiMonthly: 55, vveMonthly: 120, insuranceMonthly: 35,
     },
   ],
@@ -158,14 +156,14 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
     {
       label: 'Torre del Mar — vakantieverhuur',
       price: 275000, propType: 'existing', isResident: false,
-      downPayment: 110000, rate: 4.0, years: 20,
+      ltvPct: 60, rate: 4.0, years: 20,
       ibiMonthly: 50, vveMonthly: 95, insuranceMonthly: 32,
       monthlyRent: 1850, managementPct: 15, maintenancePct: 6,
     },
     {
       label: 'Alicante centro — long term',
       price: 215000, propType: 'existing', isResident: false,
-      downPayment: 86000, rate: 4.0, years: 25,
+      ltvPct: 60, rate: 4.0, years: 25,
       ibiMonthly: 40, vveMonthly: 85, insuranceMonthly: 28,
       monthlyRent: 1100, managementPct: 8, maintenancePct: 5,
     },
@@ -174,7 +172,7 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
     {
       label: 'Penthouse Estepona — via SL',
       price: 650000, propType: 'existing', isResident: false,
-      downPayment: 260000, rate: 4.0, years: 20,
+      ltvPct: 60, rate: 4.0, years: 20,
       ibiMonthly: 110, vveMonthly: 240, insuranceMonthly: 65,
       monthlyRent: 3400, managementPct: 15, maintenancePct: 5,
       slAge: 'young', slAdmin: 2500,
@@ -182,7 +180,7 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
     {
       label: 'Ibiza portfolio — 2+ jaar SL',
       price: 1200000, propType: 'existing', isResident: false,
-      downPayment: 600000, rate: 4.0, years: 20,
+      ltvPct: 50, rate: 4.0, years: 20,
       ibiMonthly: 220, vveMonthly: 480, insuranceMonthly: 140,
       monthlyRent: 6500, managementPct: 18, maintenancePct: 6,
       slAge: 'mature', slAdmin: 3800,
@@ -309,7 +307,8 @@ function calcRental(state: CalcState, buyer: BuyerCosts) {
   const annualRent = state.monthlyRent * 12
   const management = annualRent * (state.managementPct / 100)
   const maintenance = annualRent * (state.maintenancePct / 100)
-  const mortgage = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
+  const downPayment = state.price * (1 - state.ltvPct / 100)
+  const mortgage = Math.max(0, state.price * (state.ltvPct / 100))
   const monthlyPayment = monthlyAnnuity(mortgage, state.rate, state.years)
   const annualInterestApprox = monthlyPayment * 12 * 0.6
   const fixedCostsYear = (state.ibiMonthly + state.vveMonthly + state.insuranceMonthly) * 12
@@ -317,7 +316,7 @@ function calcRental(state: CalcState, buyer: BuyerCosts) {
   const irnr = Math.max(0, preTax) * (RENO_SETTINGS.irnr_pct / 100)
   const netAfterTax = preTax - irnr
   const yieldOnPrice = state.price > 0 ? (netAfterTax / state.price) * 100 : 0
-  const equityInvested = state.downPayment + buyer.total
+  const equityInvested = downPayment + buyer.total
   const yieldOnEquity = equityInvested > 0 ? (netAfterTax / equityInvested) * 100 : 0
   return {
     annualRent, management, maintenance, annualInterestApprox, fixedCostsYear,
@@ -364,7 +363,7 @@ interface ProjectionRow {
 
 function calcProjection(state: CalcState, years = 10): ProjectionRow[] {
   const rows: ProjectionRow[] = []
-  const mortgage0 = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
+  const mortgage0 = Math.max(0, state.price * (state.ltvPct / 100))
   const monthlyPayment = monthlyAnnuity(mortgage0, state.rate, state.years)
   const rIdx = 1 + state.rentIndex / 100
   let cumulative = 0
@@ -451,14 +450,15 @@ export default function CalculatorPage() {
 
   const region = useMemo(() => regions.find(r => r.id === state.regionId) || null, [regions, state.regionId])
 
-  const mortgage = state.noFinancing ? 0 : Math.max(0, state.price - state.downPayment)
+  const downPayment = state.price * (1 - state.ltvPct / 100)
+  const mortgage = Math.max(0, state.price * (state.ltvPct / 100))
   const hasMortgage = mortgage > 0
   const maxLTV = state.isResident ? MAX_LTV_RESIDENT : MAX_LTV_NON_RESIDENT
   const ltv = state.price > 0 ? (mortgage / state.price) * 100 : 0
   const ltvWarn = hasMortgage && ltv > maxLTV
   const monthlyPayment = monthlyAnnuity(mortgage, state.rate, state.years)
   const monthlyTotal = monthlyPayment + state.ibiMonthly + state.vveMonthly + state.insuranceMonthly
-  const fin = { mortgage, hasMortgage, maxLTV, ltv, ltvWarn, monthlyPayment, monthlyTotal }
+  const fin = { downPayment, mortgage, hasMortgage, maxLTV, ltv, ltvWarn, monthlyPayment, monthlyTotal }
 
   const buyer = useMemo(
     () => calcBuyerCosts(state.price, region, state.propType, hasMortgage),
@@ -581,81 +581,71 @@ export default function CalculatorPage() {
               {/* 3 — Financiering */}
               {state.mode !== 'flip' && (
                 <Section num={3} title="Financiering">
-                  <NoFinancingToggle
-                    checked={state.noFinancing}
-                    onChange={v =>
-                      patch(
-                        v
-                          ? { noFinancing: true, downPayment: state.price }
-                          : { noFinancing: false }
-                      )
-                    }
+                  <LtvSlider
+                    value={state.ltvPct}
+                    onChange={v => patch({ ltvPct: v })}
+                    maxLTV={fin.maxLTV}
+                    isResident={state.isResident}
                   />
 
-                  {state.noFinancing ? (
-                    <Grid cols={4}>
-                      <Field label="Eigen geld ex. K.K. (€)">
-                        <MoneyInput value={state.downPayment} onChange={v => patch({ downPayment: v })} />
+                  {fin.hasMortgage && (
+                    <Grid cols={3}>
+                      <Field label="Looptijd (jaar)">
+                        <CalcInput
+                          type="number"
+                          min={5}
+                          max={30}
+                          value={state.years}
+                          onChange={e => patch({ years: Number(e.target.value) || 20 })}
+                        />
+                      </Field>
+                      <Field label="Rente">
+                        <RateSlider
+                          value={state.rate}
+                          onChange={v => patch({ rate: v })}
+                          resident={state.isResident}
+                          warn={false}
+                        />
+                      </Field>
+                      <Field label="Aflossing">
+                        <CalcSelect
+                          value={state.amortType}
+                          onChange={e => patch({ amortType: e.target.value as CalcState['amortType'] })}
+                        >
+                          <option value="annuity">Annuïtair</option>
+                          <option value="linear" disabled>Lineair</option>
+                          <option value="interest-only" disabled>Aflossingsvrij</option>
+                        </CalcSelect>
                       </Field>
                     </Grid>
-                  ) : (
-                    <>
-                      <Grid cols={4}>
-                        <Field label="Eigen geld ex. K.K. (€)">
-                          <MoneyInput value={state.downPayment} onChange={v => patch({ downPayment: v })} />
-                        </Field>
-                        <Field label="Looptijd (jaar)">
-                          <CalcInput
-                            type="number"
-                            min={5}
-                            max={30}
-                            value={state.years}
-                            onChange={e => patch({ years: Number(e.target.value) || 20 })}
-                          />
-                        </Field>
-                        <Field label="Rente">
-                          <RateSlider
-                            value={state.rate}
-                            onChange={v => patch({ rate: v })}
-                            resident={state.isResident}
-                            warn={false}
-                          />
-                        </Field>
-                        <Field label="Aflossing">
-                          <CalcSelect
-                            value={state.amortType}
-                            onChange={e => patch({ amortType: e.target.value as CalcState['amortType'] })}
-                          >
-                            <option value="annuity">Annuïtair</option>
-                            <option value="linear" disabled>Lineair</option>
-                            <option value="interest-only" disabled>Aflossingsvrij</option>
-                          </CalcSelect>
-                        </Field>
-                      </Grid>
+                  )}
 
-                      <DerivedRow>
-                        <DerivedItem label="Hypotheek" sub="Prijs − eigen geld" value={fmtEUR(fin.mortgage)} />
-                        <DerivedItem
-                          label="LTV"
-                          sub={`Max ${fin.maxLTV}% · ${state.isResident ? 'resident' : 'non-resident'}`}
-                          value={fmtPct(fin.ltv)}
-                          warn={fin.ltvWarn}
-                        />
-                        <DerivedItem
-                          label="Maandlast hypotheek"
-                          sub={`Annuïtair · ${state.years} jaar`}
-                          value={fmtEUR(fin.monthlyPayment)}
-                          accent="sea"
-                        />
-                      </DerivedRow>
+                  <DerivedRow>
+                    <DerivedItem
+                      label="Eigen geld ex. K.K."
+                      sub={`${fmtPct(100 - state.ltvPct)} van aankoopprijs`}
+                      value={fmtEUR(fin.downPayment)}
+                    />
+                    <DerivedItem
+                      label="Hypotheek"
+                      sub={fin.hasMortgage ? `${state.ltvPct}% van aankoopprijs` : 'Geen hypotheek'}
+                      value={fmtEUR(fin.mortgage)}
+                    />
+                    {fin.hasMortgage && (
+                      <DerivedItem
+                        label="Maandlast hypotheek"
+                        sub={`Annuïtair · ${state.years} jaar`}
+                        value={fmtEUR(fin.monthlyPayment)}
+                        accent="sea"
+                      />
+                    )}
+                  </DerivedRow>
 
-                      {fin.ltvWarn && (
-                        <Warning>
-                          <b>LTV overschrijdt maximum</b> voor {state.isResident ? 'resident' : 'niet-resident'} (
-                          {fin.maxLTV}%). Spaanse banken financieren max {fin.maxLTV}%.
-                        </Warning>
-                      )}
-                    </>
+                  {fin.ltvWarn && (
+                    <Warning>
+                      <b>LTV overschrijdt maximum</b> voor {state.isResident ? 'resident' : 'niet-resident'} (
+                      {fin.maxLTV}%). Spaanse banken financieren max {fin.maxLTV}%.
+                    </Warning>
                   )}
                 </Section>
               )}
@@ -671,7 +661,7 @@ export default function CalculatorPage() {
                       <SimpleRow
                         label="Eigen geld nodig"
                         sub="Eigen geld + kosten koper"
-                        value={fmtEUR(state.downPayment + buyer.total)}
+                        value={fmtEUR(fin.downPayment + buyer.total)}
                       />
                     </tbody>
                   </Table>
@@ -1172,6 +1162,7 @@ function HeroStats({
   state: CalcState
   buyer: BuyerCosts
   fin: {
+    downPayment: number
     mortgage: number
     hasMortgage: boolean
     maxLTV: number
@@ -1198,7 +1189,7 @@ function HeroStats({
       {
         icon: <Wallet size={13} strokeWidth={2} />,
         label: 'Totaal inleg',
-        value: fmtEUR(state.downPayment + buyer.total),
+        value: fmtEUR(fin.downPayment + buyer.total),
         sub: 'Eigen geld + kosten koper',
       },
       {
@@ -2000,41 +1991,78 @@ function DerivedItem({
 }
 
 // ════════════════════ WARNING / FOOTNOTE ════════════════════
-function NoFinancingToggle({
-  checked,
+function LtvSlider({
+  value,
   onChange,
+  maxLTV,
+  isResident,
 }: {
-  checked: boolean
-  onChange: (v: boolean) => void
+  value: number
+  onChange: (v: number) => void
+  maxLTV: number
+  isResident: boolean
 }) {
+  const overMax = value > maxLTV
+  const isCash = value === 0
   return (
-    <label
-      className="flex items-center font-body cursor-pointer"
-      style={{
-        gap: 10,
-        marginBottom: 16,
-        padding: '10px 14px',
-        background: checked ? 'rgba(245,175,64,0.10)' : 'rgba(0,75,70,0.04)',
-        border: `1px solid ${checked ? 'rgba(245,175,64,0.45)' : 'rgba(0,75,70,0.12)'}`,
-        borderRadius: 10,
-        fontSize: 13,
-        color: '#004B46',
-        transition: 'background 120ms, border-color 120ms',
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={e => onChange(e.target.checked)}
-        style={{ width: 16, height: 16, accentColor: '#F5AF40', cursor: 'pointer' }}
-      />
-      <span>
-        <b>Cash-koper</b> — geen financiering nodig
-        <span style={{ marginLeft: 8, fontSize: 11, color: '#7A8C8B' }}>
-          eigen geld dekt de hele aankoopprijs
+    <div style={{ marginBottom: 18 }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
+        <span
+          className="font-body font-bold uppercase"
+          style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7A8C8B' }}
+        >
+          Loan-to-value (LTV)
         </span>
-      </span>
-    </label>
+        <span
+          className="font-heading font-bold tabular-nums"
+          style={{
+            fontSize: 22,
+            color: overMax ? '#c03e34' : isCash ? '#F5AF40' : '#004B46',
+            letterSpacing: '-0.01em',
+          }}
+        >
+          {value}%
+          {isCash && (
+            <span
+              className="font-body"
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                marginLeft: 8,
+                color: '#D4921A',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+              }}
+            >
+              · cash-koper
+            </span>
+          )}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{
+          width: '100%',
+          accentColor: overMax ? '#c03e34' : '#004B46',
+          cursor: 'pointer',
+        }}
+      />
+      <div
+        className="flex items-center justify-between font-body"
+        style={{ fontSize: 11, color: '#7A8C8B', marginTop: 6 }}
+      >
+        <span>0% · cash</span>
+        <span style={{ color: overMax ? '#c03e34' : '#7A8C8B' }}>
+          Max {maxLTV}% · {isResident ? 'resident' : 'non-resident'}
+        </span>
+        <span>100% · volledig financieren</span>
+      </div>
+    </div>
   )
 }
 
@@ -2516,6 +2544,7 @@ function SummaryCard({
   region: RegionalSettings | null
   buyer: BuyerCosts
   fin: {
+    downPayment: number
     mortgage: number
     hasMortgage: boolean
     maxLTV: number
@@ -2580,7 +2609,7 @@ function SummaryCard({
 
       {state.mode !== 'flip' && (
         <>
-          <SummaryRow label="Eigen geld" value={fmtEUR(state.downPayment + buyer.total)} />
+          <SummaryRow label="Eigen geld" value={fmtEUR(fin.downPayment + buyer.total)} />
           <SummaryDivider />
           <div style={{ marginBottom: 4 }}>
             <div className="flex justify-between items-baseline">
