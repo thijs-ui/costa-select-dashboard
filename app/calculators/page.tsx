@@ -327,14 +327,19 @@ function calcRental(state: CalcState, buyer: BuyerCosts) {
 function calcSL(state: CalcState, rental: ReturnType<typeof calcRental>) {
   const buildingValue = state.price * (RENO_SETTINGS.building_value_pct / 100)
   const depreciation = buildingValue * (RENO_SETTINGS.depreciation_pct / 100)
-  const deductible =
+  // Echte cash-uitgaven (geen afschrijving — dat is een papieren kost).
+  const realCosts =
     rental.management + rental.maintenance + rental.annualInterestApprox +
-    rental.fixedCostsYear + depreciation + state.slAdmin
+    rental.fixedCostsYear + state.slAdmin
+  // Fiscaal aftrekbaar = echte kosten + afschrijving (alleen voor belastinggrondslag).
+  const deductible = realCosts + depreciation
   const taxable = Math.max(0, rental.annualRent - deductible)
   const vpbPct = state.slAge === 'young' ? RENO_SETTINGS.vpb_young_pct : RENO_SETTINGS.vpb_mature_pct
   const vpb = taxable * (vpbPct / 100)
-  const netInSL = rental.annualRent - deductible - vpb
-  return { buildingValue, depreciation, deductible, taxable, vpbPct, vpb, netInSL }
+  // Cash in de SL = huur − echte kosten − VPB. Afschrijving is een tax-shield,
+  // geen werkelijke uitgave — dus NIET hier aftrekken.
+  const netInSL = rental.annualRent - realCosts - vpb
+  return { buildingValue, depreciation, deductible, taxable, vpbPct, vpb, netInSL, realCosts }
 }
 
 function calcFlip(state: CalcState, buyer: BuyerCosts) {
@@ -822,20 +827,31 @@ export default function CalculatorPage() {
                     <tbody>
                       <SubtotalRow label="Bruto jaarhuur" value={fmtEUR(rental.annualRent)} />
                       <MinusRow
-                        label="− Alle aftrekbare kosten"
-                        sub="Beheer + onderhoud + rente + IBI/VvE/verz. + afschrijving + admin"
-                        value={fmtEUR(-sl.deductible)}
+                        label="− Operationele kosten"
+                        sub="Beheer + onderhoud + rente + IBI/VvE/verz. + admin"
+                        value={fmtEUR(-sl.realCosts)}
                       />
-                      <SubtotalRow label="Belastbare winst SL" value={fmtEUR(sl.taxable)} />
-                      <MinusRow label={`− VPB ${fmtPct(sl.vpbPct, 0)}`} value={fmtEUR(-sl.vpb)} />
+                      <SubtotalRow label="Operationele winst" value={fmtEUR(rental.annualRent - sl.realCosts)} />
+                      <MinusRow
+                        label={`− VPB ${fmtPct(sl.vpbPct, 0)}`}
+                        sub={`Op belastbare grondslag ${fmtEUR(sl.taxable)} = operationele winst − afschrijving ${fmtEUR(sl.depreciation)}`}
+                        value={fmtEUR(-sl.vpb)}
+                      />
                       <TotalRow
-                        label="Netto winst in SL"
+                        label="Netto cash in SL"
                         value={fmtEUR(sl.netInSL)}
                         accent="sea"
                         negative={sl.netInSL < 0}
                       />
                     </tbody>
                   </Table>
+
+                  <Footnote>
+                    <b>Tax-shield —</b> de afschrijving van {fmtEUR(sl.depreciation)} verlaagt
+                    alleen de VPB-grondslag, niet de cash-uitstroom. Bij {fmtPct(sl.vpbPct, 0)} VPB
+                    levert dit {fmtEUR(sl.depreciation * sl.vpbPct / 100)} per jaar belasting-besparing op
+                    — de cash blijft in de SL.
+                  </Footnote>
 
                   <Footnote>
                     <b>Let op —</b> dividenduitkering is een aparte gespreksvraag voor de fiscalist (NL&nbsp;Box&nbsp;2-impact).
