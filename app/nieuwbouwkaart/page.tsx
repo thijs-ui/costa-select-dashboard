@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PageLayout } from '@/components/page-layout'
 import NieuwbouwFilterbar from '@/components/nieuwbouw-filterbar'
 import NieuwbouwDetail from '@/components/nieuwbouw-detail'
-import NieuwbouwMap from '@/components/nieuwbouw-map'
+import NieuwbouwMap, { LoadingCard } from '@/components/nieuwbouw-map'
 import { CircleCheck, TrendingUp } from 'lucide-react'
 import type { Amenity, Listing, ListingFilters } from '@/components/nieuwbouw-types'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
@@ -202,9 +202,12 @@ export default function NieuwbouwkaartPage() {
         />
 
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', color: '#7A8C8B', fontSize: 13 }}>
-            Projecten laden…
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', pointerEvents: 'none',
+            background: 'rgba(238,245,243,0.55)', backdropFilter: 'blur(1px)',
+          }}>
+            <LoadingCard label="Projecten laden…" />
           </div>
         )}
       </div>

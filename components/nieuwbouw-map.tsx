@@ -8,10 +8,13 @@
 
 import { useMemo, useRef, useCallback } from 'react'
 import { GoogleMap, useLoadScript, OverlayView } from '@react-google-maps/api'
+import { Loader2 } from 'lucide-react'
 import type { Listing } from '@/components/nieuwbouw-types'
 
-const MAP_CENTER = { lat: 36.51, lng: -4.88 }  // Costa del Sol centraal
-const MAP_ZOOM = 10
+// Geocentreerd op heel Spanje — gebruiker ziet bij eerste laden de hele kaart
+// en kan zelf naar een costa zoomen. Lat ~40.0 / Lng ~-3.7 = Madrid-as.
+const MAP_CENTER = { lat: 40.0, lng: -3.7 }
+const MAP_ZOOM = 6
 
 const mapOptions: google.maps.MapOptions = {
   disableDefaultUI: true,
@@ -48,9 +51,8 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
   if (!isLoaded) {
     return (
       <div style={{ position: 'absolute', inset: 0, background: '#EEF5F3',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#7A8C8B', fontSize: 13 }}>
-        Kaart laden…
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingCard label="Kaart laden…" />
       </div>
     )
   }
@@ -89,5 +91,31 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
         </OverlayView>
       ))}
     </GoogleMap>
+  )
+}
+
+// Gedeelde loading-card. Solid deepsea-bg + sun-spinner zodat 'ie boven de
+// licht-getinte map duidelijk afsteekt — voorkomt dat 'Laden...' wegvalt
+// tegen de plaatsnamen.
+export function LoadingCard({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        background: '#004B46',
+        color: '#FFFAEF',
+        padding: '14px 22px',
+        borderRadius: 12,
+        boxShadow: '0 8px 24px rgba(7,42,36,0.28)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 12,
+        fontSize: 14,
+        fontWeight: 600,
+        letterSpacing: '0.01em',
+      }}
+    >
+      <Loader2 size={18} strokeWidth={2.4} className="animate-spin" color="#F5AF40" />
+      {label}
+    </div>
   )
 }
