@@ -11,7 +11,8 @@ import path from 'path'
 
 // ─── Brand fonts ─────────────────────────────────────────────────────────
 // Lokaal gebundeld in public/fonts/. Google Fonts CDN-URLs zijn niet stabiel
-// (Raleway 500 v37 ging op 26-04 op 404).
+// (Raleway 500 v37 ging op 26-04 op 404). Bricolage 500-weight is niet
+// beschikbaar; 600 is registered en valt in voor 500 (closest-match).
 function fontUrl(name: string): string {
   return path.join(process.cwd(), 'public', 'fonts', name)
 }
@@ -37,17 +38,23 @@ Font.register({
 
 Font.registerHyphenationCallback(word => [word])
 
-// ─── Design tokens (uit handoff) ─────────────────────────────────────────
+// ─── Design tokens (uit handoff v2) ──────────────────────────────────────
 const DEEPSEA = '#004B46'
 const DEEPSEA_DEEP = '#072A24'
 const SUN = '#F5AF40'
 const SUN_DARK = '#C58118'
+const SUN_TINT = '#FAEDD0'
+const SUN_FRAME_BD = '#EBD9B0'
 const MARBLE = '#FFFAEF'
+const SEA = '#0EAE96'
+const RED = '#B81D13'
 const INK = '#1B2A28'
+const INK_SOFT = '#4A5A57'
 const INK_MUTE = '#8A9794'
 const RULE = 'rgba(7,42,36,0.10)'
 const RULE_STRONG = 'rgba(7,42,36,0.20)'
 const ON_DARK_55 = 'rgba(255,250,239,0.55)'
+const ON_DARK_45 = 'rgba(255,250,239,0.45)'
 const ON_DARK_20 = 'rgba(255,250,239,0.20)'
 
 const PAD_X = 64
@@ -70,22 +77,50 @@ export interface DossierData {
   }
   regioInfo?: string
   brochure_type?: 'pitch' | 'presentatie'
-  // Backwards-compat velden (worden niet meer gerendered):
-  analyse?: unknown
-  pitch_content?: unknown
+  pitch_content?: {
+    voordelen?: string[]
+    nadelen?: string[]
+    buurtcontext?: string
+    investering?: string
+    advies?: string
+  }
+  analyse?: {
+    juridische_risicos?: string[]
+    [k: string]: unknown
+  }
+  generatedAt?: string
+  // Backwards-compat:
   financial_data?: unknown
   units_data?: unknown
-  generatedAt?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function fmtEuro(n: number): string {
   if (!n) return '€ 0'
-  return `€ ${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
+  return `€ ${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
 }
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+
+function fmtDate(iso?: string): string {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleDateString('nl-NL', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function firstSentences(text: string | undefined, count: number): string {
+  if (!text) return ''
+  const parts = text.split(/(?<=[.!?])\s+/)
+  return parts.slice(0, count).join(' ').trim()
 }
 
 function truncateAtSentence(text: string, max: number): string {
@@ -133,24 +168,17 @@ const s = StyleSheet.create({
     marginTop: -31,
     marginLeft: -19,
   },
-  coverBeeldmerkImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-  },
-  coverBody: {
-    marginTop: 'auto',
-    flexDirection: 'column',
-  },
+  coverBeeldmerkImg: { width: '100%', height: '100%', objectFit: 'contain' },
+  coverBody: { marginTop: 'auto', flexDirection: 'column' },
   coverAddr: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 48,
+    fontSize: 54,
     lineHeight: 0.98,
-    letterSpacing: -1.2,
+    letterSpacing: -1.35,
     color: MARBLE,
     marginBottom: 28,
-    maxWidth: 480,
+    maxWidth: 540,
   },
   coverAddrTerminal: { color: SUN },
   coverPriceRow: {
@@ -163,9 +191,9 @@ const s = StyleSheet.create({
   },
   coverPriceLabel: {
     fontFamily: 'Raleway',
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: 700,
-    letterSpacing: 2.2,
+    letterSpacing: 2.28,
     textTransform: 'uppercase',
     color: ON_DARK_55,
     marginBottom: 6,
@@ -173,9 +201,9 @@ const s = StyleSheet.create({
   coverPrice: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 38,
+    fontSize: 42,
     color: SUN,
-    letterSpacing: -0.95,
+    letterSpacing: -1.05,
     lineHeight: 1,
   },
   coverSpecs: { flexDirection: 'row' },
@@ -187,30 +215,27 @@ const s = StyleSheet.create({
     borderLeftStyle: 'solid',
     borderLeftColor: ON_DARK_20,
   },
-  coverSpecFirst: {
-    borderLeftWidth: 0,
-    paddingLeft: 0,
-  },
+  coverSpecFirst: { borderLeftWidth: 0, paddingLeft: 0 },
   coverSpecLabel: {
     fontFamily: 'Raleway',
-    fontSize: 8,
+    fontSize: 8.5,
     fontWeight: 700,
-    letterSpacing: 1.76,
+    letterSpacing: 1.87,
     textTransform: 'uppercase',
     color: ON_DARK_55,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   coverSpecValue: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 22,
+    fontSize: 24,
     color: MARBLE,
-    letterSpacing: -0.44,
+    letterSpacing: -0.48,
     lineHeight: 1,
   },
   coverSpecUnit: {
     fontFamily: 'Raleway',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 500,
     color: ON_DARK_55,
     marginLeft: 3,
@@ -232,10 +257,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hWordmarkImg: {
-    height: 11,
-    objectFit: 'contain',
-  },
+  hWordmarkImg: { height: 11, objectFit: 'contain' },
 
   // ── Body container ──
   pdfBody: {
@@ -247,20 +269,17 @@ const s = StyleSheet.create({
   },
 
   // ── Section title ──
-  stitle: {
-    marginBottom: 28,
-    flexDirection: 'column',
-  },
+  stitle: { marginBottom: 24, flexDirection: 'column' },
   stitleEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   stitleEyebrow: {
     fontFamily: 'Raleway',
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: 700,
-    letterSpacing: 2.52,
+    letterSpacing: 2.66,
     textTransform: 'uppercase',
     color: DEEPSEA,
   },
@@ -273,9 +292,9 @@ const s = StyleSheet.create({
   },
   stitleEyebrowCounter: {
     fontFamily: 'Raleway',
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: 700,
-    letterSpacing: 1.98,
+    letterSpacing: 2.09,
     textTransform: 'uppercase',
     color: INK_MUTE,
   },
@@ -288,9 +307,9 @@ const s = StyleSheet.create({
   stitleH2: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 32,
+    fontSize: 34,
     lineHeight: 1.02,
-    letterSpacing: -0.8,
+    letterSpacing: -0.85,
     color: DEEPSEA,
     maxWidth: 880,
   },
@@ -300,7 +319,7 @@ const s = StyleSheet.create({
   presSpecGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 28,
+    marginBottom: 24,
     borderTopWidth: 1,
     borderTopStyle: 'solid',
     borderTopColor: RULE_STRONG,
@@ -308,18 +327,15 @@ const s = StyleSheet.create({
   presSpec: {
     flexBasis: '33.333%',
     width: '33.333%',
-    paddingTop: 18,
+    paddingTop: 16,
     paddingRight: 22,
-    paddingBottom: 18,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomStyle: 'solid',
     borderBottomColor: RULE,
     flexDirection: 'column',
   },
-  presSpecSm: {
-    flexBasis: '25%',
-    width: '25%',
-  },
+  presSpecSm: { flexBasis: '25%', width: '25%' },
   presSpecLabel: {
     fontFamily: 'Raleway',
     fontSize: 8.5,
@@ -327,47 +343,37 @@ const s = StyleSheet.create({
     letterSpacing: 1.87,
     textTransform: 'uppercase',
     color: INK_MUTE,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   presSpecValue: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 19,
+    fontSize: 20,
     color: DEEPSEA,
-    letterSpacing: -0.38,
+    letterSpacing: -0.4,
     lineHeight: 1,
   },
   presSpecUnit: {
     fontFamily: 'Raleway',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 500,
     color: INK_MUTE,
     marginLeft: 3,
   },
-  presSpecAccent: {
-    color: SUN_DARK,
-    fontSize: 22,
-  },
-  presCols: {
-    flexDirection: 'row',
-    flex: 1,
-  },
+  presSpecAccent: { color: SUN_DARK, fontSize: 23 },
+  presCols: { flexDirection: 'row', flex: 1 },
   presColsLeft: {
     flex: 1.25,
     flexDirection: 'column',
     paddingRight: 18,
   },
-  presColsRight: {
-    flex: 1,
-    flexDirection: 'column',
-    paddingLeft: 18,
-  },
-  presBlockH: {
+  presColsRight: { flex: 1, flexDirection: 'column', paddingLeft: 18 },
+  blockH: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  presBlockHNum: {
+  blockHNum: {
     fontFamily: 'Raleway',
     fontSize: 9,
     fontWeight: 600,
@@ -375,22 +381,183 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     color: INK_MUTE,
   },
-  presBlockTitle: {
+  blockTitle: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
     fontSize: 16,
     color: DEEPSEA,
     letterSpacing: -0.24,
     lineHeight: 1.1,
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  presBlockBody: {
+  blockBody: {
     fontFamily: 'Raleway',
     fontSize: 9.5,
     fontWeight: 400,
     lineHeight: 1.65,
     color: INK,
   },
+
+  // ── Pitch grid ──
+  lede: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 400,
+    fontSize: 12.5,
+    lineHeight: 1.55,
+    color: INK_SOFT,
+    marginBottom: 22,
+    maxWidth: 920,
+  },
+  pitchGrid: { flexDirection: 'row', marginBottom: 18 },
+  pitchCol: { flex: 1, flexDirection: 'column' },
+  pitchColSpacer: { width: 28 },
+  pitchTick: { width: 28, height: 2, marginTop: 4, marginBottom: 12 },
+  pitchTickPos: { backgroundColor: SEA },
+  pitchTickNeg: { backgroundColor: SUN },
+  pitchTickWarn: { backgroundColor: RED },
+  pitchTickNeutral: { backgroundColor: DEEPSEA },
+  pitchListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingTop: 9,
+    paddingBottom: 9,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: RULE,
+  },
+  pitchListItemLast: { borderBottomWidth: 0 },
+  pitchListBullet: {
+    width: 12,
+    height: 2,
+    marginTop: 7,
+    marginRight: 10,
+    flexShrink: 0,
+  },
+  pitchListBulletPos: { backgroundColor: SEA },
+  pitchListBulletNeg: { backgroundColor: SUN },
+  pitchListBulletWarn: { backgroundColor: RED },
+  pitchListBulletNeutral: { backgroundColor: INK_MUTE },
+  pitchListText: {
+    flex: 1,
+    fontFamily: 'Raleway',
+    fontSize: 9.5,
+    fontWeight: 400,
+    lineHeight: 1.55,
+    color: INK,
+  },
+
+  // ── Pitch callout ──
+  pitchCallout: {
+    backgroundColor: SUN_TINT,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: SUN_FRAME_BD,
+    borderRadius: 2,
+    padding: 18,
+    marginTop: 'auto',
+    flexDirection: 'row',
+  },
+  calloutGlyph: { width: 56, flexDirection: 'column' },
+  calloutGlyphLabel: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 1.87,
+    textTransform: 'uppercase',
+    color: SUN_DARK,
+    marginBottom: 4,
+  },
+  calloutGlyphNum: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 26,
+    color: DEEPSEA,
+    letterSpacing: -0.65,
+    lineHeight: 1,
+  },
+  calloutBody: {
+    flex: 1,
+    borderLeftWidth: 1,
+    borderLeftStyle: 'solid',
+    borderLeftColor: SUN_FRAME_BD,
+    paddingLeft: 22,
+  },
+  calloutLabel: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 2.16,
+    textTransform: 'uppercase',
+    color: SUN_DARK,
+    marginBottom: 6,
+  },
+  calloutText: {
+    fontFamily: 'Raleway',
+    fontSize: 9.5,
+    fontWeight: 400,
+    lineHeight: 1.6,
+    color: INK,
+  },
+
+  // ── Advies hero (page 04) ──
+  adviesHero: {
+    backgroundColor: DEEPSEA,
+    padding: 28,
+    borderRadius: 2,
+    marginBottom: 22,
+    flexDirection: 'row',
+  },
+  adviesSunBar: {
+    width: 3,
+    backgroundColor: SUN,
+    marginRight: 24,
+  },
+  adviesBody: { flex: 1, flexDirection: 'column' },
+  adviesLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  adviesLabel: {
+    fontFamily: 'Raleway',
+    fontSize: 9.5,
+    fontWeight: 700,
+    letterSpacing: 2.66,
+    textTransform: 'uppercase',
+    color: SUN,
+    marginRight: 10,
+  },
+  adviesMeta: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 500,
+    letterSpacing: 1.62,
+    textTransform: 'uppercase',
+    color: ON_DARK_45,
+  },
+  adviesText: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 400,
+    fontSize: 16,
+    lineHeight: 1.5,
+    color: MARBLE,
+    letterSpacing: -0.08,
+    maxWidth: 860,
+  },
+  adviesSignoff: {
+    marginTop: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  adviesSignoffText: {
+    fontFamily: 'Raleway',
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 1.98,
+    textTransform: 'uppercase',
+    color: ON_DARK_55,
+  },
+  adviesSignoffName: { color: SUN, marginLeft: 6, marginRight: 6 },
 
   // ── Foto-mosaic page ──
   photosBody: {
@@ -400,10 +567,7 @@ const s = StyleSheet.create({
     paddingBottom: 72,
     flexDirection: 'column',
   },
-  photosHero: {
-    flexDirection: 'row',
-    height: 650,
-  },
+  photosHero: { flexDirection: 'row', height: 650 },
   phHeroLeft: {
     flex: 1.35,
     backgroundColor: DEEPSEA_DEEP,
@@ -411,10 +575,7 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     marginRight: 14,
   },
-  phHeroRight: {
-    flex: 1,
-    flexDirection: 'column',
-  },
+  phHeroRight: { flex: 1, flexDirection: 'column' },
   phHeroSmall: {
     flex: 1,
     backgroundColor: DEEPSEA_DEEP,
@@ -422,11 +583,7 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   phHeroSmallSpacer: { height: 14 },
-  photoImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
+  photoImg: { width: '100%', height: '100%', objectFit: 'cover' },
 })
 
 // ─── Section title component ─────────────────────────────────────────────
@@ -455,7 +612,7 @@ function SectionTitle({
   )
 }
 
-// ─── Header (content pages, page 2+) ─────────────────────────────────────
+// ─── Header ──────────────────────────────────────────────────────────────
 function Header({ wordmarkSrc }: { wordmarkSrc?: string }) {
   return (
     <View style={s.hbar}>
@@ -464,6 +621,55 @@ function Header({ wordmarkSrc }: { wordmarkSrc?: string }) {
       </View>
     </View>
   )
+}
+
+// ─── Pitch list (bullets via View) ───────────────────────────────────────
+type PitchKind = 'pos' | 'neg' | 'warn' | 'neutral'
+
+function PitchList({
+  items,
+  kind,
+}: {
+  items: string[]
+  kind: PitchKind
+}) {
+  const bulletStyle =
+    kind === 'pos'
+      ? s.pitchListBulletPos
+      : kind === 'neg'
+        ? s.pitchListBulletNeg
+        : kind === 'warn'
+          ? s.pitchListBulletWarn
+          : s.pitchListBulletNeutral
+  return (
+    <View>
+      {items.map((item, i) => (
+        <View
+          key={i}
+          style={
+            i === items.length - 1
+              ? [s.pitchListItem, s.pitchListItemLast]
+              : s.pitchListItem
+          }
+        >
+          <View style={[s.pitchListBullet, bulletStyle]} />
+          <Text style={s.pitchListText}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+function PitchTick({ kind }: { kind: PitchKind }) {
+  const tickStyle =
+    kind === 'pos'
+      ? s.pitchTickPos
+      : kind === 'neg'
+        ? s.pitchTickNeg
+        : kind === 'warn'
+          ? s.pitchTickWarn
+          : s.pitchTickNeutral
+  return <View style={[s.pitchTick, tickStyle]} />
 }
 
 // ─── Main component ──────────────────────────────────────────────────────
@@ -480,9 +686,19 @@ export function DossierPDF({
   const fotos = property.fotos || []
   const heroFoto = fotos[0]
   const mosaicFotos = [fotos[1], fotos[2], fotos[3]]
+  const hasMosaic = mosaicFotos.some(Boolean)
+
+  const isPitch = data.brochure_type === 'pitch'
+  const pitch = data.pitch_content
+  const hasPitchA =
+    isPitch && pitch && (pitch.voordelen?.length || pitch.nadelen?.length)
+  const hasPitchB = isPitch && pitch?.advies
+  const juridischeRisicos = data.analyse?.juridische_risicos ?? []
 
   const omschrijving = truncateAtSentence(property.omschrijving ?? '', 720)
   const regioText = truncateAtSentence(regioInfo ?? '', 600)
+  const lede = firstSentences(pitch?.buurtcontext, 2)
+  const adviesDate = fmtDate(data.generatedAt)
 
   return (
     <Document>
@@ -539,18 +755,18 @@ export function DossierPDF({
         </View>
       </Page>
 
-      {/* ─── 02 DETAIL (presentatie) ───────────────────────────── */}
+      {/* ─── 02 DETAIL ───────────────────────────────────────── */}
       <Page size="A4" orientation="landscape" style={s.page}>
         <Header wordmarkSrc={wordmarkSrc} />
         <View style={s.pdfBody}>
           <SectionTitle
             eyebrow="Kenmerken & locatie"
-            counter="02 · Detail"
+            counter={isPitch ? '02 / 04 · Detail' : '02 · Detail'}
             title={property.adres}
           />
 
           <View style={s.presSpecGrid}>
-            <View style={[s.presSpec, s.presSpecAccent]}>
+            <View style={s.presSpec}>
               <Text style={s.presSpecLabel}>Vraagprijs</Text>
               <Text style={[s.presSpecValue, s.presSpecAccent]}>
                 {fmtEuro(property.vraagprijs)}
@@ -592,35 +808,146 @@ export function DossierPDF({
 
           <View style={s.presCols}>
             <View style={s.presColsLeft}>
-              <View style={s.presBlockH}>
-                <Text style={s.presBlockHNum}>01 / Beschrijving</Text>
+              <View style={s.blockH}>
+                <Text style={s.blockHNum}>01 / Beschrijving</Text>
               </View>
-              <Text style={s.presBlockTitle}>
+              <Text style={s.blockTitle}>
                 Over deze woning
                 <Text style={s.stitleTerminal}>.</Text>
               </Text>
-              {omschrijving ? (
-                <Text style={s.presBlockBody}>{omschrijving}</Text>
-              ) : null}
+              {omschrijving ? <Text style={s.blockBody}>{omschrijving}</Text> : null}
             </View>
             <View style={s.presColsRight}>
-              <View style={s.presBlockH}>
-                <Text style={s.presBlockHNum}>02 / Locatie</Text>
+              <View style={s.blockH}>
+                <Text style={s.blockHNum}>02 / Locatie</Text>
               </View>
-              <Text style={s.presBlockTitle}>
+              <Text style={s.blockTitle}>
                 {property.regio}
                 <Text style={s.stitleTerminal}>.</Text>
               </Text>
-              {regioText ? (
-                <Text style={s.presBlockBody}>{regioText}</Text>
-              ) : null}
+              {regioText ? <Text style={s.blockBody}>{regioText}</Text> : null}
             </View>
           </View>
         </View>
       </Page>
 
-      {/* ─── 03 FOTO-MOSAIC ────────────────────────────────────── */}
-      {(mosaicFotos[0] || mosaicFotos[1] || mosaicFotos[2]) && (
+      {/* ─── 03 PITCH A — Samenvatting & voordelen ─────────────── */}
+      {hasPitchA && (
+        <Page size="A4" orientation="landscape" style={s.page}>
+          <Header wordmarkSrc={wordmarkSrc} />
+          <View style={s.pdfBody}>
+            <SectionTitle
+              eyebrow="Overzicht — Analyse"
+              counter="03 / 04 · Pitch A"
+              title="Samenvatting & voordelen"
+            />
+
+            {lede ? <Text style={s.lede}>{lede}</Text> : null}
+
+            <View style={s.pitchGrid}>
+              <View style={s.pitchCol}>
+                <View style={s.blockH}>
+                  <Text style={s.blockHNum}>A / Voordelen</Text>
+                </View>
+                <PitchTick kind="pos" />
+                <Text style={s.blockTitle}>
+                  Wat we sterk vinden
+                  <Text style={s.stitleTerminal}>.</Text>
+                </Text>
+                <PitchList
+                  items={(pitch?.voordelen ?? []).slice(0, 5)}
+                  kind="pos"
+                />
+              </View>
+              <View style={s.pitchColSpacer} />
+              <View style={s.pitchCol}>
+                <View style={s.blockH}>
+                  <Text style={s.blockHNum}>B / Aandachtspunten</Text>
+                </View>
+                <PitchTick kind="neg" />
+                <Text style={s.blockTitle}>
+                  Onderhandelingsruimte
+                  <Text style={s.stitleTerminal}>.</Text>
+                </Text>
+                <PitchList
+                  items={(pitch?.nadelen ?? []).slice(0, 3)}
+                  kind="neg"
+                />
+              </View>
+            </View>
+
+            {pitch?.investering ? (
+              <View style={s.pitchCallout}>
+                <View style={s.calloutGlyph}>
+                  <Text style={s.calloutGlyphLabel}>Callout</Text>
+                  <Text style={s.calloutGlyphNum}>C</Text>
+                </View>
+                <View style={s.calloutBody}>
+                  <Text style={s.calloutLabel}>
+                    Prijsanalyse & verhuurpotentieel
+                  </Text>
+                  <Text style={s.calloutText}>{pitch.investering}</Text>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </Page>
+      )}
+
+      {/* ─── 04 PITCH B — Costa Select advies ──────────────────── */}
+      {hasPitchB && (
+        <Page size="A4" orientation="landscape" style={s.page}>
+          <Header wordmarkSrc={wordmarkSrc} />
+          <View style={s.pdfBody}>
+            <SectionTitle
+              eyebrow="Ons perspectief"
+              counter="04 / 04 · Pitch B"
+              title="Costa Select advies"
+            />
+
+            <View style={s.adviesHero}>
+              <View style={s.adviesSunBar} />
+              <View style={s.adviesBody}>
+                <View style={s.adviesLabelRow}>
+                  <Text style={s.adviesLabel}>Ons advies</Text>
+                  {adviesDate ? (
+                    <Text style={s.adviesMeta}>— Geüpdatet {adviesDate}</Text>
+                  ) : null}
+                </View>
+                <Text style={s.adviesText}>{pitch?.advies}</Text>
+                <View style={s.adviesSignoff}>
+                  <Text style={s.adviesSignoffText}>—</Text>
+                  <Text style={[s.adviesSignoffText, s.adviesSignoffName]}>
+                    Stefan P.
+                  </Text>
+                  <Text style={s.adviesSignoffText}>
+                    · Senior consultant · Costa Select
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {juridischeRisicos.length > 0 ? (
+              <View style={s.pitchGrid}>
+                <View style={s.pitchCol}>
+                  <View style={s.blockH}>
+                    <Text style={s.blockHNum}>D / Juridisch</Text>
+                  </View>
+                  <PitchTick kind="warn" />
+                  <Text style={s.blockTitle}>
+                    Due-diligence checklist
+                    <Text style={s.stitleTerminal}>.</Text>
+                  </Text>
+                  <PitchList items={juridischeRisicos.slice(0, 5)} kind="warn" />
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </Page>
+      )}
+
+      {/* ─── 05 FOTO-MOSAIC ────────────────────────────────────── */}
+      {hasMosaic && (
         <Page size="A4" orientation="landscape" style={s.page}>
           <Header wordmarkSrc={wordmarkSrc} />
           <View style={s.photosBody}>
