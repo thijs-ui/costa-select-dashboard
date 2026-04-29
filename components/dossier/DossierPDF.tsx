@@ -96,9 +96,17 @@ export interface DossierData {
     [k: string]: unknown
   }
   generatedAt?: string
+  units_data?: Array<{
+    typology?: string
+    rooms?: number | null
+    size_m2?: number | null
+    price?: number | null
+    floor?: string | null
+    is_exterior?: boolean | null
+    has_terrace?: boolean | null
+  }>
   // Backwards-compat:
   financial_data?: unknown
-  units_data?: unknown
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -471,6 +479,56 @@ const s = StyleSheet.create({
   },
   blockBodyPara: { marginBottom: 8 },
 
+  // ── Units-tabel (nieuwbouw) ──
+  unitsTable: {
+    flexDirection: 'column',
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: RULE_STRONG,
+  },
+  unitsHeaderRow: {
+    flexDirection: 'row',
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: RULE,
+  },
+  unitsRow: {
+    flexDirection: 'row',
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: RULE,
+  },
+  unitsRowLast: { borderBottomWidth: 0 },
+  unitsHeaderCell: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 700,
+    letterSpacing: 1.87,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+  },
+  unitsCell: {
+    fontFamily: 'Raleway',
+    fontSize: 9.5,
+    fontWeight: 500,
+    color: INK,
+  },
+  unitsCellPrice: {
+    fontFamily: 'Bricolage Grotesque',
+    fontWeight: 600,
+    fontSize: 11,
+    color: DEEPSEA,
+    letterSpacing: -0.22,
+  },
+  unitsColTypology: { flex: 2 },
+  unitsColRooms: { flex: 0.7, textAlign: 'right' },
+  unitsColSize: { flex: 0.9, textAlign: 'right' },
+  unitsColPrice: { flex: 1.4, textAlign: 'right' },
+
   // ── Pitch grid ──
   lede: {
     fontFamily: 'Bricolage Grotesque',
@@ -833,8 +891,14 @@ export function DossierPDF({
     truncateAtSentence(property.omschrijving ?? '', 720)
   )
   const regioParas = toParagraphs(truncateAtSentence(regioInfo ?? '', 600))
+  // Units (nieuwbouw): bij aanwezigheid vervangt het regio-blok rechts.
+  // Max 8 units zodat het binnen de kolom-hoogte past.
+  const units = (data.units_data ?? [])
+    .filter(u => u && (u.typology || u.price))
+    .slice(0, 8)
+  const hasUnits = units.length > 0
   const hasOmschrijving = omschrijvingParas.length > 0
-  const hasRegio = regioParas.length > 0
+  const hasRegio = regioParas.length > 0 && !hasUnits
   const lede = firstSentences(stripMarkdown(pitch?.buurtcontext ?? ''), 2)
   const adviesDate = fmtDate(data.generatedAt)
   const adviesText = stripMarkdown(pitch?.advies ?? '')
@@ -1014,6 +1078,54 @@ export function DossierPDF({
                     {p}
                   </Text>
                 ))}
+              </View>
+            )}
+            {hasUnits && (
+              <View style={s.presColsRight}>
+                <View style={s.blockH}>
+                  <Text style={s.blockHNum}>02 / Units</Text>
+                </View>
+                <Text style={s.blockTitle}>
+                  Beschikbare units
+                  <Text style={s.stitleTerminal}>.</Text>
+                </Text>
+                <View style={s.unitsTable}>
+                  <View style={s.unitsHeaderRow}>
+                    <Text style={[s.unitsHeaderCell, s.unitsColTypology]}>
+                      Type
+                    </Text>
+                    <Text style={[s.unitsHeaderCell, s.unitsColRooms]}>
+                      Slpk
+                    </Text>
+                    <Text style={[s.unitsHeaderCell, s.unitsColSize]}>m²</Text>
+                    <Text style={[s.unitsHeaderCell, s.unitsColPrice]}>
+                      Vanaf
+                    </Text>
+                  </View>
+                  {units.map((u, i) => (
+                    <View
+                      key={i}
+                      style={
+                        i === units.length - 1
+                          ? [s.unitsRow, s.unitsRowLast]
+                          : s.unitsRow
+                      }
+                    >
+                      <Text style={[s.unitsCell, s.unitsColTypology]}>
+                        {u.typology || '—'}
+                      </Text>
+                      <Text style={[s.unitsCell, s.unitsColRooms]}>
+                        {u.rooms ?? '—'}
+                      </Text>
+                      <Text style={[s.unitsCell, s.unitsColSize]}>
+                        {u.size_m2 ?? '—'}
+                      </Text>
+                      <Text style={[s.unitsCellPrice, s.unitsColPrice]}>
+                        {u.price ? fmtEuro(u.price) : '—'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             )}
           </View>

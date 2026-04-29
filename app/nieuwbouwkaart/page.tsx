@@ -137,7 +137,7 @@ export default function NieuwbouwkaartPage() {
     const res = await fetch('/api/dossier/generate-from-newbuild', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ listing_id: presentatieTarget.listing_id, mode: 'pitch' }),
+      body: JSON.stringify({ listing_id: presentatieTarget.listing_id, mode: 'presentatie' }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
