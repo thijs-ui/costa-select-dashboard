@@ -51,14 +51,18 @@ const RED = '#B81D13'
 const INK = '#1B2A28'
 const INK_SOFT = '#4A5A57'
 const INK_MUTE = '#8A9794'
-// Hex met alpha — react-pdf parser struikelt op rgba() zonder spaces en
-// renderde alle rgba-borders als rood. Deze waarden komen overeen met de
-// originele rgba's uit de handoff (alpha = 0.10 → 0x19, 0.20 → 0x33, etc.)
-const RULE = '#07242419' // rgba(7,42,36,0.10)
-const RULE_STRONG = '#07242433' // rgba(7,42,36,0.20)
-const ON_DARK_55 = '#FFFAEF8C' // rgba(255,250,239,0.55)
-const ON_DARK_45 = '#FFFAEF73' // rgba(255,250,239,0.45)
-const ON_DARK_20 = '#FFFAEF33' // rgba(255,250,239,0.20)
+// Solid pre-blended hex — react-pdf parser fault op zowel rgba() als
+// 8-char hex met alpha (renderde beide als rood). Deze waarden zijn
+// hand-blends van de originele rgba's tegen de bg waarop ze landen:
+//  - RULE / RULE_STRONG: ink (rgba 7,42,36,X) op marble (#FFFAEF)
+//  - ON_DARK_*: marble (rgba 255,250,239,X) op deepsea (#004B46)
+const RULE = '#D8D6CB' // ~ ink @ 0.10 over marble — neutraal lichtgrijs
+const RULE_STRONG = '#B6B6AA' // ~ ink @ 0.20 over marble — sterker
+const ON_DARK_55 = '#A8BFB9' // marble @ 0.55 over deepsea — labels op deepsea
+const ON_DARK_45 = '#94AEA8' // marble @ 0.45 over deepsea
+// Cover-borders zichtbaar als neutraal lichtgrijs ipv groen-tint —
+// hogere effective alpha tegen deepsea bg.
+const ON_DARK_20 = '#88A29D'
 
 const PAD_X = 64
 
@@ -303,18 +307,19 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
   },
   hWordmark: {
-    height: 11,
-    marginTop: 33,
+    marginTop: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hWordmarkImg: { height: 11, width: 149, objectFit: 'contain' },
+  hWordmarkImg: { height: 14, width: 190, objectFit: 'contain' },
+  // height-constraint weggelaten — react-pdf klipt anders fontSize 12 binnen
+  // height 11 container. fontSize iets opgehoogd voor leesbaarheid.
   hWordmarkFallback: {
     fontFamily: 'Bricolage Grotesque',
-    fontWeight: 600,
-    fontSize: 11,
-    letterSpacing: 1.98,
+    fontWeight: 700,
+    fontSize: 13,
+    letterSpacing: 2.34,
     textTransform: 'uppercase',
     color: DEEPSEA,
   },
@@ -641,6 +646,23 @@ const s = StyleSheet.create({
     flexDirection: 'column',
   },
   photosHero: { flexDirection: 'row', height: 480 },
+
+  // ── Foto-gallery grid (2 cols × 3 rows = 6 per page) ──
+  galleryGrid: { flexDirection: 'column', height: 480 },
+  galleryRow: { flexDirection: 'row', flex: 1 },
+  galleryRowSpacer: { height: 14 },
+  galleryColSpacer: { width: 14 },
+  galleryCell: {
+    flex: 1,
+    backgroundColor: DEEPSEA_DEEP,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  galleryCellEmpty: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderRadius: 2,
+  },
   phHeroLeft: {
     flex: 1.35,
     backgroundColor: DEEPSEA_DEEP,
@@ -764,6 +786,12 @@ export function DossierPDF({
   const heroFoto = fotos[0]
   const mosaicFotos = [fotos[1], fotos[2], fotos[3]]
   const hasMosaic = mosaicFotos.some(Boolean)
+  // Gallery: foto's 5-15 in 2x3 grid (6 per pagina). Tot 11 extra foto's.
+  const galleryFotos = fotos.slice(4, 15).filter(Boolean)
+  const galleryPages: string[][] = []
+  for (let i = 0; i < galleryFotos.length; i += 6) {
+    galleryPages.push(galleryFotos.slice(i, i + 6))
+  }
 
   const isPitch = data.brochure_type === 'pitch'
   const pitch = data.pitch_content
@@ -1119,6 +1147,41 @@ export function DossierPDF({
           </View>
         </Page>
       )}
+
+      {/* ─── 06+ FOTO-GALLERY (2 cols × 3 rows = 6 per page) ────── */}
+      {galleryPages.map((pageFotos, pageIdx) => (
+        <Page
+          key={`gallery-${pageIdx}`}
+          size="A4"
+          orientation="landscape"
+          style={s.page}
+        >
+          <Header wordmarkSrc={wordmarkSrc} />
+          <View style={s.photosBody}>
+            <View style={s.galleryGrid}>
+              {[0, 1, 2].map(rowIdx => {
+                const left = pageFotos[rowIdx * 2]
+                const right = pageFotos[rowIdx * 2 + 1]
+                if (!left && !right) return null
+                return (
+                  <View key={rowIdx} style={{ flexDirection: 'column', flex: 1 }}>
+                    <View style={s.galleryRow}>
+                      <View style={left ? s.galleryCell : s.galleryCellEmpty}>
+                        {left ? <Image src={left} style={s.photoImg} /> : null}
+                      </View>
+                      <View style={s.galleryColSpacer} />
+                      <View style={right ? s.galleryCell : s.galleryCellEmpty}>
+                        {right ? <Image src={right} style={s.photoImg} /> : null}
+                      </View>
+                    </View>
+                    {rowIdx < 2 ? <View style={s.galleryRowSpacer} /> : null}
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        </Page>
+      ))}
     </Document>
   )
 }

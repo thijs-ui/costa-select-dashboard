@@ -71,10 +71,10 @@ export async function POST(request: Request) {
   const beeldmerkSrc = getAssetBase64('beeldmerk-sun.png')
   const wordmarkSrc = getAssetBase64('wordmark-deepsea-v2.svg')
 
-  // Nieuwe presentatie-design gebruikt 4 foto's: 1 cover + 3 mosaic.
-  // Idealista URLs via weserv.nl proxy → base64
+  // PDF gebruikt tot 15 foto's: 1 cover + 3 mosaic + 11 in 2x3 grid-pages.
+  // Idealista URLs via weserv.nl proxy → base64.
   if (data.property.fotos?.length > 0) {
-    const maxPhotos = Math.min(data.property.fotos.length, 4)
+    const maxPhotos = Math.min(data.property.fotos.length, 15)
     const convertedPhotos: string[] = []
 
     for (const url of data.property.fotos.slice(0, maxPhotos)) {
