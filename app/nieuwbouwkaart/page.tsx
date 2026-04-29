@@ -48,9 +48,26 @@ const emptyFilters: ListingFilters = {
   nearBeach: false,
 }
 
+// Module-level in-memory cache — overleeft SPA-navigatie binnen één session
+// maar wordt geleegd bij een full page reload. TTL houdt 'm vers genoeg
+// (idealista-sync draait dagelijks; 10 min is ruim binnen die window).
+const LISTINGS_CACHE_TTL_MS = 10 * 60 * 1000
+let listingsCache: { data: Listing[]; ts: number } | null = null
+function getCachedListings(): Listing[] | null {
+  if (!listingsCache) return null
+  if (Date.now() - listingsCache.ts > LISTINGS_CACHE_TTL_MS) {
+    listingsCache = null
+    return null
+  }
+  return listingsCache.data
+}
+
 export default function NieuwbouwkaartPage() {
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
+  // Initialiseer met cache-hit zodat de eerste render al data heeft — geen
+  // loading-spinner meer bij terug-navigeren binnen TTL.
+  const cached = typeof window !== 'undefined' ? getCachedListings() : null
+  const [listings, setListings] = useState<Listing[]>(cached ?? [])
+  const [loading, setLoading] = useState(cached === null)
   const [filters, setFilters] = useState<ListingFilters>(emptyFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [presentatieTarget, setPresentatieTarget] = useState<
@@ -59,20 +76,27 @@ export default function NieuwbouwkaartPage() {
   >(null)
 
   // Listings komen uit het Bots-Supabase project via /api/nieuwbouw.
-  // nearby_amenities (JSONB) → amenities[] client-side.
+  // nearby_amenities (JSONB) → amenities[] client-side. Cache-hit slaat
+  // de fetch over; cache-miss vult 'm voor de volgende navigatie.
   useEffect(() => {
-    (async () => {
+    if (getCachedListings()) return
+    let cancelled = false
+    ;(async () => {
       setLoading(true)
       try {
         const res = await fetch('/api/nieuwbouw')
         if (!res.ok) throw new Error(`status ${res.status}`)
         const data = (await res.json()) as (Listing & { nearby_amenities?: unknown })[]
-        setListings(data.map(l => ({ ...l, amenities: mapAmenities(l.nearby_amenities) })))
+        const processed = data.map(l => ({ ...l, amenities: mapAmenities(l.nearby_amenities) }))
+        if (cancelled) return
+        listingsCache = { data: processed, ts: Date.now() }
+        setListings(processed)
       } catch (err) {
         console.error('[NIEUWBOUW]', err)
       }
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     })()
+    return () => { cancelled = true }
   }, [])
 
   // Derived: province + type options
