@@ -203,15 +203,16 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
 // ════════════════════ Calc engine ════════════════════
 
 // Comunidad Valenciana hanteert geen progressieve ladder, maar een
-// drempel-tarief: ≤ €1.000.000 = 10% op het hele bedrag, > €1.000.000 = 11%
-// op het hele bedrag. itp_progressive wordt daarom geïnterpreteerd als
-// 'tier-rate': vind de eerste band waarin de prijs valt en pas dat tarief
-// toe op de volledige aankoopprijs.
+// drempel-tarief: < €1.000.000 = 10% op het hele bedrag, ≥ €1.000.000 = 11%
+// op het hele bedrag. Drempel is EXCLUSIEF — bij precies €1M zit je al in
+// de 11%-band. itp_progressive wordt geïnterpreteerd als 'tier-rate': vind
+// de eerste band waarin de prijs valt en pas dat tarief toe op de volledige
+// aankoopprijs.
 function calcITP(price: number, region: RegionalSettings | null): number {
   if (!region || !price) return 0
   if (region.itp_progressive && region.itp_progressive.length) {
     for (const b of region.itp_progressive) {
-      if (b.threshold == null || price <= b.threshold) {
+      if (b.threshold == null || price < b.threshold) {
         return price * (b.rate / 100)
       }
     }
@@ -225,7 +226,7 @@ function applicableItpRate(price: number, region: RegionalSettings | null): numb
   if (!region || !price) return 0
   if (region.itp_progressive && region.itp_progressive.length) {
     for (const b of region.itp_progressive) {
-      if (b.threshold == null || price <= b.threshold) return b.rate
+      if (b.threshold == null || price < b.threshold) return b.rate
     }
     return region.itp_progressive[region.itp_progressive.length - 1].rate
   }
