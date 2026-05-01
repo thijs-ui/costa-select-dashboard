@@ -10,7 +10,7 @@ export const maxDuration = 60
 // triggerde (code 57014). Hier alleen wat de UI daadwerkelijk gebruikt.
 const LISTING_COLS = [
   'id', 'property_code', 'url',
-  'province', 'municipality', 'district', 'address',
+  'province', 'region', 'municipality', 'district', 'address',
   'latitude', 'longitude',
   'property_type', 'title', 'description',
   'price', 'price_per_m2', 'size_m2', 'rooms', 'bathrooms',

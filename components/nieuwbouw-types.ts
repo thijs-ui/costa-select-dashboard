@@ -14,6 +14,7 @@ export interface Listing {
   url: string | null
   external_reference: string | null
   province: string | null
+  region: string | null
   municipality: string | null
   district: string | null
   address: string | null
@@ -90,7 +91,7 @@ export interface MapBounds {
 
 export interface ListingFilters {
   search: string
-  province: string       // '' = all
+  region: string         // '' = all (Costa Blanca Noord/Zuid, Costa Cálida, Costa del Sol, Valencia)
   propertyType: string   // '' = all
   priceMin: number | null
   priceMax: number | null

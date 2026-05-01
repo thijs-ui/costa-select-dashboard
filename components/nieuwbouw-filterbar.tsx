@@ -9,7 +9,7 @@ import type { ListingFilters } from '@/components/nieuwbouw-types'
 interface Props {
   filters: ListingFilters
   setFilters: (next: ListingFilters) => void
-  provinces: string[]
+  regions: string[]
   propertyTypes: string[]
 }
 
@@ -19,7 +19,7 @@ const inpBase: React.CSSProperties = {
   background: '#fff', color: '#004B46', fontFamily: 'inherit',
 }
 
-export default function NieuwbouwFilterbar({ filters, setFilters, provinces, propertyTypes }: Props) {
+export default function NieuwbouwFilterbar({ filters, setFilters, regions, propertyTypes }: Props) {
   const upd = <K extends keyof ListingFilters>(k: K, v: ListingFilters[K]) =>
     setFilters({ ...filters, [k]: v })
 
@@ -40,7 +40,7 @@ export default function NieuwbouwFilterbar({ filters, setFilters, provinces, pro
         <input
           value={filters.search}
           onChange={(e) => upd('search', e.target.value)}
-          placeholder="Zoek op project, gemeente of provincie"
+          placeholder="Zoek op project, gemeente of regio"
           style={{
             border: 'none', outline: 'none', fontSize: 13, background: 'transparent',
             color: '#004B46', flex: 1, fontFamily: 'inherit',
@@ -48,9 +48,9 @@ export default function NieuwbouwFilterbar({ filters, setFilters, provinces, pro
         />
       </div>
 
-      <select value={filters.province} onChange={(e) => upd('province', e.target.value)} style={inpBase}>
-        <option value="">Alle provincies</option>
-        {provinces.map(p => <option key={p} value={p}>{p}</option>)}
+      <select value={filters.region} onChange={(e) => upd('region', e.target.value)} style={inpBase}>
+        <option value="">Alle regio&apos;s</option>
+        {regions.map(r => <option key={r} value={r}>{r}</option>)}
       </select>
 
       <select value={filters.propertyType} onChange={(e) => upd('propertyType', e.target.value)} style={inpBase}>

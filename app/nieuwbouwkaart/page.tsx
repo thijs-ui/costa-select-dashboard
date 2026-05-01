@@ -43,9 +43,20 @@ function mapAmenities(raw: unknown): Amenity[] {
 }
 
 const emptyFilters: ListingFilters = {
-  search: '', province: '', propertyType: '',
+  search: '', region: '', propertyType: '',
   priceMin: null, priceMax: null, roomsMin: null, roomsMax: null,
 }
+
+// Vaste volgorde van regio's in de filter-dropdown — alfabetisch op
+// stringvergelijking zou 'Costa Cálida' boven 'Costa Blanca' zetten;
+// ophalen-volgorde houden we aan voor leesbaarheid.
+const REGION_ORDER = [
+  'Costa del Sol',
+  'Costa Blanca Noord',
+  'Costa Blanca Zuid',
+  'Costa Cálida',
+  'Valencia',
+]
 
 // Module-level in-memory cache — overleeft SPA-navigatie binnen één session
 // maar wordt geleegd bij een full page reload. TTL houdt 'm vers genoeg
@@ -104,11 +115,13 @@ export default function NieuwbouwkaartPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Derived: province + type options
-  const provinces = useMemo(
-    () => [...new Set(listings.map(l => l.province).filter(Boolean))].sort() as string[],
-    [listings]
-  )
+  // Derived: region + type options. Regions in vaste volgorde (zie REGION_ORDER).
+  const regions = useMemo(() => {
+    const present = new Set(listings.map(l => l.region).filter(Boolean) as string[])
+    const ordered = REGION_ORDER.filter(r => present.has(r))
+    const extras = [...present].filter(r => !REGION_ORDER.includes(r)).sort()
+    return [...ordered, ...extras]
+  }, [listings])
   const propertyTypes = useMemo(
     () => [...new Set(listings.map(l => l.property_type).filter(Boolean))].sort() as string[],
     [listings]
@@ -118,10 +131,10 @@ export default function NieuwbouwkaartPage() {
   const filtered = useMemo(() => listings.filter(l => {
     if (filters.search) {
       const q = filters.search.toLowerCase()
-      const hay = `${l.title ?? ''} ${l.municipality ?? ''} ${l.province ?? ''} ${l.address ?? ''}`.toLowerCase()
+      const hay = `${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
-    if (filters.province && l.province !== filters.province) return false
+    if (filters.region && l.region !== filters.region) return false
     if (filters.propertyType && l.property_type !== filters.propertyType) return false
     if (filters.priceMin != null && (l.price ?? 0) < filters.priceMin) return false
     if (filters.priceMax != null && (l.price ?? Infinity) > filters.priceMax) return false
@@ -173,7 +186,7 @@ export default function NieuwbouwkaartPage() {
       <NieuwbouwFilterbar
         filters={filters}
         setFilters={setFilters}
-        provinces={provinces}
+        regions={regions}
         propertyTypes={propertyTypes}
       />
 
