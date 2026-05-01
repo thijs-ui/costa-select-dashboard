@@ -202,20 +202,34 @@ const EXAMPLE_SCENARIOS: Record<ModeId, Array<{ label: string } & PartialState>>
 
 // ════════════════════ Calc engine ════════════════════
 
+// Comunidad Valenciana hanteert geen progressieve ladder, maar een
+// drempel-tarief: ≤ €1.000.000 = 10% op het hele bedrag, > €1.000.000 = 11%
+// op het hele bedrag. itp_progressive wordt daarom geïnterpreteerd als
+// 'tier-rate': vind de eerste band waarin de prijs valt en pas dat tarief
+// toe op de volledige aankoopprijs.
 function calcITP(price: number, region: RegionalSettings | null): number {
   if (!region || !price) return 0
   if (region.itp_progressive && region.itp_progressive.length) {
-    let sum = 0
-    let prev = 0
     for (const b of region.itp_progressive) {
-      const top = b.threshold == null ? price : Math.min(b.threshold, price)
-      if (top > prev) sum += (top - prev) * (b.rate / 100)
-      prev = top
-      if (b.threshold == null || price <= b.threshold) break
+      if (b.threshold == null || price <= b.threshold) {
+        return price * (b.rate / 100)
+      }
     }
-    return sum
+    const last = region.itp_progressive[region.itp_progressive.length - 1]
+    return price * (last.rate / 100)
   }
   return price * (region.itp_percentage / 100)
+}
+
+function applicableItpRate(price: number, region: RegionalSettings | null): number {
+  if (!region || !price) return 0
+  if (region.itp_progressive && region.itp_progressive.length) {
+    for (const b of region.itp_progressive) {
+      if (b.threshold == null || price <= b.threshold) return b.rate
+    }
+    return region.itp_progressive[region.itp_progressive.length - 1].rate
+  }
+  return region.itp_percentage
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -251,10 +265,8 @@ function calcBuyerCosts(
     rows.push({ key: 'ajd', label: 'AJD', sub: `${fmtPct(region.ajd_percentage)} zegelrecht`, value: ajd })
   } else {
     const itp = calcITP(price, region)
-    const effective = price > 0 ? (itp / price) * 100 : 0
-    const sub = region.itp_progressive
-      ? `Progressief — effectief ${fmtPct(effective, 2)}`
-      : `${fmtPct(region.itp_percentage)} op aankoopprijs`
+    const rate = applicableItpRate(price, region)
+    const sub = `${fmtPct(rate)} op aankoopprijs`
     rows.push({ key: 'itp', label: 'ITP', sub, value: itp })
   }
 
