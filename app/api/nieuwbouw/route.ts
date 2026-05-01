@@ -7,6 +7,14 @@ export async function GET(request: Request) {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
+  // Bots-env vroeg checken — anders crasht createClient() niet maar geeft
+  // wel cryptische "Invalid API key" terug. Expliciete diagnose helpt debug.
+  if (!process.env.BOTS_SUPABASE_URL || !process.env.BOTS_SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({
+      error: `Bots Supabase env ontbreekt — BOTS_SUPABASE_URL=${process.env.BOTS_SUPABASE_URL ? 'set' : 'MISSING'}, BOTS_SUPABASE_SERVICE_ROLE_KEY=${process.env.BOTS_SUPABASE_SERVICE_ROLE_KEY ? 'set' : 'MISSING'}`,
+    }, { status: 500 })
+  }
+
   const supabase = createBotsClient()
   const { searchParams } = new URL(request.url)
   const full = searchParams.get('id')
@@ -30,6 +38,9 @@ export async function GET(request: Request) {
     .not('longitude', 'is', null)
     .order('title')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[api/nieuwbouw] listings query failed:', error)
+    return NextResponse.json({ error: `Bots Supabase: ${error.message} (code=${error.code ?? 'n/a'})` }, { status: 500 })
+  }
   return NextResponse.json(data ?? [])
 }

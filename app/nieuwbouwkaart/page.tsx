@@ -67,6 +67,7 @@ export default function NieuwbouwkaartPage() {
   const cached = typeof window !== 'undefined' ? getCachedListings() : null
   const [listings, setListings] = useState<Listing[]>(cached ?? [])
   const [loading, setLoading] = useState(cached === null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [filters, setFilters] = useState<ListingFilters>(emptyFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [presentatieTarget, setPresentatieTarget] = useState<
@@ -82,9 +83,13 @@ export default function NieuwbouwkaartPage() {
     let cancelled = false
     ;(async () => {
       setLoading(true)
+      setErrorMsg(null)
       try {
         const res = await fetch('/api/nieuwbouw')
-        if (!res.ok) throw new Error(`status ${res.status}`)
+        if (!res.ok) {
+          const body = await res.text().catch(() => '')
+          throw new Error(`HTTP ${res.status}${body ? ' — ' + body.slice(0, 240) : ''}`)
+        }
         const data = (await res.json()) as (Listing & { nearby_amenities?: unknown })[]
         const processed = data.map(l => ({ ...l, amenities: mapAmenities(l.nearby_amenities) }))
         if (cancelled) return
@@ -92,6 +97,7 @@ export default function NieuwbouwkaartPage() {
         setListings(processed)
       } catch (err) {
         console.error('[NIEUWBOUW]', err)
+        if (!cancelled) setErrorMsg(err instanceof Error ? err.message : String(err))
       }
       if (!cancelled) setLoading(false)
     })()
@@ -203,6 +209,18 @@ export default function NieuwbouwkaartPage() {
             background: 'rgba(238,245,243,0.55)', backdropFilter: 'blur(1px)',
           }}>
             <LoadingCard label="Projecten laden…" />
+          </div>
+        )}
+
+        {errorMsg && !loading && (
+          <div style={{
+            position: 'absolute', top: 14, left: 14, right: 14, zIndex: 5,
+            background: '#FFFAEF', border: '1px solid #C84B36', borderRadius: 10,
+            padding: '12px 14px', color: '#7A2E20', fontSize: 12, lineHeight: 1.5,
+            boxShadow: '0 8px 24px rgba(122,46,32,.18)',
+          }}>
+            <b style={{ display: 'block', marginBottom: 4 }}>Listings konden niet geladen worden</b>
+            <code style={{ fontFamily: 'ui-monospace, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{errorMsg}</code>
           </div>
         )}
       </div>
