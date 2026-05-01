@@ -473,7 +473,7 @@ function OverviewView({
         <div>
           <div className="a-eyebrow">Dashboard / shortlists</div>
           <h1 className="a-h1">
-            Woninglijsten
+            Shortlists
             {!isEmpty && (
               <span className="a-count">
                 {shortlists.length} {shortlists.length === 1 ? 'klant' : 'klanten'}
@@ -753,7 +753,7 @@ function DetailView({
   }
 
   const title = detail?.klant_naam || 'Laden…'
-  const subtitle = detail?.notities || 'Shortlist — beheer, markeer favorieten en genereer dossiers.'
+  const subtitle = detail?.notities || 'Shortlist — beheer, markeer favorieten en genereer presentaties.'
 
   return (
     <>

@@ -492,9 +492,9 @@ export function HmDossiersCol({ dossiers }: { dossiers: HmDossierItem[] }) {
   return (
     <section>
       <div className="hm-section-head">
-        <h2 className="hm-section-title">Recente dossiers</h2>
+        <h2 className="hm-section-title">Recente presentaties</h2>
         <p className="hm-section-sub" style={{ marginLeft: 'auto' }}>
-          {dossiers.length} dossiers · gesorteerd op activiteit
+          {dossiers.length} presentaties · gesorteerd op activiteit
         </p>
       </div>
       {dossiers.length === 0 ? (
@@ -506,7 +506,7 @@ export function HmDossiersCol({ dossiers }: { dossiers: HmDossierItem[] }) {
             textAlign: 'center',
           }}
         >
-          Nog geen dossiers.
+          Nog geen presentaties.
         </p>
       ) : (
         <ul className="hm-doss-list">

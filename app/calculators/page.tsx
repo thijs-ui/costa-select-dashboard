@@ -26,7 +26,7 @@ import {
 const DEFAULT_RATE_RESIDENT = 3.2
 const DEFAULT_RATE_NON_RESIDENT = 4.0
 const MAX_LTV_RESIDENT = 80
-const MAX_LTV_NON_RESIDENT = 70
+const MAX_LTV_NON_RESIDENT = 75
 
 const RENO_SETTINGS = {
   supervision_pct: 5,
@@ -115,7 +115,7 @@ const DEFAULT_STATE: CalcState = {
   regionId: '',
   propType: 'existing',
   isResident: false,
-  ltvPct: 60,
+  ltvPct: 0,
   rate: 4.0,
   years: 20,
   amortType: 'annuity',

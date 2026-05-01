@@ -360,7 +360,7 @@ export default function HomePage() {
       region: d.regio ?? '—',
       activity: d.vraagprijs
         ? `Vraagprijs € ${Number(d.vraagprijs).toLocaleString('nl-NL')}`
-        : 'Dossier aangemaakt',
+        : 'Presentatie aangemaakt',
       stage: 'In behandeling',
       stageKind: 'neutral' as const,
       updatedLabel: relativeTime(d.created_at),

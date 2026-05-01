@@ -59,7 +59,7 @@ const SECTIONS: NavSection[] = [
     label: 'Menu',
     items: [
       { href: '/woningbot', label: 'Woningbot', icon: MessageSquare },
-      { href: '/woninglijst', label: 'Woninglijsten', icon: ClipboardList },
+      { href: '/woninglijst', label: 'Shortlists', icon: ClipboardList },
       { href: '/bezichtigingen', label: 'Bezichtigingen', icon: Route },
       { href: '/calculators', label: 'Calculators', icon: Calculator },
       { href: '/samenwerkingen', label: 'Samenwerkingen', icon: Building2 },
