@@ -89,16 +89,20 @@ export async function generateNewsletter(runId: string): Promise<Newsletter | nu
   const supabase = createServiceClient()
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  const { data: items, error } = await supabase
+  const { data: allItems, error } = await supabase
     .from('news_items')
-    .select('title, summary_nl, buyer_implication, source_name, urgency')
+    .select('title, summary_nl, buyer_implication, source_name, category, urgency')
     .eq('run_id', runId)
     .eq('status', 'summarized')
     .order('urgency', { ascending: false })
-    .limit(TOP_N)
 
   if (error) throw new Error(`[newsletter] fetch faalde: ${error.message}`)
-  if (!items || items.length === 0) return null
+  if (!allItems || allItems.length === 0) return null
+
+  // Selectie: top 3 op urgency (mogen alledrie zelfde categorie zijn) +
+  // per overgebleven categorie 1 extra item totdat 5 items totaal of geen
+  // categorieën meer over. Sorteer eindlijst opnieuw op urgency DESC.
+  const items = selectWithCategorySpread(allItems, TOP_N)
 
   const userPayload = items.map((i, idx) => ({
     nr: idx + 1,
@@ -138,6 +142,45 @@ export async function generateNewsletter(runId: string): Promise<Newsletter | nu
     throw new Error(`[newsletter] parsed_output null (stop_reason=${response.stop_reason})`)
   }
   return parsed
+}
+
+interface SelectableItem {
+  title: string
+  summary_nl: string | null
+  buyer_implication: string | null
+  source_name: string
+  category: string | null
+  urgency: number | null
+}
+
+function selectWithCategorySpread<T extends SelectableItem>(items: T[], targetCount: number): T[] {
+  // items komt al gesorteerd op urgency DESC binnen.
+  const top3 = items.slice(0, 3)
+  const result: T[] = [...top3]
+
+  if (result.length >= targetCount) return result.slice(0, targetCount)
+
+  const usedCategories = new Set(top3.map(i => i.category).filter(Boolean) as string[])
+  const remaining = items.slice(3)
+
+  // Per overgebleven categorie 1 extra item, hoogste urgency eerst.
+  for (const item of remaining) {
+    if (result.length >= targetCount) break
+    if (!item.category) continue
+    if (usedCategories.has(item.category)) continue
+    result.push(item)
+    usedCategories.add(item.category)
+  }
+
+  // Als nog geen 5 (te weinig categorieën), vul aan met urgency-volgorde.
+  for (const item of remaining) {
+    if (result.length >= targetCount) break
+    if (result.includes(item)) continue
+    result.push(item)
+  }
+
+  // Eindlijst opnieuw sorteren op urgency DESC voor de prompt.
+  return result.sort((a, b) => (b.urgency ?? 0) - (a.urgency ?? 0))
 }
 
 async function callWithRetry<T>(fn: () => Promise<T>): Promise<T> {

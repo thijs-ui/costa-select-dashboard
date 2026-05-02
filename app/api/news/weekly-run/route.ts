@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runScrape } from '@/lib/news/scraper'
+import { deduplicateItems } from '@/lib/news/dedup'
 import { classifyItems } from '@/lib/news/classifier'
 import { summarizeItems } from '@/lib/news/summarizer'
 import { deliverToSlack } from '@/lib/news/slack'
@@ -26,14 +27,17 @@ export async function GET(request: Request) {
     const scrape = await runScrape()
     const tScrape = Date.now() - t0
 
+    const dedup = await deduplicateItems(scrape.runId)
+    const tDedup = Date.now() - t0 - tScrape
+
     const classify = await classifyItems(scrape.runId)
-    const tClassify = Date.now() - t0 - tScrape
+    const tClassify = Date.now() - t0 - tScrape - tDedup
 
     const summarize = await summarizeItems(scrape.runId)
-    const tSummarize = Date.now() - t0 - tScrape - tClassify
+    const tSummarize = Date.now() - t0 - tScrape - tDedup - tClassify
 
     const slack = await deliverToSlack(scrape.runId)
-    const tSlack = Date.now() - t0 - tScrape - tClassify - tSummarize
+    const tSlack = Date.now() - t0 - tScrape - tDedup - tClassify - tSummarize
 
     // Markeer run als verzonden zodat we kunnen detecteren of er al een
     // delivery is geweest (en niet dubbel posten bij re-run).
@@ -52,6 +56,7 @@ export async function GET(request: Request) {
         errors: scrape.errors,
         ms: tScrape,
       },
+      dedup: { ...dedup, ms: tDedup },
       classify: { ...classify, ms: tClassify },
       summarize: { ...summarize, ms: tSummarize },
       slack: { ...slack, ms: tSlack },
