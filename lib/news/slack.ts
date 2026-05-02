@@ -1,27 +1,40 @@
 /**
- * News-pipeline Slack delivery — fase 5.
+ * News-pipeline Slack delivery — fase 5 (multi-channel routing).
  *
- * Stuurt een serie berichten naar #cs-news via een incoming webhook.
- * Volgorde: header → 1 bericht per categorie met items → concept-newsletter
- *   → dashboard-link. 500ms delay tussen berichten ivm Slack rate limits.
+ * Item-routing logica:
+ *   1. Per primary slack_channel een eigen kanaal-bericht (header + items).
+ *   2. Items met audience_invest=true gaan ÓÓK naar #info-invest (parallel).
+ *   3. Newsletter-concepten gaan in 4 berichten naar #marketing-ideeën.
+ *   4. 0 summarized items → één 'rustige week' bericht naar #info-algemeen.
  *
- * Edge case: 0 summarized items → één 'rustige week'-bericht en klaar.
+ * 500ms delay tussen alle berichten, retry op webhook-fail (transient).
  */
 
 import { createServiceClient } from '@/lib/supabase'
-import { generateNewsletter } from '@/lib/news/newsletter'
-import { CATEGORY_LABELS, PIPELINE_CONFIG, type Category } from '@/lib/news/config'
+import {
+  PIPELINE_CONFIG,
+  SLACK_CHANNEL_LABELS,
+  SLACK_WEBHOOK_ENV,
+  type SlackChannel,
+} from '@/lib/news/config'
+import type { NewsletterResult } from '@/lib/news/newsletter'
 
 const SEND_DELAY_MS = 500
-const MAX_PER_CATEGORY = PIPELINE_CONFIG.maxItemsPerCategorySlack
+const MAX_PER_CHANNEL = PIPELINE_CONFIG.maxItemsPerCategorySlack
+
+type PrimaryChannel = Exclude<SlackChannel, 'invest' | 'marketing_ideeen'>
 
 interface SummarizedItem {
+  id: string
   title: string
   url: string | null
   source_name: string
-  category: Category
+  category: string | null
   region: string | null
+  slack_channel: PrimaryChannel | null
+  audience_invest: boolean
   urgency: number
+  impact_score: number | null
   summary_nl: string
   buyer_implication: string
 }
@@ -29,27 +42,31 @@ interface SummarizedItem {
 export interface SlackDeliveryResult {
   messagesSent: number
   rustigeWeek: boolean
-  newsletterGenerated: boolean
+  channelsHit: string[]
+  investItemCount: number
+  newsletterDelivered: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SlackBlock = Record<string, any>
 type SlackPayload = { blocks: SlackBlock[] }
 
-export async function deliverToSlack(runId: string): Promise<SlackDeliveryResult> {
-  const webhook = process.env.SLACK_WEBHOOK_URL
-  if (!webhook) throw new Error('[slack] SLACK_WEBHOOK_URL ontbreekt')
-
+export async function deliverToSlack(
+  runId: string,
+  newsletter: NewsletterResult | null,
+): Promise<SlackDeliveryResult> {
   const supabase = createServiceClient()
 
   const [runRes, itemsRes] = await Promise.all([
     supabase.from('news_runs').select('items_scraped').eq('id', runId).single(),
     supabase
       .from('news_items')
-      .select('title, url, source_name, category, region, urgency, summary_nl, buyer_implication')
+      .select(
+        'id, title, url, source_name, category, region, slack_channel, audience_invest, urgency, impact_score, summary_nl, buyer_implication',
+      )
       .eq('run_id', runId)
       .eq('status', 'summarized')
-      .order('urgency', { ascending: false }),
+      .order('impact_score', { ascending: false, nullsFirst: false }),
   ])
 
   if (runRes.error) throw new Error(`[slack] news_runs fetch faalde: ${runRes.error.message}`)
@@ -57,102 +74,170 @@ export async function deliverToSlack(runId: string): Promise<SlackDeliveryResult
 
   const items = (itemsRes.data ?? []) as SummarizedItem[]
   const totalScraped = runRes.data?.items_scraped ?? 0
+  const isoWeek = getISOWeek(new Date())
 
-  // Edge case: rustige week — geen items boven urgency-threshold.
+  // Edge case: rustige week — 0 summarized items.
   if (items.length === 0) {
-    await postBlocks(webhook, {
+    await postToChannel('algemeen', {
       blocks: [
         section(
           `🌿 *Rustige week* — geen items boven urgency ${PIPELINE_CONFIG.summarizeUrgencyThreshold} om te delen. Volledige scrape: ${totalScraped} bekeken.`,
         ),
       ],
     })
-    return { messagesSent: 1, rustigeWeek: true, newsletterGenerated: false }
+    return {
+      messagesSent: 1,
+      rustigeWeek: true,
+      channelsHit: ['algemeen'],
+      investItemCount: 0,
+      newsletterDelivered: false,
+    }
   }
 
   let messagesSent = 0
+  const channelsHit: string[] = []
 
-  // 1. Header met categorie-totalen.
-  const byCat = groupByCategory(items)
-  const categoryTotalsLine = (Object.entries(byCat) as [Category, SummarizedItem[]][])
-    .filter(([, list]) => list.length > 0)
-    .map(([cat, list]) => `${CATEGORY_LABELS[cat].emoji} ${CATEGORY_LABELS[cat].label}: ${list.length}`)
-    .join(' · ')
+  // Items splitsen: invest-items gaan UITSLUITEND naar #info-invest, niet
+  // ook nog naar hun primary kanaal. Zo voorkomen we dat hetzelfde verhaal
+  // in twee kanalen verschijnt — invest is per definitie nis-content voor
+  // de UHNWI-doelgroep, niet voor de bredere klantbase.
+  const investItems = items.filter(i => i.audience_invest)
+  const primaryItems = items.filter(i => !i.audience_invest)
 
-  const isoWeek = getISOWeek(new Date())
-  await postBlocks(webhook, {
-    blocks: [
-      header(`📰 Costa Select Weekly — week ${isoWeek}`),
-      section(categoryTotalsLine || '_Geen items deze week._'),
-      { type: 'divider' },
-    ],
-  })
-  messagesSent++
+  // 1. Per primary slack_channel een bericht — alleen kanalen met items.
+  const byChannel = groupByChannel(primaryItems)
+  const channelOrder: PrimaryChannel[] = [
+    'algemeen', 'spanje', 'valencia',
+    'costa_blanca_noord', 'costa_blanca_zuid',
+    'costa_brava', 'costa_calida', 'costa_del_sol', 'costa_dorada',
+  ]
 
-  // 2-7. Per categorie — alleen tonen als er items zijn.
-  // CATEGORY_LABELS-volgorde respecteren voor consistente leesvolgorde.
-  for (const cat of Object.keys(CATEGORY_LABELS) as Category[]) {
-    const list = byCat[cat]
+  for (const channel of channelOrder) {
+    const list = byChannel[channel]
     if (!list || list.length === 0) continue
+    const top = list.slice(0, MAX_PER_CHANNEL)
+    const blocks = buildItemBlocks(
+      `📰 Costa Select Weekly — ${SLACK_CHANNEL_LABELS[channel]} — week ${isoWeek}`,
+      top,
+    )
+    if (messagesSent > 0) await sleep(SEND_DELAY_MS)
+    await postToChannel(channel, { blocks })
+    messagesSent++
+    channelsHit.push(channel)
+  }
 
-    const top = list.slice(0, MAX_PER_CATEGORY)
-    const blocks: SlackBlock[] = [
-      header(`${CATEGORY_LABELS[cat].emoji} ${CATEGORY_LABELS[cat].label}`),
-    ]
+  // 2. CSI Invest — exclusieve routing voor audience_invest=true items.
+  if (investItems.length > 0) {
+    const blocks = buildItemBlocks(
+      `💼 CSI Invest — week ${isoWeek}`,
+      investItems.slice(0, MAX_PER_CHANNEL),
+    )
+    if (messagesSent > 0) await sleep(SEND_DELAY_MS)
+    await postToChannel('invest', { blocks })
+    messagesSent++
+    channelsHit.push('invest')
+  }
 
-    for (const item of top) {
-      const sourceLink = item.url ? `<${item.url}|${item.source_name}>` : item.source_name
-      blocks.push(
-        section(`*${escapeMrkdwn(item.title)}*\n${item.summary_nl}\n> ${item.buyer_implication}`),
-        context(`Bron: ${sourceLink} · Urgency: ${item.urgency}/10${item.region ? ` · ${item.region}` : ''}`),
-      )
+  // 3. Newsletter-concepten naar #marketing-ideeën (4 berichten).
+  let newsletterDelivered = false
+  if (newsletter) {
+    try {
+      const sent = await postNewsletter(newsletter, isoWeek)
+      messagesSent += sent
+      newsletterDelivered = sent > 0
+      if (newsletterDelivered) channelsHit.push('marketing_ideeen')
+    } catch (err) {
+      console.error('[slack] newsletter posting faalde:', err instanceof Error ? err.message : err)
     }
-
-    await sleep(SEND_DELAY_MS)
-    await postBlocks(webhook, { blocks })
-    messagesSent++
   }
 
-  // 8. Concept-klantnieuwsbrief.
-  let newsletterGenerated = false
-  try {
-    const newsletter = await generateNewsletter(runId)
-    if (newsletter) {
-      await sleep(SEND_DELAY_MS)
-      await postBlocks(webhook, {
-        blocks: [
-          header('📧 Concept klantnieuwsbrief'),
-          section(`*Onderwerp:* ${escapeMrkdwn(newsletter.subject)}`),
-          section('```\n' + newsletter.body.slice(0, 2800) + '\n```'),
-        ],
-      })
-      messagesSent++
-      newsletterGenerated = true
-    }
-  } catch (err) {
-    console.error('[slack] newsletter genereren faalde:', err instanceof Error ? err.message : err)
-    // Slack-bericht dat het misging, ipv stilte.
-    await sleep(SEND_DELAY_MS)
-    await postBlocks(webhook, {
-      blocks: [section('⚠️ Concept-klantnieuwsbrief kon niet gegenereerd worden — check de logs.')],
-    })
-    messagesSent++
+  return {
+    messagesSent,
+    rustigeWeek: false,
+    channelsHit,
+    investItemCount: investItems.length,
+    newsletterDelivered,
   }
-
-  // 9. Dashboard-link.
-  const dashboardUrl = process.env.DASHBOARD_URL
-  if (dashboardUrl) {
-    await sleep(SEND_DELAY_MS)
-    await postBlocks(webhook, {
-      blocks: [section(`📊 Volledig archief: <${dashboardUrl}/news|open dashboard>`)],
-    })
-    messagesSent++
-  }
-
-  return { messagesSent, rustigeWeek: false, newsletterGenerated }
 }
 
-// ─── Block builders ────────────────────────────────────────────────────────
+// ─── Newsletter-flow ─────────────────────────────────────────────────────
+
+async function postNewsletter(newsletter: NewsletterResult, isoWeek: number): Promise<number> {
+  const headerLines: string[] = []
+  if (newsletter.selectedItem) {
+    headerLines.push(`*Hoofdonderwerp:* ${escapeMrkdwn(newsletter.selectedItem.title)}`)
+    headerLines.push(`*Waarom:* ${newsletter.selectedTopicReasoning}`)
+    if (newsletter.selectedItem.url) {
+      headerLines.push(`*Link:* <${newsletter.selectedItem.url}|${newsletter.selectedItem.source_name}>`)
+    }
+  } else {
+    headerLines.push(`*Waarom:* ${newsletter.selectedTopicReasoning}`)
+  }
+
+  // Bericht 1 — header + selectie-context.
+  await sleep(SEND_DELAY_MS)
+  await postToChannel('marketing_ideeen', {
+    blocks: [
+      header(`📧 3 Newsletter-concepten — week ${isoWeek}`),
+      section(headerLines.join('\n')),
+    ],
+  })
+
+  // Berichten 2-4 — drie concepten.
+  const concepts: { emoji: string; label: string; key: keyof NewsletterResult['concepts'] }[] = [
+    { emoji: '📘', label: 'Concept 1 — Informatief & feitelijk', key: 'informatief' },
+    { emoji: '🚨', label: 'Concept 2 — Direct & alarmerend', key: 'alarmerend' },
+    { emoji: '🌱', label: 'Concept 3 — Kans-georiënteerd', key: 'kans' },
+  ]
+
+  for (const c of concepts) {
+    const concept = newsletter.concepts[c.key]
+    await sleep(SEND_DELAY_MS)
+    await postToChannel('marketing_ideeen', {
+      blocks: [
+        header(`${c.emoji} ${c.label}`),
+        section(`*Onderwerp:* ${escapeMrkdwn(concept.subject)}`),
+        section('```\n' + concept.body.slice(0, 2700) + '\n```'),
+      ],
+    })
+  }
+
+  return 4
+}
+
+// ─── Per-channel item-formatting ─────────────────────────────────────────
+
+function buildItemBlocks(headerText: string, items: SummarizedItem[]): SlackBlock[] {
+  const blocks: SlackBlock[] = [header(headerText)]
+  for (const item of items) {
+    const sourceLink = item.url
+      ? `<${item.url}|${escapeMrkdwn(item.source_name)}>`
+      : escapeMrkdwn(item.source_name)
+    const meta: string[] = [`Bron: ${sourceLink}`, `Urgency: ${item.urgency}/10`]
+    if (item.impact_score != null) meta.push(`Impact: ${item.impact_score.toFixed(1)}`)
+    if (item.region) meta.push(item.region)
+    blocks.push(
+      section(
+        `*${escapeMrkdwn(item.title)}*\n${item.summary_nl}\n> ${item.buyer_implication}`,
+      ),
+      context(meta.join(' · ')),
+    )
+  }
+  return blocks
+}
+
+function groupByChannel(items: SummarizedItem[]): Partial<Record<PrimaryChannel, SummarizedItem[]>> {
+  const out: Partial<Record<PrimaryChannel, SummarizedItem[]>> = {}
+  for (const it of items) {
+    const ch = it.slack_channel
+    if (!ch) continue
+    if (!out[ch]) out[ch] = []
+    out[ch]!.push(it)
+  }
+  return out
+}
+
+// ─── Block builders ──────────────────────────────────────────────────────
 
 function header(text: string): SlackBlock {
   return { type: 'header', text: { type: 'plain_text', text: text.slice(0, 150) } }
@@ -166,23 +251,18 @@ function context(text: string): SlackBlock {
   return { type: 'context', elements: [{ type: 'mrkdwn', text: text.slice(0, 2900) }] }
 }
 
-// Slack mrkdwn escaping — minimaal: < > & en backticks om te voorkomen dat
-// item-titels per ongeluk Slack-formatting triggeren.
 function escapeMrkdwn(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function groupByCategory(items: SummarizedItem[]): Partial<Record<Category, SummarizedItem[]>> {
-  const out: Partial<Record<Category, SummarizedItem[]>> = {}
-  for (const it of items) {
-    if (!it.category) continue
-    if (!out[it.category]) out[it.category] = []
-    out[it.category]!.push(it)
-  }
-  return out
-}
+// ─── HTTP + helpers ──────────────────────────────────────────────────────
 
-async function postBlocks(webhook: string, payload: SlackPayload): Promise<void> {
+async function postToChannel(channel: SlackChannel, payload: SlackPayload): Promise<void> {
+  const envVar = SLACK_WEBHOOK_ENV[channel]
+  const webhook = process.env[envVar]
+  if (!webhook) {
+    throw new Error(`[slack] webhook env-var ${envVar} ontbreekt voor kanaal ${channel}`)
+  }
   const res = await fetch(webhook, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -190,7 +270,7 @@ async function postBlocks(webhook: string, payload: SlackPayload): Promise<void>
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`[slack] webhook ${res.status}: ${body.slice(0, 200)}`)
+    throw new Error(`[slack] ${channel} webhook ${res.status}: ${body.slice(0, 200)}`)
   }
 }
 
@@ -198,7 +278,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
 }
 
-// ISO 8601 week-nummer berekening (jaar-week zoals in Europa).
 function getISOWeek(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
   const dayNum = d.getUTCDay() || 7

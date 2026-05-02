@@ -16,7 +16,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import pLimit from 'p-limit'
 import { z } from 'zod'
 import { createServiceClient } from '@/lib/supabase'
-import { KEYWORDS } from '@/lib/news/config'
+import { KEYWORDS, REGION_PLACES } from '@/lib/news/config'
 
 const MODEL = 'claude-haiku-4-5-20251001'
 const BATCH_SIZE = 20
@@ -25,15 +25,22 @@ const MAX_TOKENS = 8192
 const MAX_RETRIES = 3
 
 const CATEGORIES = ['juridisch_es', 'fiscaal_es', 'fiscaal_nl', 'regio', 'marktdata', 'spelers'] as const
+const SLACK_CHANNELS = [
+  'algemeen', 'spanje', 'valencia',
+  'costa_blanca_noord', 'costa_blanca_zuid',
+  'costa_brava', 'costa_calida', 'costa_del_sol', 'costa_dorada',
+] as const
 
 const ResultSchema = z.object({
   results: z.array(
     z.object({
-      i: z.number().int(),
+      i: z.string(),
       relevant: z.boolean(),
-      category: z.enum(CATEGORIES).optional(),
-      region: z.string().optional(),
-      urgency: z.number().int().min(1).max(10).optional(),
+      category: z.enum(CATEGORIES),
+      region: z.string(),
+      slack_channel: z.enum(SLACK_CHANNELS),
+      audience_invest: z.boolean(),
+      urgency: z.number().min(1).max(10),
     }),
   ),
 })
@@ -41,13 +48,13 @@ const ResultSchema = z.object({
 type ClassificationResult = z.infer<typeof ResultSchema>
 
 // Volledige system prompt — bevat instructies, alle keywords per categorie,
-// en 3 worked voorbeelden om het model tone + edge-cases te leren én om de
-// prompt boven de 4096-token cache-drempel te krijgen (Haiku 4.5 minimum).
-// Cache-control plakt op deze hele blob; per-batch verschilt alleen het
-// user-message met items, dus elke batch na de eerste is een cache-hit.
+// slack-routing regels, audience_invest criteria, en 3 worked voorbeelden.
+// Cache-control plakt op deze blob; per-batch verschilt alleen het user-message
+// met items, dus elke batch na de eerste is een cache-hit (Haiku 4.5 cache-
+// drempel = 4096 tokens, deze prompt zit ruim daarboven).
 const SYSTEM_PROMPT = `Je bent een classificatie-engine voor Costa Select, een Nederlandse buyer's agency voor Spaans vastgoed. Onze doelgroep zijn Nederlandse en Belgische investeerders en kopers van een tweede woning in Spanje, met focus op Costa del Sol, Costa Blanca (Noord en Zuid), Costa Cálida, Mallorca en Ibiza.
 
-Je krijgt een batch nieuwsitems als JSON-array. Per item bepaal je vier velden: relevant, category, region, urgency.
+Je krijgt een batch nieuwsitems als JSON-array. Per item bepaal je zeven velden: relevant, category, region, slack_channel, audience_invest, urgency.
 
 # 1. relevant (boolean, verplicht)
 
@@ -55,7 +62,15 @@ true = relevant voor onze doelgroep — raakt het kopen, bezitten, verhuren, fis
 
 false = niet relevant. Voorbeelden: politiek nieuws zonder vastgoed-impact, sport, entertainment, regionaal nieuws over schoolfeesten/festivals, criminaliteit zonder vastgoed-context, technologie-nieuws, internationaal niet-vastgoed nieuws, lokale verkiezingen zonder beleidswijziging die vastgoed raakt.
 
-Bij relevant=false vul je ALLEEN de velden i en relevant in. Sla category, region en urgency over.
+EXTRA STRENG bij commerciële content — zet relevant=false bij:
+- Marketing-positionering / bedrijfs-pluche van een specifiek bedrijf zonder harde cijfers, transactie-data of fundamentele markt-impact (bv. "X profileert zich als marktleider", "Y benadrukt klantbeleving", "Z combineert technologie en service")
+- Advertorials / sponsored content / branded interviews waarin een bedrijf zichzelf prijst
+- Listings / te-koop-aanbiedingen voor één specifieke woning (bv. "2bed apartment in Denia €399k")
+- Algemene marketingtaal zonder concrete cijfers, regelgeving of marktbewegingen
+
+Vuistregel: zonder een feit dat een consultant moet weten om beter advies te geven, is het filler. Filler hoort niet in de pipeline.
+
+Ook bij relevant=false vul je álle velden in (kies redelijke defaults: category bv. 'regio', region 'Onbekend', slack_channel 'algemeen', audience_invest false, urgency 1). Onze post-processing leest alleen de andere velden bij relevant=true, maar het schema vereist ze.
 
 # 2. category (string-enum, alleen bij relevant=true)
 
@@ -88,6 +103,100 @@ Kalibreer streng. Standaard is een item een 4 of 5; gebruik 8+ alleen als consul
 - 8-9: raakt actieve klantdeals direct, mogelijk juridische of financiële impact
 - 10: alarm — wetswijziging die NU klant-impact heeft, marktshock, grote speler valt om
 
+# 5. slack_channel (string-enum)
+
+Kies precies één van: algemeen, spanje, valencia, costa_blanca_noord, costa_blanca_zuid, costa_brava, costa_calida, costa_del_sol, costa_dorada.
+
+PRIMAIRE REGEL — REGIO HEEFT VOORRANG: als de titel of inhoud van het item een specifieke plaatsnaam noemt die voorkomt in REGION_PLACES (zie hieronder), kies je het bijbehorende regio-kanaal. Dit geldt ONGEACHT de category. Een fiscaal_es item over een ITP-decreet specifiek voor Andalucía gaat dus naar 'costa_del_sol', NIET naar 'spanje'. Een marktdata item dat Marbella's luxury-segment bespreekt gaat naar 'costa_del_sol', NIET naar 'spanje'.
+
+Plaats-detectie volgorde:
+  1. Costa del Sol plaatsen aanwezig → 'costa_del_sol'
+  2. Costa Blanca Noord plaatsen aanwezig (incl. Gandía/Gandia) → 'costa_blanca_noord'
+  3. Costa Blanca Zuid plaatsen aanwezig → 'costa_blanca_zuid'
+  4. Costa Brava plaatsen aanwezig → 'costa_brava'
+  5. Costa Cálida plaatsen aanwezig (incl. Murcia stad) → 'costa_calida'
+  6. Costa Dorada plaatsen aanwezig → 'costa_dorada'
+  7. Valencia stad of plaats uit valencia-lijst aanwezig (EXCL. Castellón) → 'valencia'
+
+UITZONDERING — geen regio-kanaal:
+  - Castellón / Peñíscola / Benicàssim / Oropesa → 'spanje' (geen apart kanaal)
+  - Madrid, Sevilla, andere Spaanse regio's zonder eigen kanaal → 'spanje'
+  - Balearen (Mallorca/Ibiza/Menorca/Formentera) → 'spanje' bij urgency >= 7, anders 'algemeen'
+  - Canarische Eilanden → 'spanje' bij urgency >= 7, anders 'algemeen'
+  - Categorie 'fiscaal_nl': altijd 'algemeen' (Nederlandse fiscale regels zijn niet regio-specifiek)
+  - Geen plaatsnaam herkenbaar / EU-breed / internationaal: 'algemeen'
+  - Spaans landelijk nieuws (BOE-decreet zonder geografische scope, ECB-rente, Tinsa-index nationaal): 'spanje'
+
+VOORKOM TYPISCHE FOUTEN:
+- "Marbella" in titel → ALTIJD 'costa_del_sol', nooit 'spanje'
+- "Murcia" in titel → 'costa_calida', niet 'spanje' (Murcia stad valt onder Costa Cálida-coverage)
+- Item dat MEERDERE plaatsen uit verschillende regio's noemt: kies het regio-kanaal dat het zwaartepunt vormt; bij gelijke weging → 'spanje'
+
+NATIONAAL-OVERRULE (belangrijk — breekt regio-priority):
+
+Als het item taalcues bevat die nationale of multi-regio scope aanduiden, gaat het naar 'spanje' (of 'algemeen' bij EU-brede strekking) ongeacht welke plaatsnamen er ook in titel of content voorkomen. Dit voorkomt dat een nationaal verhaal dat één Costa-stad als voorbeeld noemt verkeerd in dat regio-kanaal belandt.
+
+Cues die nationaal-overrule triggeren:
+
+Spaans:
+- "todo el país", "toda España", "a nivel nacional"
+- "todas las regiones", "todas las comunidades"
+- "un centenar de ciudades", "decenas de ciudades", "varias ciudades"
+- "en toda la geografía", "en todo el territorio"
+- "ciudades de toda España"
+
+Nederlands:
+- "in heel Spanje", "door heel Spanje"
+- "in tientallen steden", "in honderd steden"
+- "landelijk", "op nationaal niveau"
+
+Engels:
+- "across Spain", "throughout Spain", "nationwide"
+- "in dozens of cities", "in hundreds of cities"
+- "across the country"
+
+Voorbeeld: "Clamor por el acceso a la vivienda en un centenar de ciudades en el Día del Trabajo" — ondanks mogelijke vermelding van Málaga of Marbella in de content, gaat dit naar 'spanje' omdat de scope nationaal is ("centenar de ciudades").
+
+Belangrijk onderscheid — overrule geldt ALLEEN bij echte nationale scope:
+- Een artikel dat één regio diepgaand behandelt en daarbij andere regio's noemt ter context BLIJFT regio-gerouteerd. Voorbeeld: "Marbella's prijzen stijgen 8%, vergelijkbaar met Madrid en Barcelona" → blijft 'costa_del_sol'.
+- Een artikel dat 2-3 specifieke gemeentes uit één regio noemt → blijft regio-gerouteerd. Voorbeeld: "Decreet voor Marbella, Estepona en Mijas" → 'costa_del_sol'.
+- Alleen taalcues die expliciet 'multi-regio' of 'landelijk' suggeren triggeren de overrule.
+
+REGION_PLACES referentie (welke plaatsen in welk regio-kanaal vallen):
+${JSON.stringify(REGION_PLACES, null, 2)}
+
+# 6. audience_invest (boolean)
+
+Default: false. We verwachten 5-15% true rate over een normale week. Wees streng — alleen items voor onze CSI-klanten (Costa Select Invest, ultra-high-net-worth segment).
+
+Zet TRUE als het item past in een van deze 14 categorieën:
+- Family office activiteit Spanje
+- Vermogensbeheerders met Spanje-expansie
+- Hotel-groep uitbreidingen 50M+
+- Private equity vastgoed-deals
+- Grote ontwikkelaar-bewegingen (institutional level)
+- Prime market data (top 5%)
+- Beckham Law wijzigingen
+- Wealth tax / impuesto solidaridad wijzigingen
+- Golden Visa / residencias-routes
+- Yacht / aviation gerelateerd vastgoed
+- Branded residences (Four Seasons / Mandarin / Aman residences)
+- Trophy property transacties (>5M public sales)
+- Corporate HQ-relocations Spanje (multinationals)
+- Tax ruling / DGT consultas voor non-residenten
+
+Zet FALSE bij standaard marktnieuws, generieke woningprijzen-rapporten, regio-decreten zonder UHNWI-context, hypotheek-nieuws onder 1M segment, lokale ontwikkelingen zonder institutional/luxury angle.
+
+EXPLICIET FALSE (veelvoorkomende false-positives — vermijd deze):
+- Algemene "buitenlandse kopers" demografie en trendrapporten — ook al noemt 't niet-EU/EU-cijfers, dat is generieke markt-statistiek, niet UHNWI
+- Brede prijs-indices (Tinsa IMIE, Sociedad de Tasación) — alleen TRUE als 't expliciet over prime/luxury segment of top 5% gaat
+- Algemene rente/euribor/ECB-bewegingen — TRUE alleen als specifiek over private banking, family office hypotheek-rates, of jumbo-loans
+- Standaard nieuws over ontwikkelaars en vastgoedbeurzen — TRUE alleen als institutional deal (PE-kapitaal, M&A boven 50M, IPO)
+- Resale-markt sentiment, "tijd-tot-verkopen", consumer-housing trends — altijd FALSE
+- Politieke retoriek over buitenlandse kopers (incl. 100%-taks debat zónder concrete wetswijziging) — FALSE; alleen TRUE bij gepubliceerde DGT-consulta of fiscale wetswijziging die residents/non-residents direct raakt
+
+Standaardregel: als het item even goed in een gewone Bloomberg-NL artikel zou kunnen verschijnen, is 't NIET invest. Invest = nis-content voor private banking en family offices.
+
 # Keyword-referentie (voor jouw context, niet om mechanisch te matchen)
 
 juridisch_es: ${KEYWORDS.juridisch_es.join(', ')}
@@ -99,24 +208,40 @@ spelers: ${KEYWORDS.spelers.join(', ')}
 
 # Voorbeelden
 
-Voorbeeld 1 — hoge urgency (juridisch met directe deal-impact):
-Input: { "i": 1, "title": "Junta de Andalucía publica decreto que limita licencias turísticas en Marbella, Estepona y Mijas", "source": "boja", "matched_keywords": ["licencia turística", "Marbella", "Estepona", "Mijas"] }
-Output: { "i": 1, "relevant": true, "category": "juridisch_es", "region": "Costa del Sol", "urgency": 9 }
-Reden: nieuwe restrictie op vakantieverhuur in drie kerngemeentes — raakt actieve klanten met verhuur-investering plannen direct.
+Voorbeeld 1 — hoge urgency, costa_del_sol routing:
+Input: { "i": "abc", "title": "Junta de Andalucía publica decreto que limita licencias turísticas en Marbella, Estepona y Mijas", "source": "boja" }
+Output: { "i": "abc", "relevant": true, "category": "juridisch_es", "region": "Costa del Sol", "slack_channel": "costa_del_sol", "audience_invest": false, "urgency": 9 }
 
-Voorbeeld 2 — middel urgency (marktdata achtergrond):
-Input: { "i": 2, "title": "Tinsa: Spaanse woningprijzen stijgen 4,2% jaar-op-jaar in Q3", "source": "elconfidencial_vivienda", "matched_keywords": ["Tinsa", "precio vivienda"] }
-Output: { "i": 2, "relevant": true, "category": "marktdata", "region": "Spanje (nationaal)", "urgency": 5 }
-Reden: nuttige marktdata voor advies, geen acute deal-impact.
+Voorbeeld 2 — UHNWI/invest, costa_del_sol routing met audience_invest:
+Input: { "i": "def", "title": "Mandarin Oriental announces branded residences in Marbella with €15M-€40M units", "source": "mansion_global" }
+Output: { "i": "def", "relevant": true, "category": "spelers", "region": "Costa del Sol", "slack_channel": "costa_del_sol", "audience_invest": true, "urgency": 7 }
 
-Voorbeeld 3 — niet relevant:
-Input: { "i": 3, "title": "Real Madrid wint Champions League finale tegen Manchester City", "source": "diariosur", "matched_keywords": [] }
-Output: { "i": 3, "relevant": false }
-Reden: sport, geen vastgoed-relatie.
+Voorbeeld 3 — landelijke marktdata, geen regio:
+Input: { "i": "ghi", "title": "Tinsa: Spaanse woningprijzen stijgen 4,2% jaar-op-jaar in Q3", "source": "elconfidencial_vivienda" }
+Output: { "i": "ghi", "relevant": true, "category": "marktdata", "region": "Spanje (nationaal)", "slack_channel": "spanje", "audience_invest": false, "urgency": 5 }
+
+Voorbeeld 4 — niet relevant, defaults voor verplichte velden:
+Input: { "i": "jkl", "title": "Real Madrid wint Champions League finale tegen Manchester City", "source": "diariosur" }
+Output: { "i": "jkl", "relevant": false, "category": "regio", "region": "Onbekend", "slack_channel": "algemeen", "audience_invest": false, "urgency": 1 }
+
+Voorbeeld 5 — buitenlandse koper-trend (lijkt invest, is generiek):
+Input: { "i": "mno", "title": "Non-EU foreign buyers take a hit in 2025 after political backlash", "source": "spanish_property_insight" }
+Output: { "i": "mno", "relevant": true, "category": "marktdata", "region": "Spanje (nationaal)", "slack_channel": "spanje", "audience_invest": false, "urgency": 6 }
+Reden: brede demografische marktdata raakt onze hele klantbase, niet specifiek UHNWI. NIET invest.
+
+Voorbeeld 6 — commerciële puff piece (NIET relevant):
+Input: { "i": "pqr", "title": "Cubo's Holiday Homes: maximizando la rentabilidad del propietario y la excelencia en la experiencia del viajero", "source": "diariosur" }
+Output: { "i": "pqr", "relevant": false, "category": "spelers", "region": "Onbekend", "slack_channel": "algemeen", "audience_invest": false, "urgency": 1 }
+Reden: marketing-positionering door één property-management bedrijf zonder transactiedata, marktcijfers of regelgevings-context. Filler.
+
+Voorbeeld 7 — regio HEEFT voorrang op category (Marbella → costa_del_sol):
+Input: { "i": "stu", "title": "International market boosts demand for luxury housing in Marbella by 30%", "source": "surinenglish" }
+Output: { "i": "stu", "relevant": true, "category": "marktdata", "region": "Costa del Sol", "slack_channel": "costa_del_sol", "audience_invest": false, "urgency": 5 }
+Reden: marktdata-categorie maar Marbella in titel — regio wint, dus costa_del_sol kanaal, niet spanje.
 
 # Output-formaat
 
-Antwoord uitsluitend met JSON conform het schema. Eén results-array, één entry per input-item, in dezelfde volgorde, met de meegestuurde i als identifier. Bij relevant=false alleen i + relevant; alle andere velden weglaten.`
+Antwoord uitsluitend met JSON conform het schema. Eén results-array, één entry per input-item, met de meegestuurde i (UUID) als identifier. ALLE velden zijn altijd verplicht — bij relevant=false vul je redelijke defaults zoals in voorbeeld 4.`
 
 interface ItemForClassification {
   id: string
@@ -126,11 +251,13 @@ interface ItemForClassification {
 }
 
 interface ClassifiedItem {
-  i: number
+  i: string
   relevant: boolean
-  category?: typeof CATEGORIES[number]
-  region?: string
-  urgency?: number
+  category: typeof CATEGORIES[number]
+  region: string
+  slack_channel: typeof SLACK_CHANNELS[number]
+  audience_invest: boolean
+  urgency: number
 }
 
 export interface ClassifyResult {
@@ -189,16 +316,14 @@ async function classifyBatch(
   supabase: ReturnType<typeof createServiceClient>,
   batch: ItemForClassification[],
 ): Promise<{ classified: number; archived: number }> {
-  const idMap = new Map<number, string>()
-  const userPayload = batch.map((item, idx) => {
-    idMap.set(idx, item.id)
-    return {
-      i: idx,
-      title: item.title,
-      source: item.source_name,
-      matched_keywords: item.matched_keywords ?? [],
-    }
-  })
+  // i is nu de UUID van het item zelf — geen mapping meer nodig.
+  const validIds = new Set(batch.map(i => i.id))
+  const userPayload = batch.map(item => ({
+    i: item.id,
+    title: item.title,
+    source: item.source_name,
+    matched_keywords: item.matched_keywords ?? [],
+  }))
 
   const response = await callWithRetry(() =>
     anthropic.messages.parse({
@@ -231,29 +356,32 @@ async function classifyBatch(
 
   await Promise.all(
     parsed.results.map(async (r: ClassifiedItem) => {
-      const dbId = idMap.get(r.i)
-      if (!dbId) {
+      if (!validIds.has(r.i)) {
         console.warn(`[classifier] onbekende i=${r.i} in response, skip`)
         return
       }
 
-      // Atomische update: status + alle velden in één query.
+      // Atomische update: status + alle velden in één query. Bij irrelevant
+      // alleen status='archived' — defaults uit het schema worden niet
+      // opgeslagen om ruis in queries te voorkomen.
       const update: Record<string, unknown> = r.relevant
         ? {
             status: 'classified',
-            category: r.category ?? null,
-            region: r.region ?? null,
-            urgency: r.urgency ?? null,
+            category: r.category,
+            region: r.region,
+            slack_channel: r.slack_channel,
+            audience_invest: r.audience_invest,
+            urgency: r.urgency,
           }
         : { status: 'archived' }
 
       const { error: updErr } = await supabase
         .from('news_items')
         .update(update)
-        .eq('id', dbId)
+        .eq('id', r.i)
 
       if (updErr) {
-        console.error(`[classifier] update ${dbId} faalde: ${updErr.message}`)
+        console.error(`[classifier] update ${r.i} faalde: ${updErr.message}`)
       } else if (r.relevant) {
         classified++
       } else {
