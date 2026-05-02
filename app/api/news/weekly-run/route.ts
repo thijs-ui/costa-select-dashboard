@@ -10,7 +10,11 @@ import { createServiceClient } from '@/lib/supabase'
 // Maandagochtend cron + handmatige trigger. Vercel cron stuurt
 // 'Authorization: Bearer ${CRON_SECRET}' header automatisch; handmatige
 // curl-trigger gebruikt ?secret=... query param. Beide zijn geldig.
-export const maxDuration = 800
+//
+// 300s is Vercel Hobby's maximum. Lokale tests komen op ~85-90s totaal —
+// ruim binnen de cap. Bij groei (>100 items per run) kan 't krap worden;
+// dan upgraden naar Pro voor 800s ceiling.
+export const maxDuration = 300
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
