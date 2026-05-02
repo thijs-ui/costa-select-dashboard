@@ -3,6 +3,10 @@
     {
       "path": "/api/nieuwbouw/amenities/cron",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/news/weekly-run",
+      "schedule": "0 6 * * 1"
     }
   ]
 }
