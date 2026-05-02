@@ -72,6 +72,26 @@ Toon: zakelijk, direct, competent. Wij weten waar we het over hebben en spreken 
 
 Schrijf in tweede persoon waar je consultants aanspreekt ("je klant", "voor je advisering"), derde persoon waar je over markt/wetgeving schrijft.
 
+# KRITIEK — Géén bedrijfs-zelfreferentie
+
+NOOIT in summary of buyer_implication:
+- De naam "Costa Select" gebruiken
+- Claims maken over wat ons bedrijf doet, biedt, integreert, verankert, vastlegt, controleert of begeleidt ("Costa Select doet X", "wij verankeren Y", "wij begeleiden klanten bij Z", "ons aanbod omvat...")
+- First-person plural als subject van een actie ("wij verankeren", "we integreren", "we nemen dit mee")
+
+Onze consultants en partners lezen deze briefing — als we claims over onze service maken die niet kloppen, liegen we. WEL toegestaan:
+- "Voor onze klanten met..." / "Voor onze prospects..." (bezittelijk, scope-marker)
+- "Voor consultants is dit een signaal om..."
+- "Voor klanten in een actieve search verdient deze checklist een plek in de bezichtigingsroutine"
+- "Voor klanten met een tweede woning betekent dit een hogere belastingdruk"
+
+NIET toegestaan:
+- "Voor onze klanten verankert Costa Select deze stappen in onze begeleiding"
+- "Voor klanten kan Costa Select adviseren om..."
+- "Wij raden onze klanten aan om..."
+
+Beschrijf de IMPLICATIE voor de klant, niet de actie van het bedrijf. De zin gaat over wat het feit voor de klant betekent of waar de consultant op moet letten — niet over wat wij ermee doen.
+
 # Lengte-eisen
 - summary_nl: 30-80 woorden
 - buyer_implication: 15-40 woorden
@@ -95,7 +115,19 @@ Input: { source: "Idealista News", title: "Tinsa: woningprijzen Costa del Sol st
 Output: {
   "summary_nl": "Tinsa-index laat zien dat Costa del Sol de grootste prijsstijger van Spanje is in Q3 met 7,8% jaar-op-jaar, ruim boven het landelijk gemiddelde van 4,2%. De drijver is voornamelijk buitenlandse vraag in Marbella, Estepona en Mijas.",
   "buyer_implication": "Voor onze prospects die nog twijfelen over instappen, geeft dit weer een datapoint dat wachten duur wordt; voor klanten met een actieve search in deze regio is een hogere bieding-drempel nu realistisch."
-}`
+}
+
+# Kritieke fout-paar (FOUT vs GOED)
+
+Voorbeeld waar het MIS gaat — buyer_implication maakt claim over Costa Select:
+
+FOUT: "Voor klanten in een actieve search verankert Costa Select deze drie stappen in de bezichtigingsbegeleiding, zodat omgevingsrisico's boven tafel komen vóór ondertekening."
+
+Reden: claim over wat Costa Select doet/integreert. Onze consultants en partners lezen dit en weten niet of dat klopt — dus we mogen het niet schrijven.
+
+GOED: "Voor klanten in een actieve search verdienen deze drie checks (politie-info, gesprekken met meerdere bewoners, straatbezoek op verschillende tijdstippen) een vaste plek in de bezichtigingsroutine vóór ondertekening."
+
+Reden: beschrijft wat de klant of consultant kan doen met de info, maakt geen claim over ons bedrijf.`
 
 interface ItemForSummary {
   id: string
@@ -140,6 +172,18 @@ const HARD_FAIL_PATTERNS: RegExp[] = [
   /\bit's worth noting\b/i,
   /\bin conclusion\b/i,
   /\bfurthermore\b/i,
+
+  // KRITIEK — geen bedrijfs-zelfreferentie. Costa Select mag nooit in
+  // de output verschijnen, en first-person plural mag nooit subject zijn
+  // van een actie (geen claims over wat wij doen).
+  /\bCosta Select\b/,
+  // 2a: subject-first ("wij verankeren", "we adviseren")
+  /\b(wij|we)\s+(verankert?|verankeren|integreren|integreert|bieden|biedt|adviseren|adviseert|controleren|controleert|doen|maken|verzorgen|verzorgt|nemen\s+mee|leveren|levert|combineren|combineert|verwerken|verwerkt|stellen\s+vast|raden\s+(?:onze\s+klanten\s+)?aan)\b/i,
+  // 2b: V2-inversie ("verankeren we", "raden wij aan", "nemen wij mee").
+  // Separable-verbs splitsen in V2; we matchen op het verb-root + wij/we.
+  /\b(verankert?|verankeren|integreren|integreert|bieden|biedt|adviseren|adviseert|controleren|controleert|doen|maken|verzorgen|verzorgt|nemen|leveren|levert|combineren|combineert|verwerken|verwerkt|stellen|raden)\s+(wij|we)\b/i,
+  // 3: bezittelijk + service-noun ("onze service", "ons aanbod")
+  /\b(ons\s+(?:aanbod|team|bedrijf|advies|begeleiding|proces|werk)|onze\s+(?:service|begeleiding|aanpak|werkwijze|expertise))\b/i,
 ]
 
 interface FailResult {
@@ -351,6 +395,7 @@ export async function summarizeItems(runId: string): Promise<SummarizeResult> {
     .select('id, source_name, title, raw_content, category, region, urgency')
     .eq('run_id', runId)
     .eq('status', 'classified')
+    .eq('is_cluster_leader', true)
     .gte('urgency', URGENCY_THRESHOLD)
 
   if (error) throw new Error(`[summarizer] news_items fetch faalde: ${error.message}`)
