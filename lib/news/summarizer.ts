@@ -80,6 +80,23 @@ interface ItemForSummary {
   raw_content: string | null
   category: string | null
   region: string | null
+  urgency: number | null
+}
+
+// Action-words geven het signaal dat een implication concrete handeling
+// vereist. Hoe meer hits, hoe hoger de impact_score boven de raw urgency.
+// Score = urgency * 1.0 + actionMatches * 2.0.
+const ACTION_WORDS = [
+  'raadt aan', 'raden aan', 'vóór ondertekening', 'voor ondertekening',
+  'agressiever bieden', 'controleer', 'check', 'eis', 'vraag',
+  'overweeg te', 'is raadzaam', 'is verstandig', 'risico',
+  'verplicht', 'moet u', 'dien je',
+]
+
+function calculateImpactScore(urgency: number, buyerImplication: string): number {
+  const lower = buyerImplication.toLowerCase()
+  const actionMatches = ACTION_WORDS.filter(w => lower.includes(w)).length
+  return urgency * 1.0 + actionMatches * 2.0
 }
 
 export interface SummarizeResult {
@@ -171,12 +188,15 @@ async function summarizeOne(
     throw new Error(`[summarizer] parsed_output null voor ${item.id} (stop_reason=${response.stop_reason})`)
   }
 
+  const impactScore = calculateImpactScore(item.urgency ?? 0, parsed.buyer_implication)
+
   const { error: updErr } = await supabase
     .from('news_items')
     .update({
       status: 'summarized',
       summary_nl: parsed.summary_nl,
       buyer_implication: parsed.buyer_implication,
+      impact_score: impactScore,
     })
     .eq('id', item.id)
 

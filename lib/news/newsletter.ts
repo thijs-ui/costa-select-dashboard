@@ -1,10 +1,13 @@
 /**
- * News-pipeline newsletter generator — fase 4.
+ * News-pipeline newsletter generator — fase 4 (3-concept versie).
  *
- * Pakt de top 5 items op urgency uit een run en laat Sonnet 4.6 een
- * concept-klantnieuwsbrief schrijven (Nederlands, klant-georiënteerd).
- * Output is een platte JSON met subject + body, klaar om in Outlook te
- * plakken — geen markdown, geen HTML.
+ * Pakt top 10 items op impact_score uit een run en laat Sonnet 4.6 ÉÉN
+ * onderwerp kiezen waar drie verschillende klant-newsletter concepten over
+ * geschreven worden (informatief / alarmerend / kans-georiënteerd).
+ *
+ * Output gaat in-memory naar de Slack-laag en wordt naar #marketing-ideeën
+ * gepost — niet in DB opgeslagen om schema-overhead te voorkomen (kan later
+ * via een newsletter_concepts tabel als we historie willen).
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -14,103 +17,109 @@ import { createServiceClient } from '@/lib/supabase'
 import { PIPELINE_CONFIG } from '@/lib/news/config'
 
 const MODEL = PIPELINE_CONFIG.models.newsletter
-const MAX_TOKENS = 2048
-const TOP_N = 5
+const MAX_TOKENS = 4096
+const TOP_N = 10
 const MAX_RETRIES = 3
 
-const NewsletterSchema = z.object({
+const ConceptSchema = z.object({
   subject: z.string(),
   body: z.string(),
 })
 
-export type Newsletter = z.infer<typeof NewsletterSchema>
+const NewsletterSchema = z.object({
+  selected_item_id: z.string(),
+  selected_topic_reasoning: z.string(),
+  concepts: z.object({
+    informatief: ConceptSchema,
+    alarmerend: ConceptSchema,
+    kans: ConceptSchema,
+  }),
+})
 
-const SYSTEM_PROMPT = `Je schrijft de wekelijkse klantnieuwsbrief voor Costa Select, een Nederlandse buyer's agency die kopers van een tweede woning of investering in Spanje begeleidt. De ontvangers zijn Nederlandse en Belgische klanten — sommigen bezitten al een Spaans pand, anderen zijn in een actief zoekproces, weer anderen oriënteren zich nog.
+export type NewsletterConcepts = z.infer<typeof NewsletterSchema>
 
-Je krijgt 5 nieuws-items uit de afgelopen week (titel, samenvatting, koper-implicatie, bron) en je schrijft daar één samenhangende nieuwsbrief over.
+export interface NewsletterResult {
+  selectedItem: {
+    id: string
+    title: string
+    url: string | null
+    source_name: string
+  } | null
+  selectedTopicReasoning: string
+  concepts: NewsletterConcepts['concepts']
+}
+
+const SYSTEM_PROMPT = `Je bent een senior content-strateeg voor Costa Select, een Nederlandse buyer's agency voor Spaans vastgoed.
+
+# Taak
+
+Je krijgt de top 10 items van deze week (gesorteerd op impact_score). Je doet twee dingen:
+
+1. SELECTEER het ENE item met de meeste klant-impact dat zich het beste leent voor een nieuwsbrief. Niet noodzakelijk het hoogste impact_score-item — kies wat onze Nederlandse/Belgische klanten het meest raakt en thematisch het sterkst is voor brede klant-communicatie.
+
+2. SCHRIJF DRIE newsletter-concepten over dat ENE onderwerp, in drie verschillende tones. Allemaal voor dezelfde feiten, alleen anders gekaderd.
+
+# De drie concepten
+
+## Concept 1 — INFORMATIEF & FEITELIJK
+Rustige analyse-tone, getallen-gedreven. Voor klanten die feiten willen zonder framing. Toon: neutraal, journalistiek, zoals een goede sectoranalist.
+
+## Concept 2 — DIRECT & ALARMEREND
+Urgentie-tone, "wat dit voor u betekent". Voor klanten die duidelijke signalen willen. Toon: alert, actie-georiënteerd, maar zonder paniek of marketingtaal. Geen uitroeptekens, geen "DRINGEND".
+
+## Concept 3 — KANS-GEORIËNTEERD
+Optimistische framing, "hier ligt een kans". Voor klanten die actief en vooruitkijkend zijn. Toon: nuchter-positief, mogelijkheden-georiënteerd, niet over-enthousiast.
+
+# Stijlregels (alle drie de concepten)
+
+- Lengte: 200-300 woorden body
+- Eigen subject line per concept (max 60 tekens, scanbaar)
+- Opening: "Beste [voornaam],"
+- Sluiting: "Met hartelijke groet,\\n\\n[ondertekenaar]"
+- Tweede persoon ("u"). Niet "je".
+- Platte tekst, klaar voor Outlook. GEEN markdown, GEEN bullets met sterretjes, GEEN headings met hekjes.
+- Alinea's gescheiden door dubbele newlines.
+- Spaanse termen die in onze sector standaard zijn (ITP, IBI, plusvalía, urbanización) mogen onvertaald.
+- Geen em-dashes (—). Gebruik komma's, dubbele punten of haakjes.
+- Geen Engelse marketing-termen.
+- Geen vragende vorm.
+- Geen filler ("Het is belangrijk te benadrukken..."). Begin de zin gewoon met de informatie.
+- Geen uitroeptekens.
+
+# selected_topic_reasoning
+
+Maximaal 50 woorden. Interne motivatie waarom je dit onderwerp koos uit de 10 — niet voor de klant. Eerlijk over wat je liet vallen en waarom dit het sterkst is voor brede klant-communicatie.
 
 # Output
 
-JSON met twee velden: subject (onderwerpregel) en body (de nieuwsbrief-tekst zelf).
+JSON conform het schema. selected_item_id is de exacte i-string van het gekozen item uit de input.`
 
-# subject
-Concrete, scanbare onderwerpregel zonder buzzwords. Geen "Belangrijk:" prefix, geen uitroeptekens. Kort genoeg om in Outlook-overzicht volledig zichtbaar te zijn (~50 tekens). Liefst met datum-context ("week van X mei") of het sterkste item van de week als hook.
-
-# body
-200-300 woorden. Platte tekst, klaar om in Outlook te plakken. GEEN markdown, GEEN bullets met sterretjes, GEEN headings met hekjes. Wel: gewone alinea's gescheiden door dubbele newlines. Witregels mogen tussen onderwerpen.
-
-Begin met "Beste {voornaam},". Sluit af met:
-"Met hartelijke groet,
-
-[ondertekenaar]"
-
-Het mailmerge-veld {voornaam} en de placeholder [ondertekenaar] laat je letterlijk zo staan — wij vullen die in vóór verzenden.
-
-# Stijl (Costa Select tone-of-voice — Ruler/Caregiver, tweede persoon)
-
-- Tweede persoon ("u"). Niet "je" — onze klantcommunicatie blijft op u-niveau, anders dan onze interne briefings.
-- Zakelijk-warm. Wij weten waar we het over hebben en delen dat helder, zonder neerbuigend te zijn en zonder te overdrijven.
-- Geen jargon zonder uitleg. Termen als ITP, IBI, plusvalía mogen, maar leg ze één keer uit als ze in de tekst voorkomen ("ITP, de Spaanse overdrachtsbelasting").
-- Geen em-dashes (—). Gebruik komma's, dubbele punten, of haakjes.
-- Geen Engelse marketing-termen ("game-changer", "must-know").
-- Geen vragende vorm ("Wist u dat...?").
-- Geen filler ("Het is belangrijk te benadrukken dat..."). Begin de zin gewoon met de informatie.
-- Geen uitroeptekens.
-
-# Structuur
-
-Eerste alinea: één of twee zinnen waarin u meegeeft wat de rode draad of het opvallendste nieuws van de week is.
-
-Middendeel: 2-4 alinea's, één per onderwerp dat u behandelt. Niet alle 5 items in detail — selecteer wat klanten écht raakt en groepeer waar dat logisch is. Vermeld bij feiten kort de bron in de tekst zelf ("volgens Tinsa", "het Boletín Oficial publiceerde", "El Confidencial meldt").
-
-Laatste alinea voor de afsluiting: één zin die uitnodigt tot contact bij specifieke vragen of een lopend traject. Niet wervend ("neem nu contact op!"), wel attent ("mocht u twijfelen of dit op uw situatie van toepassing is, dan kijken wij daar graag samen naar").
-
-# Voorbeeld
-
-subject: "Spaans vastgoed — week 18: rente, prijzen en regelgeving"
-
-body: "Beste {voornaam},
-
-De Spaanse vastgoedmarkt liet deze week een aantal bewegingen zien die voor u relevant kunnen zijn, vooral als u in een actief koop- of verkooptraject zit of recent een tweede woning heeft aangeschaft.
-
-Tinsa publiceerde nieuwe prijscijfers: de Costa del Sol blijft koploper met 7,8% prijsstijging op jaarbasis, ruim boven het Spaanse gemiddelde van 4,2%. Drijvende factor is de buitenlandse vraag in Marbella, Estepona en Mijas. Voor u betekent dit dat afwachten in deze regio in de praktijk duurder wordt.
-
-Tegelijk zien Spaanse makelaars een afkoeling in andere delen van het land. Aanbod blijft langer staan en bieden onder de vraagprijs is minder uitzonderlijk dan zes maanden geleden, vooral op resale-objecten waarvan de vraagprijs niet is bijgesteld.
-
-Op fiscaal vlak speelt het debat over een mogelijke 100%-belasting voor niet-EU-kopers door. Notarisdata laat zien dat dit voornemen alleen al een effect heeft: 17% minder aankopen door niet-EU-buitenlanders in 2025. Voor onze Nederlandse en Belgische klanten verandert er praktisch niets, maar de marktdynamiek schuift wel.
-
-Mocht u twijfelen of een van deze ontwikkelingen op uw situatie van toepassing is, dan kijken wij daar graag samen naar.
-
-Met hartelijke groet,
-
-[ondertekenaar]"`
-
-export async function generateNewsletter(runId: string): Promise<Newsletter | null> {
+export async function generateNewsletter(runId: string): Promise<NewsletterResult | null> {
   const supabase = createServiceClient()
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  const { data: allItems, error } = await supabase
+  const { data: items, error } = await supabase
     .from('news_items')
-    .select('title, summary_nl, buyer_implication, source_name, category, urgency')
+    .select('id, title, source_name, url, summary_nl, buyer_implication, category, region, urgency, impact_score, audience_invest')
     .eq('run_id', runId)
     .eq('status', 'summarized')
-    .order('urgency', { ascending: false })
+    .order('impact_score', { ascending: false, nullsFirst: false })
+    .limit(TOP_N)
 
   if (error) throw new Error(`[newsletter] fetch faalde: ${error.message}`)
-  if (!allItems || allItems.length === 0) return null
+  if (!items || items.length === 0) return null
 
-  // Selectie: top 3 op urgency (mogen alledrie zelfde categorie zijn) +
-  // per overgebleven categorie 1 extra item totdat 5 items totaal of geen
-  // categorieën meer over. Sorteer eindlijst opnieuw op urgency DESC.
-  const items = selectWithCategorySpread(allItems, TOP_N)
-
-  const userPayload = items.map((i, idx) => ({
-    nr: idx + 1,
+  const userPayload = items.map(i => ({
+    i: i.id,
     titel: i.title,
     samenvatting: i.summary_nl,
     klant_implicatie: i.buyer_implication,
     bron: i.source_name,
+    categorie: i.category,
+    region: i.region,
     urgency: i.urgency,
+    impact_score: i.impact_score,
+    audience_invest: i.audience_invest,
   }))
 
   const response = await callWithRetry(() =>
@@ -131,56 +140,30 @@ export async function generateNewsletter(runId: string): Promise<Newsletter | nu
       messages: [
         {
           role: 'user',
-          content: `Schrijf de nieuwsbrief op basis van deze ${items.length} items van deze week:\n\n${JSON.stringify(userPayload, null, 2)}`,
+          content: `Top ${items.length} items van deze week:\n\n${JSON.stringify(userPayload, null, 2)}\n\nKies één onderwerp en schrijf drie concepten.`,
         },
       ],
     }),
   )
 
-  const parsed = response.parsed_output as Newsletter | null
+  const parsed = response.parsed_output as NewsletterConcepts | null
   if (!parsed) {
     throw new Error(`[newsletter] parsed_output null (stop_reason=${response.stop_reason})`)
   }
-  return parsed
-}
 
-interface SelectableItem {
-  title: string
-  summary_nl: string | null
-  buyer_implication: string | null
-  source_name: string
-  category: string | null
-  urgency: number | null
-}
-
-function selectWithCategorySpread<T extends SelectableItem>(items: T[], targetCount: number): T[] {
-  // items komt al gesorteerd op urgency DESC binnen.
-  const top3 = items.slice(0, 3)
-  const result: T[] = [...top3]
-
-  if (result.length >= targetCount) return result.slice(0, targetCount)
-
-  const usedCategories = new Set(top3.map(i => i.category).filter(Boolean) as string[])
-  const remaining = items.slice(3)
-
-  // Per overgebleven categorie 1 extra item, hoogste urgency eerst.
-  for (const item of remaining) {
-    if (result.length >= targetCount) break
-    if (!item.category) continue
-    if (usedCategories.has(item.category)) continue
-    result.push(item)
-    usedCategories.add(item.category)
+  const selectedItem = items.find(i => i.id === parsed.selected_item_id) ?? null
+  return {
+    selectedItem: selectedItem
+      ? {
+          id: selectedItem.id,
+          title: selectedItem.title,
+          url: selectedItem.url,
+          source_name: selectedItem.source_name,
+        }
+      : null,
+    selectedTopicReasoning: parsed.selected_topic_reasoning,
+    concepts: parsed.concepts,
   }
-
-  // Als nog geen 5 (te weinig categorieën), vul aan met urgency-volgorde.
-  for (const item of remaining) {
-    if (result.length >= targetCount) break
-    if (result.includes(item)) continue
-    result.push(item)
-  }
-
-  // Eindlijst opnieuw sorteren op urgency DESC voor de prompt.
-  return result.sort((a, b) => (b.urgency ?? 0) - (a.urgency ?? 0))
 }
 
 async function callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
