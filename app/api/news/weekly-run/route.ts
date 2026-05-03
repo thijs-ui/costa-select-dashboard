@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { runScrape } from '@/lib/news/scraper'
 import { deduplicateItems } from '@/lib/news/dedup'
+import { clusterItems } from '@/lib/news/cluster'
 import { classifyItems } from '@/lib/news/classifier'
 import { summarizeItems } from '@/lib/news/summarizer'
 import { generateNewsletter } from '@/lib/news/newsletter'
@@ -35,17 +36,20 @@ export async function GET(request: Request) {
     const dedup = await deduplicateItems(scrape.runId)
     const tDedup = Date.now() - t0 - tScrape
 
+    const cluster = await clusterItems(scrape.runId)
+    const tCluster = Date.now() - t0 - tScrape - tDedup
+
     const classify = await classifyItems(scrape.runId)
-    const tClassify = Date.now() - t0 - tScrape - tDedup
+    const tClassify = Date.now() - t0 - tScrape - tDedup - tCluster
 
     const summarize = await summarizeItems(scrape.runId)
-    const tSummarize = Date.now() - t0 - tScrape - tDedup - tClassify
+    const tSummarize = Date.now() - t0 - tScrape - tDedup - tCluster - tClassify
 
     const newsletter = await generateNewsletter(scrape.runId)
-    const tNewsletter = Date.now() - t0 - tScrape - tDedup - tClassify - tSummarize
+    const tNewsletter = Date.now() - t0 - tScrape - tDedup - tCluster - tClassify - tSummarize
 
     const slack = await deliverToSlack(scrape.runId, newsletter)
-    const tSlack = Date.now() - t0 - tScrape - tDedup - tClassify - tSummarize - tNewsletter
+    const tSlack = Date.now() - t0 - tScrape - tDedup - tCluster - tClassify - tSummarize - tNewsletter
 
     // Markeer run als verzonden zodat we kunnen detecteren of er al een
     // delivery is geweest (en niet dubbel posten bij re-run).
@@ -65,6 +69,7 @@ export async function GET(request: Request) {
         ms: tScrape,
       },
       dedup: { ...dedup, ms: tDedup },
+      cluster: { ...cluster, ms: tCluster },
       classify: { ...classify, ms: tClassify },
       summarize: { ...summarize, ms: tSummarize },
       newsletter: {

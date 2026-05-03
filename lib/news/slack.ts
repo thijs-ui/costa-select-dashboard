@@ -17,6 +17,7 @@ import {
   SLACK_WEBHOOK_ENV,
   type SlackChannel,
 } from '@/lib/news/config'
+import { getClusterMembers } from '@/lib/news/cluster'
 import type { NewsletterResult } from '@/lib/news/newsletter'
 
 const SEND_DELAY_MS = 500
@@ -37,6 +38,7 @@ interface SummarizedItem {
   impact_score: number | null
   summary_nl: string
   buyer_implication: string
+  cluster_id: string | null
 }
 
 export interface SlackDeliveryResult {
@@ -62,7 +64,7 @@ export async function deliverToSlack(
     supabase
       .from('news_items')
       .select(
-        'id, title, url, source_name, category, region, slack_channel, audience_invest, urgency, impact_score, summary_nl, buyer_implication',
+        'id, title, url, source_name, category, region, slack_channel, audience_invest, urgency, impact_score, summary_nl, buyer_implication, cluster_id',
       )
       .eq('run_id', runId)
       .eq('status', 'summarized')
@@ -116,9 +118,10 @@ export async function deliverToSlack(
     const list = byChannel[channel]
     if (!list || list.length === 0) continue
     const top = list.slice(0, MAX_PER_CHANNEL)
-    const blocks = buildItemBlocks(
+    const blocks = await buildItemBlocks(
       `📰 Costa Select Weekly — ${SLACK_CHANNEL_LABELS[channel]} — week ${isoWeek}`,
       top,
+      runId,
     )
     if (messagesSent > 0) await sleep(SEND_DELAY_MS)
     await postToChannel(channel, { blocks })
@@ -128,9 +131,10 @@ export async function deliverToSlack(
 
   // 2. CSI Invest — exclusieve routing voor audience_invest=true items.
   if (investItems.length > 0) {
-    const blocks = buildItemBlocks(
+    const blocks = await buildItemBlocks(
       `💼 CSI Invest — week ${isoWeek}`,
       investItems.slice(0, MAX_PER_CHANNEL),
+      runId,
     )
     if (messagesSent > 0) await sleep(SEND_DELAY_MS)
     await postToChannel('invest', { blocks })
@@ -207,21 +211,50 @@ async function postNewsletter(newsletter: NewsletterResult, isoWeek: number): Pr
 
 // ─── Per-channel item-formatting ─────────────────────────────────────────
 
-function buildItemBlocks(headerText: string, items: SummarizedItem[]): SlackBlock[] {
+async function buildItemBlocks(
+  headerText: string,
+  items: SummarizedItem[],
+  runId: string,
+): Promise<SlackBlock[]> {
   const blocks: SlackBlock[] = [header(headerText)]
-  for (const item of items) {
+
+  // Cluster-members ophalen per item dat in een multi-item cluster zit.
+  // Parallel om de delivery niet onnodig te vertragen.
+  const memberLookups = await Promise.all(
+    items.map(async item => {
+      if (!item.cluster_id) return [] as { source_name: string; url: string | null }[]
+      return getClusterMembers(runId, item.cluster_id)
+    }),
+  )
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx]
     const sourceLink = item.url
       ? `<${item.url}|${escapeMrkdwn(item.source_name)}>`
       : escapeMrkdwn(item.source_name)
     const meta: string[] = [`Bron: ${sourceLink}`, `Urgency: ${item.urgency}/10`]
     if (item.impact_score != null) meta.push(`Impact: ${item.impact_score.toFixed(1)}`)
     if (item.region) meta.push(item.region)
-    blocks.push(
-      section(
-        `*${escapeMrkdwn(item.title)}*\n${item.summary_nl}\n> ${item.buyer_implication}`,
-      ),
-      context(meta.join(' · ')),
-    )
+
+    const sectionLines = [
+      `*${escapeMrkdwn(item.title)}*`,
+      item.summary_nl,
+      `> ${item.buyer_implication}`,
+    ]
+
+    // "Ook gemeld door" alleen tonen als er andere bronnen in de cluster zitten.
+    const members = memberLookups[idx]
+    if (members.length > 0) {
+      const links = members
+        .slice(0, 5)
+        .map(m =>
+          m.url ? `<${m.url}|${escapeMrkdwn(m.source_name)}>` : escapeMrkdwn(m.source_name),
+        )
+        .join(', ')
+      sectionLines.push(`Ook gemeld door: ${links}`)
+    }
+
+    blocks.push(section(sectionLines.join('\n')), context(meta.join(' · ')))
   }
   return blocks
 }

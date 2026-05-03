@@ -275,6 +275,7 @@ export async function classifyItems(runId: string): Promise<ClassifyResult> {
     .select('id, title, source_name, matched_keywords')
     .eq('run_id', runId)
     .eq('status', 'scraped')
+    .eq('is_cluster_leader', true)
 
   if (error) throw new Error(`[classifier] news_items fetch faalde: ${error.message}`)
   if (!items || items.length === 0) {
