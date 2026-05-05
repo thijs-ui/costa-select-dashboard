@@ -105,6 +105,18 @@ function formatTime(t: string | null | undefined): string {
   return t.substring(0, 5)
 }
 
+// Bezichtigings-tijden lopen op halve uren (06:00 t/m 22:00). Voorkomt dat
+// consultants per ongeluk 09:17 of 10:42 invoeren waar de klant later
+// over struikelt in de itinerary.
+const TIME_OPTIONS: string[] = (() => {
+  const out: string[] = []
+  for (let h = 6; h <= 22; h++) {
+    out.push(`${String(h).padStart(2, '0')}:00`)
+    if (h < 22) out.push(`${String(h).padStart(2, '0')}:30`)
+  }
+  return out
+})()
+
 function diffMinutes(a: string, b: string): number {
   if (!a || !b) return 0
   const [ah, am] = a.split(':').map(Number)
@@ -232,6 +244,33 @@ export default function BezichtigingDetailPage({
     if (trip?.route_data) {
       setTrip({ ...trip, route_data: null })
     }
+  }
+
+  // Drag-and-drop reorder: verplaats stop fromIdx → toIdx en persisteer
+  // ALLE veranderde sort_orders (een drag kan meerdere posities skippen).
+  async function reorderStop(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
+    if (fromIdx >= stops.length || toIdx >= stops.length) return
+
+    const reordered = [...stops]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    const withOrder = reordered.map((s, k) => ({ ...s, sort_order: k + 1 }))
+    setStops(withOrder)
+    if (trip?.route_data) {
+      setTrip({ ...trip, route_data: null })
+    }
+
+    // Persist alleen de sort_orders die wijzigen.
+    const changed = withOrder.filter((s, k) => s.sort_order !== stops[k]?.sort_order || s.id !== stops[k]?.id)
+    await Promise.all(changed.map(s =>
+      fetch('/api/bezichtigingen/stops', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: s.id, sort_order: s.sort_order }),
+        cache: 'no-store',
+      }),
+    ))
   }
 
   async function moveStop(stopId: string, dir: -1 | 1) {
@@ -422,6 +461,7 @@ export default function BezichtigingDetailPage({
                 onAdd={addStop}
                 onDelete={deleteStop}
                 onMove={moveStop}
+                onReorder={reorderStop}
               />
             </div>
 
@@ -626,11 +666,17 @@ function TripForm({
           />
         </Field>
         <Field label="Starttijd">
-          <BzInput
-            type="time"
+          <BzSelect
             value={formatTime(trip.start_time)}
             onChange={e => onChange({ start_time: e.target.value })}
-          />
+          >
+            {!TIME_OPTIONS.includes(formatTime(trip.start_time)) && trip.start_time && (
+              <option value={formatTime(trip.start_time)}>{formatTime(trip.start_time)}</option>
+            )}
+            {TIME_OPTIONS.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </BzSelect>
         </Field>
         <Field label="Startadres / hotel" colFull>
           <BzInput
@@ -640,11 +686,17 @@ function TripForm({
           />
         </Field>
         <Field label="Lunchpauze">
-          <BzInput
-            type="time"
+          <BzSelect
             value={formatTime(trip.lunch_time)}
             onChange={e => onChange({ lunch_time: e.target.value })}
-          />
+          >
+            {!TIME_OPTIONS.includes(formatTime(trip.lunch_time)) && trip.lunch_time && (
+              <option value={formatTime(trip.lunch_time)}>{formatTime(trip.lunch_time)}</option>
+            )}
+            {TIME_OPTIONS.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </BzSelect>
         </Field>
         <Field label="Lunchduur">
           <BzSelect
@@ -700,12 +752,14 @@ function StopsCard({
   onAdd,
   onDelete,
   onMove,
+  onReorder,
 }: {
   stops: Stop[]
   customerName: string
   onAdd: (draft: StopDraft) => Promise<void>
   onDelete: (id: string) => void
   onMove: (id: string, dir: -1 | 1) => void
+  onReorder: (fromIdx: number, toIdx: number) => void
 }) {
   const [draft, setDraft] = useState<StopDraft>(EMPTY_DRAFT)
   const [showExtra, setShowExtra] = useState(false)
@@ -769,6 +823,7 @@ function StopsCard({
               index={idx}
               total={stops.length}
               onMove={onMove}
+              onReorder={onReorder}
               onDelete={onDelete}
             />
           ))}
@@ -875,43 +930,67 @@ function StopRow({
   index,
   total,
   onMove,
+  onReorder,
   onDelete,
 }: {
   stop: Stop
   index: number
   total: number
   onMove: (id: string, dir: -1 | 1) => void
+  onReorder: (fromIdx: number, toIdx: number) => void
   onDelete: (id: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', String(index))
+        e.dataTransfer.effectAllowed = 'move'
+        setDragging(true)
+      }}
+      onDragEnd={() => setDragging(false)}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (!dragOver) setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+        const fromIdx = Number(e.dataTransfer.getData('text/plain'))
+        if (!Number.isNaN(fromIdx) && fromIdx !== index) onReorder(fromIdx, index)
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className="flex items-start bg-white transition-all"
       style={{
         gap: 12,
         padding: 12,
-        border: hovered
+        border: dragOver
+          ? '1px dashed #0EAE96'
+          : hovered
           ? '1px solid rgba(0,75,70,0.24)'
           : '1px solid rgba(0,75,70,0.12)',
         borderRadius: 12,
         boxShadow: hovered ? '0 4px 10px rgba(7,42,36,0.05)' : 'none',
+        opacity: dragging ? 0.45 : 1,
+        cursor: 'grab',
       }}
     >
-      <button
-        title="Verplaatsen"
+      <div
+        title="Sleep om te verplaatsen"
         className="flex items-center shrink-0"
         style={{
           color: '#7A8C8B',
-          cursor: 'grab',
           padding: 2,
-          background: 'transparent',
-          border: 'none',
         }}
       >
         <GripVertical size={14} strokeWidth={2} />
-      </button>
+      </div>
       <div
         className="flex items-center justify-center shrink-0 font-heading font-bold text-marble"
         style={{
