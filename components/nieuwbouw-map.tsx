@@ -33,9 +33,15 @@ const mapOptions: google.maps.MapOptions = {
 interface Props {
   listings: Listing[]
   selectedId: string | null
-  onSelect: (id: string) => void
+  onSelect: (id: string | null) => void
   apiKey: string
 }
+
+// Detail-panel breedte (zie nieuwbouw-detail.tsx). Bij selectie pannen we de
+// kaart ~halve panel-breedte naar links zodat de gekozen pin niet onder het
+// panel verdwijnt — anders zijn pins rechts onbereikbaar.
+const PANEL_WIDTH = 420
+const PAN_OFFSET_PX = PANEL_WIDTH / 2
 
 export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }: Props) {
   const { isLoaded } = useLoadScript({ googleMapsApiKey: apiKey })
@@ -47,6 +53,17 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
     () => listings.filter(l => l.latitude != null && l.longitude != null),
     [listings]
   )
+
+  // Klik op pin → centreer pin én shift naar links zodat 't panel niet bedekt.
+  const selectAndPan = useCallback((listing: Listing) => {
+    onSelect(listing.id)
+    const map = mapRef.current
+    if (!map || listing.latitude == null || listing.longitude == null) return
+    map.panTo({ lat: listing.latitude, lng: listing.longitude })
+    // panBy verplaatst de view in pixels. Positief x = pin schuift naar links
+    // in de viewport (== map content schuift naar rechts).
+    map.panBy(PAN_OFFSET_PX, 0)
+  }, [onSelect])
 
   if (!isLoaded) {
     return (
@@ -64,6 +81,7 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
       zoom={MAP_ZOOM}
       options={mapOptions}
       onLoad={onLoad}
+      onClick={() => onSelect(null)}
     >
       {pins.map(l => (
         <OverlayView
@@ -72,7 +90,7 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
           mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
         >
           <button
-            onClick={() => onSelect(l.id)}
+            onClick={(e) => { e.stopPropagation(); selectAndPan(l) }}
             aria-label={l.title ?? l.address ?? l.property_code}
             style={{
               transform: 'translate(-50%,-50%)',
