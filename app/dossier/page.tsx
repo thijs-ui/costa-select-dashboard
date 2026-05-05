@@ -116,6 +116,7 @@ interface ManualForm {
   type: string
   vraagprijs: string
   oppervlakte: string
+  kavel: string
   slaapkamers: string
   badkamers: string
   omschrijving: string
@@ -124,7 +125,7 @@ interface ManualForm {
 
 const EMPTY_MANUAL: ManualForm = {
   adres: '', regio: '', type: 'appartement',
-  vraagprijs: '', oppervlakte: '',
+  vraagprijs: '', oppervlakte: '', kavel: '',
   slaapkamers: '', badkamers: '',
   omschrijving: '', fotos: '',
 }
@@ -255,6 +256,7 @@ function DossierPageInner() {
           type: manualForm.type,
           vraagprijs: manualForm.vraagprijs,
           oppervlakte: manualForm.oppervlakte,
+          kavel: manualForm.kavel,
           slaapkamers: manualForm.slaapkamers,
           badkamers: manualForm.badkamers,
           omschrijving: manualForm.omschrijving,
@@ -693,6 +695,14 @@ function ConfigCard({
               value={manualForm.oppervlakte}
               onChange={e => onManualChange('oppervlakte', e.target.value)}
               placeholder="120"
+            />
+          </Field>
+          <Field label="Kavel (m²)">
+            <DsInput
+              type="number"
+              value={manualForm.kavel}
+              onChange={e => onManualChange('kavel', e.target.value)}
+              placeholder="500"
             />
           </Field>
           <Field label="Slaapkamers">

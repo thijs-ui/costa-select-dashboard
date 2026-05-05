@@ -737,7 +737,7 @@ function HeaderBar({
         )}
         <View style={s.hbarRule} />
         <Text style={s.hbarMeta}>
-          Woningoverzicht ·{' '}
+          Shortlist ·{' '}
           <Text style={s.hbarMetaName}>{klantNaam}</Text>
         </Text>
       </View>
@@ -935,7 +935,7 @@ function CoverPage({
             ) : null}
           </View>
           <View style={s.coverTag}>
-            <Text style={s.coverTagEyebrow}>Woningoverzicht</Text>
+            <Text style={s.coverTagEyebrow}>Shortlist</Text>
             <View style={s.coverTagRule} />
             <Text style={s.coverTagMeta}>{date}</Text>
           </View>
@@ -1219,7 +1219,7 @@ export async function POST(request: Request) {
     />
   )
 
-  const filename = `costa-select-woningoverzicht-${(klant_naam || 'klant').replace(/\s+/g, '-').toLowerCase()}.pdf`
+  const filename = `costa-select-shortlist-${(klant_naam || 'klant').replace(/\s+/g, '-').toLowerCase()}.pdf`
 
   return new Response(new Uint8Array(buffer), {
     headers: {

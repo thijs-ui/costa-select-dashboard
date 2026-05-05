@@ -57,7 +57,9 @@ async function downloadAndStorePhotos(photos: string[], dossierId: string): Prom
   )
 
   const storedUrls: string[] = []
-  const maxPhotos = Math.min(photos.length, 6)
+  // Cap op 15: bovenkant van wat we in de PDF willen tonen. Mits de listing
+  // dat aantal heeft (Idealista heeft vaak 10-25 foto's), pakken we ze allemaal.
+  const maxPhotos = Math.min(photos.length, 15)
 
   for (let i = 0; i < maxPhotos; i++) {
     try {
@@ -91,7 +93,7 @@ async function downloadAndStorePhotos(photos: string[], dossierId: string): Prom
   }
 
   console.log(`Stored ${storedUrls.length}/${maxPhotos} photos`)
-  return storedUrls.length > 0 ? storedUrls : photos.slice(0, 6)
+  return storedUrls.length > 0 ? storedUrls : photos.slice(0, 15)
 }
 
 export async function POST(request: Request) {
@@ -122,12 +124,24 @@ export async function POST(request: Request) {
   const units = unitsRes.data ?? []
 
   // 2. Map naar dossier_data format
+  // Plot/kavel extracten uit Idealista raw data — Apify-actor exposes 'plotSize'
+  // op top-level item; fallback paths voor andere actor-versies.
+  const plotSize =
+    listing.details_data?.plotSize ??
+    listing.raw_data?.plotSize ??
+    listing.details_data?.lotSize ??
+    listing.raw_data?.lotSize ??
+    listing.details_data?.lotSurface ??
+    listing.raw_data?.lotSurface ??
+    null
+
   const propertyData = {
     adres: listing.title || listing.address || 'Onbekend',
     regio: listing.province || '',
     type: listing.property_type || 'nieuwbouw',
     vraagprijs: listing.price || 0,
     oppervlakte: listing.size_m2 || 0,
+    kavel: typeof plotSize === 'number' && plotSize > 0 ? plotSize : null,
     slaapkamers: listing.rooms || 0,
     badkamers: listing.bathrooms || 0,
     omschrijving: listing.description || '',

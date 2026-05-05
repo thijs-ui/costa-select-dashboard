@@ -121,7 +121,7 @@ ${raw.substring(0, 1500)}`,
 }
 
 async function scrapeProperty(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { mode, url, adres, regio, type, vraagprijs, oppervlakte, slaapkamers, badkamers, omschrijving, fotos } = body
+  const { mode, url, adres, regio, type, vraagprijs, oppervlakte, kavel, slaapkamers, badkamers, omschrijving, fotos } = body
 
   if (mode === 'url' && url) {
     if (isCostaSelectUrl(url as string)) {
@@ -143,12 +143,17 @@ async function scrapeProperty(body: Record<string, unknown>): Promise<Record<str
       throw new Error(errData.error || 'Lookup failed')
     }
     const prop = await res.json()
+    // Plot/kavel kan in lookup-response onder verschillende namen staan
+    // (Costa Select resales: plot_m2; Idealista: plotSize/lotSize).
+    const lookupKavel =
+      prop.plot_m2 ?? prop.plotSize ?? prop.lotSize ?? prop.lotSurface ?? null
     return {
       adres: prop.title || url,
       regio: prop.location || regio || 'Onbekend',
       type: prop.property_type || 'woning',
       vraagprijs: prop.price || 0,
       oppervlakte: prop.size_m2 || 0,
+      kavel: typeof lookupKavel === 'number' && lookupKavel > 0 ? lookupKavel : null,
       slaapkamers: prop.bedrooms || 0,
       badkamers: prop.bathrooms || 0,
       omschrijving: prop.description || '',
@@ -163,6 +168,7 @@ async function scrapeProperty(body: Record<string, unknown>): Promise<Record<str
     type: type || 'woning',
     vraagprijs: Number(vraagprijs) || 0,
     oppervlakte: Number(oppervlakte) || 0,
+    kavel: kavel != null && Number(kavel) > 0 ? Number(kavel) : null,
     slaapkamers: Number(slaapkamers) || 0,
     badkamers: Number(badkamers) || 0,
     omschrijving: omschrijving || '',

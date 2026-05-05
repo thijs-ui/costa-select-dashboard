@@ -74,6 +74,7 @@ export interface DossierData {
     type: string
     vraagprijs: number
     oppervlakte: number
+    kavel?: number | null
     slaapkamers: number
     badkamers: number
     bouwjaar?: string | number | null
@@ -946,6 +947,13 @@ export function DossierPDF({
                       unit: 'm²',
                     })
                   }
+                  if (property.kavel) {
+                    specs.push({
+                      label: 'Kavel',
+                      value: String(property.kavel),
+                      unit: 'm²',
+                    })
+                  }
                   if (property.bouwjaar) {
                     specs.push({ label: 'Bouwjaar', value: String(property.bouwjaar) })
                   }
@@ -994,6 +1002,15 @@ export function DossierPDF({
                 <Text style={s.presSpecLabel}>Oppervlakte</Text>
                 <Text style={s.presSpecValue}>
                   {property.oppervlakte}
+                  <Text style={s.presSpecUnit}>m²</Text>
+                </Text>
+              </View>
+            ) : null}
+            {property.kavel ? (
+              <View style={s.presSpec}>
+                <Text style={s.presSpecLabel}>Kavel</Text>
+                <Text style={s.presSpecValue}>
+                  {property.kavel}
                   <Text style={s.presSpecUnit}>m²</Text>
                 </Text>
               </View>
