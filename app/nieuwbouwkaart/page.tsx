@@ -9,7 +9,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { PageLayout } from '@/components/page-layout'
+import { PageHeader } from '@/components/page-header'
 import NieuwbouwFilterbar from '@/components/nieuwbouw-filterbar'
 import NieuwbouwDetail from '@/components/nieuwbouw-detail'
 import NieuwbouwMap, { LoadingCard } from '@/components/nieuwbouw-map'
@@ -166,29 +166,31 @@ export default function NieuwbouwkaartPage() {
     return { id: data.id ?? null }
   }
 
-  return (
-    <PageLayout title="Nieuwbouwkaart">
-      {/* Topbar meta */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-                    gap: 16, marginTop: -16, marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: '#7A8C8B' }}>
-          {filtered.length} actieve projecten · bron: Idealista · laatst bijgewerkt{' '}
-          {listings[0]?.last_seen_at
-            ? new Date(listings[0].last_seen_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
-            : '—'}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <StatChip icon={<CircleCheck size={14} color="#0EAE96" />} label={`${filtered.length} actief`} />
-          <StatChip icon={<TrendingUp size={14} color="#F5AF40" />} label="+4 deze week" />
-        </div>
-      </div>
+  const lastUpdated = listings[0]?.last_seen_at
+    ? new Date(listings[0].last_seen_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    : '—'
 
-      <NieuwbouwFilterbar
-        filters={filters}
-        setFilters={setFilters}
-        regions={regions}
-        propertyTypes={propertyTypes}
+  return (
+    <>
+      <PageHeader
+        eyebrow="Costa Select · Nieuwbouwkaart"
+        title="Nieuwbouwkaart"
+        subtitle={`${filtered.length} actieve projecten · bron: Idealista · laatst bijgewerkt ${lastUpdated}`}
+        actions={
+          <>
+            <StatChip icon={<CircleCheck size={14} color="#0EAE96" />} label={`${filtered.length} actief`} />
+            <StatChip icon={<TrendingUp size={14} color="#F5AF40" />} label="+4 deze week" />
+          </>
+        }
       />
+      <div style={{ padding: '20px 32px 0' }}>
+        <NieuwbouwFilterbar
+          filters={filters}
+          setFilters={setFilters}
+          regions={regions}
+          propertyTypes={propertyTypes}
+        />
+      </div>
 
       <div style={{
         position: 'relative', minHeight: 960, borderRadius: 14, overflow: 'hidden',
@@ -237,7 +239,7 @@ export default function NieuwbouwkaartPage() {
           </div>
         )}
       </div>
-    </PageLayout>
+    </>
   )
 }
 

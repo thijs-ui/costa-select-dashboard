@@ -1,34 +1,13 @@
-import Icon from './Icon'
+// Stepper-rail voor Costa Kompas. De brand-header is verhuisd naar de
+// gedeelde PageHeader in de pagina-component zodat 't aanknopt bij de andere
+// pagina's (Calculator, Presentatie, etc.). Deze component toont alleen nog
+// de stappenbalk + huidige stap-label onderaan.
 
 const LABELS = ['Profiel', 'Filters', 'Weging', 'Vragen', 'Resultaat']
 
-export default function Chrome({
-  stepIdx,
-  onRestart,
-}: {
-  stepIdx: number
-  onRestart: () => void
-}) {
+export default function KompasRail({ stepIdx }: { stepIdx: number }) {
   return (
-    <>
-      <div className="kompas-chrome">
-        <div className="kompas-chrome__brand">
-          <span className="dot" />
-          Costa Kompas
-          <em>v2 · adviesinstrument</em>
-        </div>
-        <div className="kompas-chrome__right">
-          <span className="kompas-chrome__step">
-            Stap {stepIdx + 1} van 5 · {LABELS[stepIdx]}
-          </span>
-          {stepIdx > 0 && (
-            <button className="kompas-chrome__restart" onClick={onRestart}>
-              <Icon name="rotate-ccw" size={12} />
-              Opnieuw
-            </button>
-          )}
-        </div>
-      </div>
+    <div>
       <div className="kompas-rail">
         {LABELS.map((l, i) => (
           <div
@@ -39,6 +18,18 @@ export default function Chrome({
           </div>
         ))}
       </div>
-    </>
+      <div
+        style={{
+          padding: '8px 36px 0',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: '#7A8C8B',
+        }}
+      >
+        Stap {stepIdx + 1} van 5 · {LABELS[stepIdx]}
+      </div>
+    </div>
   )
 }

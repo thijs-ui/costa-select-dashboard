@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
+import { PageHeader } from '@/components/page-header'
 
 // ───────── Types ─────────
 interface ShortlistSummary {
@@ -468,24 +469,29 @@ function OverviewView({
   }
 
   return (
-    <div className="a-page">
-      <div className="a-header-row">
-        <div>
-          <div className="a-eyebrow">Dashboard / shortlists</div>
-          <h1 className="a-h1">
-            Shortlists
-            {!isEmpty && (
-              <span className="a-count">
-                {shortlists.length} {shortlists.length === 1 ? 'klant' : 'klanten'}
-              </span>
-            )}
-          </h1>
-          <p className="a-sub">
-            Beheer shortlists voor je klanten — voeg woningen toe via URL, markeer
-            favorieten, genereer presentaties.
-          </p>
-        </div>
-        <div className="a-actions">
+    <>
+      <PageHeader
+        eyebrow="Costa Select · Shortlists"
+        title="Shortlists"
+        subtitle="Beheer shortlists voor je klanten — voeg woningen toe via URL, markeer favorieten, genereer presentaties."
+        badge={!isEmpty && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '3px 10px',
+              background: 'rgba(0,75,70,0.08)',
+              color: '#004B46',
+              fontSize: 11,
+              fontWeight: 700,
+              borderRadius: 999,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {shortlists.length} {shortlists.length === 1 ? 'klant' : 'klanten'}
+          </span>
+        )}
+        actions={
           <button
             type="button"
             className="a-btn a-btn-primary"
@@ -493,8 +499,9 @@ function OverviewView({
           >
             <UserPlus size={14} strokeWidth={2} /> Nieuwe klant
           </button>
-        </div>
-      </div>
+        }
+      />
+      <div className="a-page" style={{ paddingTop: 24 }}>
 
       {loading ? (
         <div
@@ -564,7 +571,8 @@ function OverviewView({
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 

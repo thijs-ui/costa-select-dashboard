@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useReducer } from 'react'
+import { RotateCcw } from 'lucide-react'
 import Chrome from '@/components/kompas-v2/Chrome'
+import { PageHeader } from '@/components/page-header'
 import Profile from '@/components/kompas-v2/steps/Profile'
 import Filters from '@/components/kompas-v2/steps/Filters'
 import WeightsStep from '@/components/kompas-v2/steps/Weights'
@@ -178,7 +180,35 @@ export default function KompasV2Page() {
 
   return (
     <div className={`kompas-root ${state.step === 'results' ? 'is-results' : ''}`}>
-      {state.step !== 'results' && <Chrome stepIdx={stepIdx} onRestart={onRestart} />}
+      <PageHeader
+        eyebrow="Costa Select · Adviesinstrument"
+        title="Costa Kompas"
+        subtitle="Begeleidt klanten in vijf stappen naar de regio + woningtype dat past bij hun profiel."
+        actions={
+          stepIdx > 0 && state.step !== 'results' ? (
+            <button
+              type="button"
+              onClick={onRestart}
+              className="flex items-center font-body"
+              style={{
+                gap: 6,
+                padding: '9px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#004B46',
+                background: '#fff',
+                border: '1.5px solid rgba(0,75,70,0.16)',
+                borderRadius: 10,
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={13} strokeWidth={2} />
+              Opnieuw
+            </button>
+          ) : null
+        }
+      />
+      {state.step !== 'results' && <Chrome stepIdx={stepIdx} />}
       <div className="kompas-main">
         {state.step === 'profile' && (
           <Profile onSelect={d => dispatch({ type: 'SET_DOEL', doel: d })} />
