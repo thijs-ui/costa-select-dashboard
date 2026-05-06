@@ -4,7 +4,7 @@
 'use client'
 
 import { Search } from 'lucide-react'
-import type { ListingFilters } from '@/components/nieuwbouw-types'
+import { humanizePropertyType, type ListingFilters } from '@/components/nieuwbouw-types'
 
 interface Props {
   filters: ListingFilters
@@ -55,7 +55,9 @@ export default function NieuwbouwFilterbar({ filters, setFilters, regions, prope
 
       <select value={filters.propertyType} onChange={(e) => upd('propertyType', e.target.value)} style={inpBase}>
         <option value="">Alle types</option>
-        {propertyTypes.map(t => <option key={t} value={t}>{t}</option>)}
+        {propertyTypes.map(t => (
+          <option key={t} value={t}>{humanizePropertyType(t) ?? t}</option>
+        ))}
       </select>
 
       <div style={{ ...inpBase, display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -14,7 +14,13 @@ import {
   Clock4, ExternalLink, FileDown, RefreshCw, Image as ImageIcon, ChevronDown,
   Utensils, Wine, Stethoscope, Pill as PillIcon, Train,
 } from 'lucide-react'
-import type { Listing, Unit, Amenity } from '@/components/nieuwbouw-types'
+import {
+  humanizePropertyType,
+  listingTypologies,
+  type Listing,
+  type Unit,
+  type Amenity,
+} from '@/components/nieuwbouw-types'
 
 interface Props {
   listing: Listing
@@ -137,7 +143,12 @@ function Gallery({
 // --- Head -------------------------------------------------------------------
 function Head({ listing }: { listing: Listing }) {
   const addr = [listing.address, listing.municipality, listing.province].filter(Boolean).join(' · ')
-  const typeLabel = humanizeType(listing.property_type)
+  // listing.property_type bij Idealista is altijd 'newDevelopment' — niet zinvol
+  // als type-label. Pak in plaats daarvan de unit-typologies (Appartement /
+  // Villa / Townhouse / etc.) en toon één pill per uniek type.
+  const typeLabels = listingTypologies(listing)
+    .map(humanizePropertyType)
+    .filter((s): s is string => !!s)
   return (
     <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(0,75,70,.08)' }}>
       <h2 style={{
@@ -150,7 +161,9 @@ function Head({ listing }: { listing: Listing }) {
         <MapPin size={12} />{addr}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {typeLabel && <Pill kind="type"><Building size={11} />{typeLabel}</Pill>}
+        {typeLabels.map(label => (
+          <Pill key={label} kind="type"><Building size={11} />{label}</Pill>
+        ))}
         {listing.is_new_development && (
           <Pill kind="new"><Sparkles size={11} />Nieuwbouw</Pill>
         )}
@@ -160,25 +173,6 @@ function Head({ listing }: { listing: Listing }) {
       </div>
     </div>
   )
-}
-
-// DB-types (Idealista mapping in scraper) → leesbare NL-labels.
-// Mapping spiegelt mapPropertyType in woningbot/idealista-direct.js.
-function humanizeType(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  const t = raw.toLowerCase()
-  if (t === 'flat' || t === 'apartment')                          return 'Appartement'
-  if (t === 'penthouse')                                          return 'Penthouse'
-  if (t === 'duplex')                                             return 'Duplex'
-  if (t === 'chalet' || t === 'villa' || t === 'detachedhouse')   return 'Villa'
-  if (t === 'townhouse' || t === 'semidetachedhouse'
-      || t === 'terracedhouse')                                   return 'Townhouse'
-  if (t === 'countryhouse' || t === 'finca')                      return 'Finca'
-  if (t === 'studio')                                             return 'Studio'
-  if (t === 'loft')                                               return 'Loft'
-  if (t === 'bungalow')                                           return 'Bungalow'
-  // Onbekende type — geef ruwe waarde terug met capitalisatie.
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
 }
 
 function Pill({ kind, children }: { kind: 'new' | 'dev' | 'feat' | 'type'; children: React.ReactNode }) {
@@ -201,20 +195,26 @@ function Pill({ kind, children }: { kind: 'new' | 'dev' | 'feat' | 'type'; child
 // --- Quick stats ------------------------------------------------------------
 function QuickStats({ listing }: { listing: Listing }) {
   const units = listing.units ?? []
-  const typologies = [...new Set(units.map(u => u.typology).filter(Boolean))] as string[]
+  const typologies = listingTypologies(listing)
+  const humanizedTypes = typologies
+    .map(humanizePropertyType)
+    .filter((s): s is string => !!s)
   const avgPm2 = listing.price_per_m2
     ?? (units.length
         ? units.reduce((a, u) => a + (u.price && u.size_m2 ? u.price / u.size_m2 : 0), 0) / (units.filter(u => u.price && u.size_m2).length || 1)
         : null)
-  const typeLabel = humanizeType(listing.property_type)
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10,
       padding: '14px 18px', borderBottom: '1px solid rgba(0,75,70,.08)',
     }}>
-      <Stat l="Type" v={typeLabel ?? '—'} s={typologies.length ? typologies.slice(0, 2).join(' · ').toLowerCase() : ''} />
+      <Stat
+        l="Type"
+        v={humanizedTypes[0] ?? '—'}
+        s={humanizedTypes.length > 1 ? `+ ${humanizedTypes.slice(1).join(' · ')}` : ''}
+      />
       <Stat l="Units" v={String(units.length || '—')} s={units.length ? 'beschikbaar' : ''} />
-      <Stat l="Typologieën" v={String(typologies.length || '—')} s={typologies.slice(0, 3).join(' · ').toLowerCase()} />
+      <Stat l="Typologieën" v={String(typologies.length || '—')} s={humanizedTypes.slice(0, 3).join(' · ')} />
       <Stat l="€/m²" v={avgPm2 ? Math.round(avgPm2).toLocaleString('nl-NL') : '—'} s="gemiddeld" />
     </div>
   )

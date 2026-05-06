@@ -14,7 +14,12 @@ import NieuwbouwFilterbar from '@/components/nieuwbouw-filterbar'
 import NieuwbouwDetail from '@/components/nieuwbouw-detail'
 import NieuwbouwMap, { LoadingCard } from '@/components/nieuwbouw-map'
 import { CircleCheck, TrendingUp } from 'lucide-react'
-import type { Amenity, Listing, ListingFilters } from '@/components/nieuwbouw-types'
+import {
+  listingTypologies,
+  type Amenity,
+  type Listing,
+  type ListingFilters,
+} from '@/components/nieuwbouw-types'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
 
 // nearby_amenities gebruikt NL-keys in de DB. We mappen naar EN-kinds voor de icon-lookup
@@ -122,10 +127,16 @@ export default function NieuwbouwkaartPage() {
     const extras = [...present].filter(r => !REGION_ORDER.includes(r)).sort()
     return [...ordered, ...extras]
   }, [listings])
-  const propertyTypes = useMemo(
-    () => [...new Set(listings.map(l => l.property_type).filter(Boolean))].sort() as string[],
-    [listings]
-  )
+  // Property-type filter werkt op unit-typologies (flat/chalet/townhouse/...)
+  // niet op listing.property_type — die is bij Idealista altijd 'newDevelopment'
+  // en geeft maar 1 filter-optie. Dedup over alle units van alle listings.
+  const propertyTypes = useMemo(() => {
+    const set = new Set<string>()
+    for (const l of listings) {
+      for (const t of listingTypologies(l)) set.add(t)
+    }
+    return [...set].sort()
+  }, [listings])
 
   // Filtered listings — used for pins + stats
   const filtered = useMemo(() => listings.filter(l => {
@@ -135,7 +146,7 @@ export default function NieuwbouwkaartPage() {
       if (!hay.includes(q)) return false
     }
     if (filters.region && l.region !== filters.region) return false
-    if (filters.propertyType && l.property_type !== filters.propertyType) return false
+    if (filters.propertyType && !listingTypologies(l).includes(filters.propertyType)) return false
     if (filters.priceMin != null && (l.price ?? 0) < filters.priceMin) return false
     if (filters.priceMax != null && (l.price ?? Infinity) > filters.priceMax) return false
     return true

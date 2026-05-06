@@ -92,9 +92,41 @@ export interface MapBounds {
 export interface ListingFilters {
   search: string
   region: string         // '' = all (Costa Blanca Noord/Zuid, Costa Cálida, Costa del Sol, Valencia)
-  propertyType: string   // '' = all
+  propertyType: string   // '' = all; matched tegen unit.typology (lowercase: 'flat', 'chalet', etc.)
   priceMin: number | null
   priceMax: number | null
   roomsMin: number | null
   roomsMax: number | null
+}
+
+// Mapping van Idealista DB-types (units.typology / listings.property_type)
+// naar leesbare NL-labels. Spiegelt mapPropertyType in idealista-direct.js.
+// Gebruikt door: filter-dropdown, popup detail-pill, QuickStats.
+export function humanizePropertyType(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const t = String(raw).toLowerCase()
+  if (t === 'flat' || t === 'apartment')                          return 'Appartement'
+  if (t === 'penthouse')                                          return 'Penthouse'
+  if (t === 'duplex')                                             return 'Duplex'
+  if (t === 'chalet' || t === 'villa' || t === 'detachedhouse')   return 'Villa'
+  if (t === 'townhouse' || t === 'semidetachedhouse'
+      || t === 'terracedhouse')                                   return 'Townhouse'
+  if (t === 'countryhouse' || t === 'finca')                      return 'Finca'
+  if (t === 'studio')                                             return 'Studio'
+  if (t === 'loft')                                               return 'Loft'
+  if (t === 'bungalow')                                           return 'Bungalow'
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+}
+
+/**
+ * Verzamel alle unit-typologies uit een listing (deduped, gesorteerd).
+ * Dit is wat we als 'echte' property-types tonen — listing.property_type is bij
+ * Idealista vrijwel altijd 'newDevelopment' wat geen filter-waarde is.
+ */
+export function listingTypologies(l: { units?: Unit[] | null }): string[] {
+  const set = new Set<string>()
+  for (const u of (l.units ?? [])) {
+    if (u.typology) set.add(String(u.typology).toLowerCase())
+  }
+  return [...set].sort()
 }
