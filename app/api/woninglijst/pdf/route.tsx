@@ -59,7 +59,6 @@ const ON_DARK_70 = 'rgba(255,250,239,0.70)'
 
 // Design handoff specifies px op 96dpi. @react-pdf rendert in pt op 72dpi.
 // Conversie: pt = px × 0.75. Page A4 landscape = 842×595pt = 1123×794px @ 96.
-const PX = 0.75
 const PAD_X = 42 // 56px × 0.75
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -840,27 +839,32 @@ function CardThumb({ item, index, variant, isFav }: CardProps & { isFav: boolean
 }
 
 function CardInfo({ item, variant, isFav }: CardProps & { isFav: boolean }) {
-  const titleStyles: object[] = [s.cardTitle]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const titleStyles: any[] = [s.cardTitle]
   if (isFav) titleStyles.push(s.cardTitleFav)
   if (variant === 'solo') titleStyles.push(s.cardTitleSolo)
   if (variant === 'compact') titleStyles.push(s.cardTitleCompact)
   if (variant === 'grid') titleStyles.push(s.cardTitleGrid)
 
-  const priceStyles: object[] = [s.cardPriceV]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const priceStyles: any[] = [s.cardPriceV]
   if (isFav && variant !== 'solo') priceStyles.push(s.cardPriceVFav)
   if (variant === 'solo') priceStyles.push(s.cardPriceVSolo)
   if (variant === 'compact') priceStyles.push(s.cardPriceVCompact)
   if (variant === 'grid') priceStyles.push(s.cardPriceVGrid)
 
-  const specVStyles: object[] = [s.cardSpecV]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const specVStyles: any[] = [s.cardSpecV]
   if (variant === 'solo') specVStyles.push(s.cardSpecVSolo)
   if (variant === 'compact') specVStyles.push(s.cardSpecVCompact)
   if (variant === 'grid') specVStyles.push(s.cardSpecVGrid)
 
-  const noteStyles: object[] = [s.cardNote]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const noteStyles: any[] = [s.cardNote]
   if (variant === 'compact') noteStyles.push(s.cardNoteCompact)
 
-  const noteTextStyles: object[] = [s.cardNoteText]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const noteTextStyles: any[] = [s.cardNoteText]
   if (variant === 'compact') noteTextStyles.push(s.cardNoteTextCompact)
 
   const showNote = isFav && !!item.notities && variant !== 'grid'
@@ -936,11 +940,13 @@ function CardSpecCell({
   label: string
   value: string
   unit?: string
-  valStyle: object[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  valStyle: any[]
   isFirst?: boolean
   isLast?: boolean
 }) {
-  const cellStyles: object[] = [s.cardSpec]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cellStyles: any[] = [s.cardSpec]
   if (isFirst) cellStyles.push(s.cardSpecFirst)
   if (isLast) cellStyles.push(s.cardSpecLast)
   return (
@@ -1018,7 +1024,7 @@ function CoverPage({
               )}
               {regionsText ? (
                 <View style={s.coverMetaItem}>
-                  <Text style={s.coverMetaL}>Regio's</Text>
+                  <Text style={s.coverMetaL}>{"Regio's"}</Text>
                   <Text style={[s.coverMetaV, s.coverMetaVSm]}>{regionsText}</Text>
                 </View>
               ) : null}
