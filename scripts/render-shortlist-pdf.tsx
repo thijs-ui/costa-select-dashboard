@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable */
 // Lokale render van de shortlist-PDF voor visuele iteratie zonder Vercel.
 // Run: npx tsx scripts/render-shortlist-pdf.tsx

@@ -1302,18 +1302,36 @@ function PropertyCard({
           </div>
         ) : null}
 
-        {/* Cross-portal — als woning ook op andere portals staat */}
-        {!!prop.also_on?.length && (
-          <div
-            style={{
-              fontSize: 11, color: '#7A8C8B',
-              marginTop: 8, paddingTop: 8,
-              borderTop: '1px dashed rgba(0,75,70,0.10)',
-            }}
-          >
-            Ook gevonden op: <strong>{prop.also_on.join(', ')}</strong>
-          </div>
-        )}
+        {/* Cross-portal — als woning ook op andere portals staat. Dedupe +
+            humanize: upstream levert soms ['idealista', 'idealista', ...,
+            'supabase', 'supabase'] uit een grote dedup-cluster; we tonen 'm
+            één keer per bron met leesbare naam. */}
+        {(() => {
+          const SOURCE_LABELS: Record<string, string> = {
+            idealista: 'Idealista',
+            supabase: 'Costa Select',
+            costaselect: 'Costa Select',
+            'costa-select': 'Costa Select',
+            thinkspain: 'ThinkSpain',
+            fotocasa: 'Fotocasa',
+          }
+          const unique = Array.from(
+            new Set((prop.also_on ?? []).filter(Boolean).map(s => s.toLowerCase()))
+          )
+            .map(s => SOURCE_LABELS[s] ?? s.charAt(0).toUpperCase() + s.slice(1))
+          if (unique.length === 0) return null
+          return (
+            <div
+              style={{
+                fontSize: 11, color: '#7A8C8B',
+                marginTop: 8, paddingTop: 8,
+                borderTop: '1px dashed rgba(0,75,70,0.10)',
+              }}
+            >
+              Ook gevonden op: <strong>{unique.join(', ')}</strong>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
