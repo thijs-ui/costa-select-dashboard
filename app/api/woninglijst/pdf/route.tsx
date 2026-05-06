@@ -469,14 +469,15 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  // Thumb
+  // Thumb — iets smaller dan design's 320px (290) zodat de info-kolom genoeg
+  // breedte heeft voor de 4-cel spec-row zonder dat waardes overlappen.
   cardThumb: {
-    width: 320,
+    width: 290,
     flexShrink: 0,
     backgroundColor: DEEPSEA_DEEP,
     position: 'relative',
   },
-  cardThumbCompact: { width: 240 },
+  cardThumbCompact: { width: 220 },
   cardThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   cardThumbEmpty: {
     width: '100%',
@@ -617,9 +618,15 @@ const s = StyleSheet.create({
     borderTopColor: RULE,
   },
   cardSpec: {
-    flex: 1,
+    // Belangrijk: flexBasis 0 expliciet zetten zodat lange waardes (bv. een
+    // €-bedrag) niet de kolom breder maken dan 1/N van de beschikbare ruimte.
+    // @react-pdf's `flex: 1` shorthand zet flexBasis op 'auto', wat content-
+    // sized werkt en de andere kolommen wegduwt.
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
     flexDirection: 'column',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRightWidth: 1,
     borderRightStyle: 'solid',
     borderRightColor: RULE,
@@ -627,7 +634,11 @@ const s = StyleSheet.create({
   cardSpecFirst: { paddingLeft: 0 },
   cardSpecLast: { borderRightWidth: 0, paddingRight: 0 },
   cardSpecPrice: {
-    flex: 1.4,
+    // Prijs krijgt 1.8× de breedte van de andere cellen (was 1.4) — voorkomt
+    // dat "€ 1.780.000" tegen de m²-waarde in de volgende cel aanloopt.
+    flexGrow: 1.8,
+    flexShrink: 1,
+    flexBasis: 0,
     borderRightColor: RULE_STRONG,
   },
   cardSpecL: {
@@ -649,14 +660,16 @@ const s = StyleSheet.create({
     lineHeight: 1,
   },
   cardSpecVPrice: {
-    fontSize: 19,
+    // Schaal-down vs design (was 19pt) zodat "€ 1.780.000" nooit groter wordt
+    // dan de prijs-kolom (1.8 flex). Echte prijzen halen 7 cijfers + kommas.
+    fontSize: 16,
     color: SUN_DARK,
   },
-  cardSpecVPriceFav: { fontSize: 21 },
+  cardSpecVPriceFav: { fontSize: 18 },
   cardSpecVSolo: { fontSize: 17 },
-  cardSpecVPriceSolo: { fontSize: 24 },
+  cardSpecVPriceSolo: { fontSize: 22 },
   cardSpecVCompact: { fontSize: 12 },
-  cardSpecVPriceCompact: { fontSize: 16 },
+  cardSpecVPriceCompact: { fontSize: 14 },
   cardSpecUnit: {
     fontFamily: 'Raleway',
     fontSize: 8.5,
@@ -773,7 +786,8 @@ function CardSpec({
     if (variant === 'solo') valueStyles.push(s.cardSpecVPriceSolo)
   }
   // Inline unit (geen nested <Text>) — voorkomt rare wrapping/spacing artifacts.
-  const valueText = unit ? `${value} ${unit}` : value
+  // Smal non-breaking space tussen value en unit zodat ze samenblijven bij wrap.
+  const valueText = unit ? `${value} ${unit}` : value
   return (
     <View
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -783,7 +797,8 @@ function CardSpec({
       <Text style={[s.cardSpecL, isPrice ? s.cardSpecLPrice : {}] as any}>
         {label}
       </Text>
-      <Text style={valueStyles}>{valueText}</Text>
+      {/* wrap=false: voorkomt dat "€ 1.780.000" naar twee regels gaat. */}
+      <Text style={valueStyles} wrap={false}>{valueText}</Text>
     </View>
   )
 }
