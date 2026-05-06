@@ -47,14 +47,20 @@ const MARBLE = '#FFFAEF'
 const MARBLE_DEEP = '#F4EDDD'
 const INK = '#1B2A28'
 const INK_MUTE = '#8A9794'
-const RULE = 'rgba(7,42,36,0.10)'
-const RULE_STRONG = 'rgba(7,42,36,0.20)'
+// Solide hex i.p.v. rgba() — @react-pdf parsed rgba inconsistent en
+// rendert dan vaak een coral/oranje-rode fallback waar wij teal-ink op
+// marble willen. Pre-blended tegen MARBLE (#FFFAEF) zodat 't visueel
+// klopt met de design tokens.
+const RULE = '#E5E0D2'        // ≈ rgba(7,42,36,0.10) op marble
+const RULE_STRONG = '#CCC4B1' // ≈ rgba(7,42,36,0.20) op marble
 const ON_DARK_45 = 'rgba(255,250,239,0.45)'
 const ON_DARK_55 = 'rgba(255,250,239,0.55)'
 const ON_DARK_92 = 'rgba(255,250,239,0.92)'
 const ON_DARK_20 = 'rgba(255,250,239,0.20)'
 
-const PAD_X = 48
+// PAD_X 32 i.p.v. design's 48 — A4 portret is op 595pt simpelweg te smal
+// om 320pt thumb + 4 spec-cellen comfortabel te tonen met design's padding.
+const PAD_X = 32
 const HEADER_H = 56
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -75,7 +81,10 @@ interface Item {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function fmtEuro(n: number | null | undefined): string {
   if (n == null) return 'Op aanvraag'
-  return `€ ${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
+  // NBSP ( ) tussen € en bedrag — anders breekt @react-pdf de regel op
+  // de spatie en krijg je "€" boven "1.780.000". wrap={false} op de Text helpt
+  // niet voor intra-text wrapping, alleen voor page-breaks.
+  return `€${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
 }
 
 function fmtDate(d: Date): string {
@@ -253,8 +262,10 @@ const s = StyleSheet.create({
   },
   coverMetaItem: {
     flexDirection: 'column',
-    paddingRight: 28,
-    marginRight: 28,
+    // 14+14=28pt gap per item (was 56pt) zodat alle 4 meta-items op één rij
+    // passen op A4 portret (cover content ~483pt).
+    paddingRight: 14,
+    marginRight: 14,
     borderRightWidth: 1,
     borderRightStyle: 'solid',
     borderRightColor: ON_DARK_20,
@@ -469,15 +480,17 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  // Thumb — iets smaller dan design's 320px (290) zodat de info-kolom genoeg
-  // breedte heeft voor de 4-cel spec-row zonder dat waardes overlappen.
+  // Thumb — @react-pdf rendert in points (595pt wide A4), niet pixels.
+  // Design's 320px aanname klopt niet. Met body padding 96pt blijft maar
+  // 499pt over voor de hele kaart; thumb mag dus max ~200pt om info
+  // genoeg breedte te geven voor de 4-cel spec-row.
   cardThumb: {
-    width: 290,
+    width: 200,
     flexShrink: 0,
     backgroundColor: DEEPSEA_DEEP,
     position: 'relative',
   },
-  cardThumbCompact: { width: 220 },
+  cardThumbCompact: { width: 160 },
   cardThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   cardThumbEmpty: {
     width: '100%',
@@ -618,15 +631,14 @@ const s = StyleSheet.create({
     borderTopColor: RULE,
   },
   cardSpec: {
-    // Belangrijk: flexBasis 0 expliciet zetten zodat lange waardes (bv. een
-    // €-bedrag) niet de kolom breder maken dan 1/N van de beschikbare ruimte.
-    // @react-pdf's `flex: 1` shorthand zet flexBasis op 'auto', wat content-
-    // sized werkt en de andere kolommen wegduwt.
+    // flexBasis 0 expliciet zodat lange waardes de kolom niet breder maken.
+    // padding 4pt elke kant (was 10) — geeft "€ 1.780.000" net genoeg ruimte
+    // bij een ~70pt cel-breedte op A4 portret.
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: 0,
     flexDirection: 'column',
-    paddingHorizontal: 10,
+    paddingHorizontal: 4,
     borderRightWidth: 1,
     borderRightStyle: 'solid',
     borderRightColor: RULE,
@@ -634,18 +646,22 @@ const s = StyleSheet.create({
   cardSpecFirst: { paddingLeft: 0 },
   cardSpecLast: { borderRightWidth: 0, paddingRight: 0 },
   cardSpecPrice: {
-    // Prijs krijgt 1.8× de breedte van de andere cellen (was 1.4) — voorkomt
-    // dat "€ 1.780.000" tegen de m²-waarde in de volgende cel aanloopt.
-    flexGrow: 1.8,
+    // Prijs krijgt nu dezelfde flex als andere cellen (was 1.8) — design's
+    // breder-prijs-cel werkt niet op A4-portret-breedte. In plaats daarvan
+    // onderscheidt prijs zich via SUN_DARK kleur en zwaardere font-weight.
+    // Border iets sterker dan de andere cell-separators.
+    flexGrow: 1,
     flexShrink: 1,
     flexBasis: 0,
     borderRightColor: RULE_STRONG,
   },
   cardSpecL: {
     fontFamily: 'Raleway',
-    fontSize: 7.5,
+    fontSize: 7,
     fontWeight: 700,
-    letterSpacing: 1.65,
+    // Tracking flink terug — anders overloopt 'PRIJS'/'BADK' alsnog de smalle
+    // cellen. @react-pdf letterSpacing is in pt, niet em zoals CSS.
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: INK_MUTE,
     marginBottom: 4,
@@ -660,16 +676,15 @@ const s = StyleSheet.create({
     lineHeight: 1,
   },
   cardSpecVPrice: {
-    // Schaal-down vs design (was 19pt) zodat "€ 1.780.000" nooit groter wordt
-    // dan de prijs-kolom (1.8 flex). Echte prijzen halen 7 cijfers + kommas.
-    fontSize: 16,
+    // Met body-pad 32 + thumb 200 + cell-pad 4 past "€ 1.780.000" tot ~13pt.
+    fontSize: 13,
     color: SUN_DARK,
   },
-  cardSpecVPriceFav: { fontSize: 18 },
+  cardSpecVPriceFav: { fontSize: 14 },
   cardSpecVSolo: { fontSize: 17 },
-  cardSpecVPriceSolo: { fontSize: 22 },
-  cardSpecVCompact: { fontSize: 12 },
-  cardSpecVPriceCompact: { fontSize: 14 },
+  cardSpecVPriceSolo: { fontSize: 18 },
+  cardSpecVCompact: { fontSize: 11 },
+  cardSpecVPriceCompact: { fontSize: 12 },
   cardSpecUnit: {
     fontFamily: 'Raleway',
     fontSize: 8.5,
@@ -710,7 +725,8 @@ const s = StyleSheet.create({
     lineHeight: 1.5,
     letterSpacing: -0.05,
     color: INK,
-    fontStyle: 'italic',
+    // fontStyle: 'italic' weggelaten — vereist een aparte italic-variant
+    // van Bricolage in Font.register, hebben we (nog) niet.
   },
   cardNoteTextCompact: { fontSize: 10.5 },
 
@@ -853,11 +869,8 @@ function ListingCard({
             </Text>
           </View>
         )}
-        {item.thumbnail && (
-          <View style={s.cardSource}>
-            <Text style={s.cardSourceText}>{sourceLabel(item)}</Text>
-          </View>
-        )}
+        {/* Source pill (Idealista/Costa Select) bewust verborgen — niet
+            relevant voor klant-presentatie. */}
       </View>
 
       <View style={infoStyles}>
@@ -869,26 +882,27 @@ function ListingCard({
         </Text>
 
         <View style={s.cardSpecs}>
+          {/* Korte labels — anders overloopt 'VRAAGPRIJS' (10 chars × 7pt + tracking) de smalle cellen op A4 portret. */}
           <CardSpec
-            label="Vraagprijs"
+            label="Prijs"
             value={fmtEuro(item.price)}
             variant={variant}
             isPrice
             isFirst
           />
           <CardSpec
-            label="Woonopp."
+            label="Opp."
             value={item.size_m2 != null ? String(item.size_m2) : '—'}
             unit={item.size_m2 != null ? 'm²' : undefined}
             variant={variant}
           />
           <CardSpec
-            label="Slaapk."
+            label="Slpk"
             value={item.bedrooms != null ? String(item.bedrooms) : '—'}
             variant={variant}
           />
           <CardSpec
-            label="Badk."
+            label="Badk"
             value={item.bathrooms != null ? String(item.bathrooms) : '—'}
             variant={variant}
             isLast
@@ -1131,7 +1145,9 @@ function CompactPage({
 }
 
 // ─── PDF document ─────────────────────────────────────────────────────────
-function ShortlistPDF({
+// Geëxporteerd zodat scripts/render-shortlist-pdf.tsx 'm lokaal kan aanroepen
+// zonder auth — Vercel-deploy-cyclus is te traag voor visuele iteratie.
+export function ShortlistPDF({
   klantNaam,
   items,
   beeldmerkSrc,
