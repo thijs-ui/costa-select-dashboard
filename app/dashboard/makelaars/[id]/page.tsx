@@ -16,6 +16,7 @@ interface Makelaar {
   naam: string
   rol: string
   pipedrive_naam: string | null
+  regios_assigned: string[] | null
 }
 
 interface Deal {
@@ -47,12 +48,14 @@ export default function MakelaarDetailPage() {
   const [loading, setLoading] = useState(true)
   const [editingPipedrive, setEditingPipedrive] = useState(false)
   const [pipedriveNaam, setPipedriveNaam] = useState('')
+  const [editingRegios, setEditingRegios] = useState(false)
+  const [regiosInput, setRegiosInput] = useState('')
 
   useEffect(() => {
     async function load() {
       try {
         const [mRes, dRes, aRes] = await Promise.allSettled([
-          supabase.from('makelaars').select('id, naam, rol, pipedrive_naam').eq('id', id).single(),
+          supabase.from('makelaars').select('id, naam, rol, pipedrive_naam, regios_assigned').eq('id', id).single(),
           supabase.from('deals').select('id, datum_passering, aankoopprijs, bruto_commissie, makelaar_commissie, regio, type_deal').eq('makelaar_id', id).order('datum_passering', { ascending: false }),
           supabase.from('afspraken').select('id, datum, status, type, lead_naam, regio').eq('makelaar_id', id).order('datum', { ascending: false }),
         ])
@@ -62,6 +65,7 @@ export default function MakelaarDetailPage() {
         const m = mData as Makelaar | null
         setMakelaar(m)
         setPipedriveNaam(m?.pipedrive_naam ?? '')
+        setRegiosInput((m?.regios_assigned ?? []).join(', '))
         setDeals(dData as Deal[])
         setAfspraken(aData as Afspraak[])
       } catch (e) {
@@ -86,6 +90,17 @@ export default function MakelaarDetailPage() {
     await supabase.from('makelaars').update({ pipedrive_naam: pipedriveNaam.trim() || null }).eq('id', id)
     setMakelaar(prev => prev ? { ...prev, pipedrive_naam: pipedriveNaam.trim() || null } : prev)
     setEditingPipedrive(false)
+  }
+
+  async function saveRegios() {
+    const arr = regiosInput
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const value = arr.length > 0 ? arr : null
+    await supabase.from('makelaars').update({ regios_assigned: value }).eq('id', id)
+    setMakelaar(prev => prev ? { ...prev, regios_assigned: value } : prev)
+    setEditingRegios(false)
   }
 
   if (loading) return <div className="text-slate-400 text-sm p-8">Laden…</div>
@@ -130,6 +145,36 @@ export default function MakelaarDetailPage() {
                   </>
                 )}
               </div>
+              {makelaar.rol === 'sdr' && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-xs text-gray-400">Regio-pool:</span>
+                  {editingRegios ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={regiosInput}
+                        onChange={e => setRegiosInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveRegios(); if (e.key === 'Escape') setEditingRegios(false) }}
+                        className="text-xs border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:border-slate-400 w-56"
+                        placeholder="CDS, CBN"
+                      />
+                      <button onClick={saveRegios} className="text-xs text-green-600 hover:text-green-800 font-medium">Opslaan</button>
+                      <button onClick={() => setEditingRegios(false)} className="text-xs text-gray-400 hover:text-gray-600">Annuleren</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-gray-500">
+                        {(makelaar.regios_assigned ?? []).length > 0
+                          ? makelaar.regios_assigned!.join(' · ')
+                          : <span className="italic text-gray-300">geen pool ingesteld</span>}
+                      </span>
+                      <button onClick={() => setEditingRegios(true)} className="text-gray-300 hover:text-amber-500">
+                        <Pencil size={11} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DateFilter value={datePreset} onChange={setDatePreset} />

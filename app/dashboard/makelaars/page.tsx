@@ -26,6 +26,7 @@ interface Makelaar {
   rol: string
   area_manager_id: string | null
   pipedrive_naam: string | null
+  regios_assigned: string[] | null
 }
 
 interface Deal {
@@ -43,6 +44,7 @@ interface Afspraak {
   datum: string
   status: string
   type: string | null
+  regio: string | null
 }
 
 interface PipedriveStats {
@@ -120,13 +122,13 @@ export default function MakelaarsPage() {
       const [mRes, dRes, aRes, pdRes] = await Promise.allSettled([
         supabase
           .from('makelaars')
-          .select('id, naam, rol, area_manager_id, pipedrive_naam')
+          .select('id, naam, rol, area_manager_id, pipedrive_naam, regios_assigned')
           .eq('actief', true)
           .order('naam'),
         supabase
           .from('deals')
           .select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
-        supabase.from('afspraken').select('makelaar_id, datum, status, type'),
+        supabase.from('afspraken').select('makelaar_id, datum, status, type, regio'),
         fetch('/api/pipedrive/consultant-funnel', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { perUser: {} })),
       ])
       const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
@@ -158,7 +160,7 @@ export default function MakelaarsPage() {
     const filteredAfspraken = afspraken.filter(a => isInRange(a.datum, range))
 
     return makelaars
-      .filter(m => m.rol !== 'area_manager')
+      .filter(m => m.rol !== 'area_manager' && m.rol !== 'sdr')
       .map(m => {
         const mDeals = filteredDeals.filter(d => d.makelaar_id === m.id)
         const mAfspraken = filteredAfspraken.filter(a => a.makelaar_id === m.id)
@@ -203,6 +205,43 @@ export default function MakelaarsPage() {
       ),
     [stats]
   )
+
+  // SDR-stats: andere KPI-set dan consultants. SDR ontvangt leads (Pipedrive
+  // owner = SDR), belt en plant afspraken in. Sales/commissie n.v.t. — die
+  // zijn aan de consultant. Lead → Afspraak conversie is dé SDR-metric.
+  // Afspraken-koppeling is heuristisch: afspraken in SDR's regio-pool. De
+  // afspraken-tabel bewaart de uiteindelijke consultant in makelaar_id, dus
+  // we hebben geen directe "gepland_door"-link — dat zou een schemawijziging
+  // vereisen. Voor nu volstaat de regio-pool (Dean is enige SDR).
+  const sdrStats = useMemo(() => {
+    const filteredAfspraken = afspraken.filter(a => isInRange(a.datum, range))
+    return makelaars
+      .filter(m => m.rol === 'sdr')
+      .map(m => {
+        const pool = (m.regios_assigned ?? []).map(r => r.trim().toLowerCase())
+        const inPool = (regio: string | null) =>
+          pool.length > 0 && regio != null && pool.includes(regio.trim().toLowerCase())
+        const sdrAfspraken = filteredAfspraken.filter(a => inPool(a.regio))
+        const ingepland = sdrAfspraken.length
+        const noShow = sdrAfspraken.filter(a => a.status === 'No-show').length
+        const noShowPct = ingepland > 0 ? Math.round((noShow / ingepland) * 100) : null
+
+        const pdStats = matchPipedriveStats(m, pipedrivePerUser)
+        const leads = pdStats.leadDates.filter(d => isInRange(d, range)).length
+        const lToA = pct(ingepland, leads)
+
+        return {
+          makelaar: m,
+          regios: m.regios_assigned ?? [],
+          leads,
+          ingepland,
+          noShow,
+          noShowPct,
+          lToA,
+        }
+      })
+      .sort((a, b) => b.leads - a.leads)
+  }, [makelaars, afspraken, pipedrivePerUser, range])
 
   return (
     <div className="fin-page">
@@ -348,6 +387,75 @@ export default function MakelaarsPage() {
                 </table>
               </div>
             </FinSection>
+
+            {sdrStats.length > 0 && (
+              <FinSection title="SDR" meta={range.label}>
+                <div className="fin-table-wrap" style={{ borderRadius: 10 }}>
+                  <table className="fin-table">
+                    <thead>
+                      <tr>
+                        <th>SDR</th>
+                        <th>Regio&apos;s</th>
+                        <th className="num">Leads</th>
+                        <th className="num">Afspraken</th>
+                        <th className="num">L→A</th>
+                        <th className="num">No-show</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sdrStats.map(s => (
+                        <tr key={s.makelaar.id}>
+                          <td>
+                            <Link
+                              href={`/makelaars/${s.makelaar.id}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                color: 'var(--deepsea)',
+                                fontWeight: 600,
+                                textDecoration: 'none',
+                              }}
+                            >
+                              <span className="fin-avatar">{s.makelaar.naam.charAt(0)}</span>
+                              {s.makelaar.naam}
+                            </Link>
+                          </td>
+                          <td>
+                            {s.regios.length > 0
+                              ? s.regios.join(' · ')
+                              : <span style={{ color: 'var(--fg-subtle)', fontSize: 12 }}>geen pool ingesteld</span>}
+                          </td>
+                          <td className="num">
+                            <FinCountChip value={s.leads} tone={s.leads > 0 ? 'deepsea' : 'mid'} />
+                          </td>
+                          <td className="num">
+                            <FinCountChip value={s.ingepland} tone={s.ingepland > 0 ? 'positive' : 'mid'} />
+                          </td>
+                          <td className="num"><FinPctBadge value={s.lToA} good={30} /></td>
+                          <td className="num">
+                            {s.noShowPct != null ? (
+                              <span
+                                style={{
+                                  color: s.noShowPct >= 20
+                                    ? 'var(--negative)'
+                                    : s.noShowPct >= 10
+                                      ? 'var(--fg-muted)'
+                                      : 'var(--fg-subtle)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {s.noShowPct}% ({s.noShow})
+                              </span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </FinSection>
+            )}
 
             <div style={{ height: 60 }} />
           </>

@@ -707,6 +707,7 @@ function TeamSection({
                 options={[
                   { value: 'consultant', label: 'Consultant' },
                   { value: 'area_manager', label: 'Area manager' },
+                  { value: 'sdr', label: 'SDR' },
                 ]}
                 onChange={v => dt.updateRow(m.id, { rol: v, area_manager_id: v === 'area_manager' ? null : m.area_manager_id })}
               />
