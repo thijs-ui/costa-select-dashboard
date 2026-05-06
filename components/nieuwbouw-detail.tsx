@@ -7,7 +7,7 @@
 // ============================================================================
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   X, MapPin, Sparkles, Waves, Car, Home, Bed, BedDouble, Layers2, Building,
   Phone, FileText, Compass, Flag, Sun, ShoppingCart, GraduationCap, Plane,
@@ -27,6 +27,15 @@ export default function NieuwbouwDetail({ listing, onClose, onGenerateDossier }:
   const hero = images[0] ?? listing.main_image_url ?? ''
   const [activeImg, setActiveImg] = useState(hero)
   const [expanded, setExpanded] = useState(false)
+
+  // Reset hero foto + collapsed-state wanneer de gebruiker een andere pin
+  // selecteert. useState's initial value pakt alleen bij eerste mount, dus
+  // anders blijft de foto van de oude listing staan terwijl de rest update.
+  useEffect(() => {
+    setActiveImg(hero)
+    setExpanded(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing.id])
 
   const minPrice = useMemo(() => {
     const vals = (listing.units ?? []).map(u => u.price ?? Infinity).concat([listing.price ?? Infinity])

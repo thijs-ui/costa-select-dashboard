@@ -765,61 +765,77 @@ function DetailView({
 
   return (
     <>
-    <div className="a-page">
-      <div className="a-header-row">
-        <div style={{ minWidth: 0 }}>
-          <button type="button" className="c-back-link" onClick={onBack}>
-            <ArrowLeft size={13} strokeWidth={2} /> Terug naar overzicht
-          </button>
-          <div className="a-eyebrow">Shortlist</div>
-          <h1 className="a-h1">
-            {title}
-            {detail && (
-              <span className="a-count">
-                {items.length} {items.length === 1 ? 'woning' : 'woningen'}
-              </span>
-            )}
-          </h1>
-          <p className="a-sub">{subtitle}</p>
-        </div>
-        <div className="a-actions">
-          <button
-            type="button"
-            className="a-btn a-btn-ghost"
-            onClick={() => setShowAlertModal(true)}
+      <PageHeader
+        eyebrow={`Costa Select · Shortlist · ${title}`}
+        title={title}
+        titlePeriod={false}
+        subtitle={subtitle}
+        badge={detail && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '3px 10px',
+              background: 'rgba(0,75,70,0.08)',
+              color: '#004B46',
+              fontSize: 11,
+              fontWeight: 700,
+              borderRadius: 999,
+              letterSpacing: '0.02em',
+            }}
           >
-            {activeAlerts.length > 0 ? (
-              <>
-                <Bell size={14} strokeWidth={2} fill="#004B46" /> Alert actief ({activeAlerts.length})
-              </>
-            ) : (
-              <>
-                <Bell size={14} strokeWidth={2} /> Alert aanzetten
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            className="a-btn a-btn-ghost"
-            disabled={items.length === 0 || pdfLoading}
-            onClick={onDownloadPdf}
-          >
-            {pdfLoading ? (
-              <Loader2 size={14} className="animate-spin" strokeWidth={2} />
-            ) : (
-              <Download size={14} strokeWidth={2} />
-            )}
-            Download PDF
-          </button>
-          <button
-            type="button"
-            className="a-btn a-btn-primary"
-            onClick={() => setShowAddUrl(!showAddUrl)}
-          >
-            <Link2 size={14} strokeWidth={2} /> Voeg woning toe
-          </button>
-        </div>
-      </div>
+            {items.length} {items.length === 1 ? 'woning' : 'woningen'}
+          </span>
+        )}
+        actions={
+          <>
+            <button
+              type="button"
+              className="a-btn a-btn-ghost"
+              onClick={() => setShowAlertModal(true)}
+            >
+              {activeAlerts.length > 0 ? (
+                <>
+                  <Bell size={14} strokeWidth={2} fill="#004B46" /> Alert actief ({activeAlerts.length})
+                </>
+              ) : (
+                <>
+                  <Bell size={14} strokeWidth={2} /> Alert aanzetten
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              className="a-btn a-btn-ghost"
+              disabled={items.length === 0 || pdfLoading}
+              onClick={onDownloadPdf}
+            >
+              {pdfLoading ? (
+                <Loader2 size={14} className="animate-spin" strokeWidth={2} />
+              ) : (
+                <Download size={14} strokeWidth={2} />
+              )}
+              Download PDF
+            </button>
+            <button
+              type="button"
+              className="a-btn a-btn-primary"
+              onClick={() => setShowAddUrl(!showAddUrl)}
+            >
+              <Link2 size={14} strokeWidth={2} /> Voeg woning toe
+            </button>
+          </>
+        }
+      />
+    <div className="a-page" style={{ paddingTop: 16 }}>
+      <button
+        type="button"
+        className="c-back-link"
+        onClick={onBack}
+        style={{ marginBottom: 14 }}
+      >
+        <ArrowLeft size={13} strokeWidth={2} /> Terug naar overzicht
+      </button>
 
       {loading ? (
         <div
