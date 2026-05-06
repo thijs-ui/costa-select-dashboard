@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Coins, Receipt, TrendingUp, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { berekenTargetStatus, formatEuro, getDagVanJaar, MAANDEN } from '@/lib/calculations'
+import { berekenTargetStatus, formatEuro, getDagVanJaar, isPastMonth, MAANDEN } from '@/lib/calculations'
 import { type DatePreset, getDateRange, isInRange } from '@/lib/date-utils'
 import { matchesEntiteit, matchesEntity, useEntity } from '@/lib/entity'
 import {
@@ -107,8 +107,13 @@ export default function DashboardPage() {
     const nettoOmzet = filteredDeals.reduce((s, d) => s + Number(d.netto_commissie_cs ?? 0), 0)
 
     const entityKosten = maandkosten.filter(k => matchesEntiteit(k.entiteit, entity))
+    // isPastMonth: lopende maand telt nog niet mee. Recurring kosten staan
+    // al voor de volledige kalender in de DB, terwijl de bijbehorende
+    // omzet pas geleidelijk binnenkomt — meetellen vóór de maand voorbij
+    // is geeft een vertekend negatief beeld.
     const filteredKosten = entityKosten.filter(k =>
       isInRange(`${k.jaar}-${String(k.maand).padStart(2, '0')}-01`, range)
+      && isPastMonth(k.jaar, k.maand)
     )
     const kostenPeriode = filteredKosten.reduce((s, k) => s + Number(k.bedrag), 0)
     const brutowinst = nettoOmzet - kostenPeriode
@@ -116,7 +121,10 @@ export default function DashboardPage() {
     const filteredLeads = leads.filter(l => matchesEntity(l.regio, entity) && isInRange(l.add_time, range))
     const totaalAdSpend = entityKosten
       .filter(k => AD_POSTEN.includes(k.kosten_posten?.naam ?? ''))
-      .filter(k => isInRange(`${k.jaar}-${String(k.maand).padStart(2, '0')}-01`, range))
+      .filter(k =>
+        isInRange(`${k.jaar}-${String(k.maand).padStart(2, '0')}-01`, range)
+        && isPastMonth(k.jaar, k.maand)
+      )
       .reduce((s, k) => s + Number(k.bedrag), 0)
 
     const filteredAfspraken = afspraken.filter(
@@ -190,7 +198,7 @@ export default function DashboardPage() {
   const chartData = useMemo(() => {
     const kostenPerMaand: Record<number, number> = {}
     computed.entityKosten
-      .filter(k => k.jaar === chartJaar)
+      .filter(k => k.jaar === chartJaar && isPastMonth(k.jaar, k.maand))
       .forEach(k => {
         kostenPerMaand[k.maand] = (kostenPerMaand[k.maand] ?? 0) + Number(k.bedrag)
       })

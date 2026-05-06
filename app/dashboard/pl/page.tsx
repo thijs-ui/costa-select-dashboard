@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { formatEuro, MAANDEN } from '@/lib/calculations'
+import { formatEuro, isPastMonth, MAANDEN } from '@/lib/calculations'
 import { matchesEntiteit, matchesEntity, useEntity } from '@/lib/entity'
 import {
   FinChartCard,
@@ -76,8 +76,11 @@ export default function PLPage() {
     const deals = allDeals.filter(d => matchesEntity(d.regio, entity))
     const kostenData = allKosten.filter(k => matchesEntiteit(k.entiteit, entity))
 
+    // Alleen voorbije maanden: lopende maand heeft recurring kosten al
+    // volledig geboekt, omzet komt pas later — meetellen vertekent YTD.
     const kostenPerMaand: Record<number, number> = {}
     kostenData.forEach(k => {
+      if (!isPastMonth(jaar, k.maand)) return
       kostenPerMaand[k.maand] = (kostenPerMaand[k.maand] ?? 0) + Number(k.bedrag)
     })
 
@@ -152,6 +155,14 @@ export default function PLPage() {
   const sparkOmzet = useMemo(() => rows.map(r => r.netto_omzet), [rows])
   const sparkWinst = useMemo(() => rows.map(r => r.brutowinst), [rows])
 
+  // Sub-label voor Kosten YTD: maakt zichtbaar dat de huidige maand niet
+  // meetelt zolang hij niet voorbij is.
+  const kostenYtdSub = useMemo(() => {
+    const prevIdx = new Date().getMonth() - 1
+    if (prevIdx < 0) return 'nog geen voorbije maanden'
+    return `t/m ${MAANDEN[prevIdx].toLowerCase()}`
+  }, [])
+
   return (
     <div className="fin-page">
       <div className="fin-shell">
@@ -176,7 +187,7 @@ export default function PLPage() {
               <FinKpi
                 label="Kosten YTD"
                 value={formatEuro(totaal.kosten)}
-                sub="alle maandkosten"
+                sub={kostenYtdSub}
                 tone="negative"
               />
               <FinKpi

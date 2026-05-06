@@ -160,3 +160,16 @@ export const MAANDEN = [
   'Jan', 'Feb', 'Mrt', 'Apr', 'Mei', 'Jun',
   'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec',
 ]
+
+// Maandkosten zijn (deels) recurring — kantoor, salarissen etc. staan als
+// rij in de DB voor de hele jaarkalender. Voor aggregaties moeten alleen
+// volledig voorbije maanden meetellen, anders staan toekomstige geboekte
+// kosten al in de "kosten YTD" zonder dat de bijbehorende omzet er ook is.
+// De huidige maand telt pas mee zodra hij voorbij is.
+export function isPastMonth(jaar: number, maand: number, now: Date = new Date()): boolean {
+  const curYear = now.getFullYear()
+  const curMonth = now.getMonth() + 1 // 1-12
+  if (jaar < curYear) return true
+  if (jaar > curYear) return false
+  return maand < curMonth
+}
