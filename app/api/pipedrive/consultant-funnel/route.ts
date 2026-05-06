@@ -23,12 +23,18 @@ export async function GET() {
     return NextResponse.json({ error: 'Geen API token' }, { status: 400 })
   }
 
-  // Fetch leads, users, and all open deals in parallel
+  // Fetch leads (incl. gearchiveerde — geconverteerde leads worden in
+  // Pipedrive automatisch archived en zouden anders uit de telling vallen),
+  // users, en alle open deals in parallel.
   const [leads, users, dealsRaw] = await Promise.all([
-    fetchLeads(token),
+    fetchLeads(token, 'all'),
     fetchUsers(token),
     (async () => {
-      const results: { user_id: { id: number; name: string } | null; status: string }[] = []
+      const results: {
+        user_id: { id: number; name: string } | null
+        status: string
+        add_time: string
+      }[] = []
       let start = 0
       while (true) {
         const res = await fetch(
@@ -45,34 +51,28 @@ export async function GET() {
     })(),
   ])
 
-  // Build user id → name map
   const userMap = new Map<number, string>()
-  for (const u of users) {
-    userMap.set(u.id, u.name)
+  for (const u of users) userMap.set(u.id, u.name)
+
+  // Per user: lijst van add_time-datums (YYYY-MM-DD), niet alleen totalen.
+  // Datums laten de UI client-side filteren op de geselecteerde periode —
+  // anders zou de leads-kolom altijd een lifetime-totaal tonen, ongeacht
+  // de periode-picker.
+  const perUser: Record<string, { leadDates: string[]; openDealDates: string[] }> = {}
+  function bucket(name: string) {
+    if (!perUser[name]) perUser[name] = { leadDates: [], openDealDates: [] }
+    return perUser[name]
   }
 
-  // Count leads per user name
-  const leadsPerUser: Record<string, number> = {}
   for (const lead of leads) {
     const name = userMap.get(lead.owner_id as number) ?? 'Onbekend'
-    leadsPerUser[name] = (leadsPerUser[name] ?? 0) + 1
+    const date = ((lead.add_time as string) ?? '').split('T')[0]
+    if (date) bucket(name).leadDates.push(date)
   }
-
-  // Count open deals per user name
-  const dealsPerUser: Record<string, number> = {}
   for (const deal of dealsRaw) {
     const name = (deal.user_id as { id: number; name: string } | null)?.name ?? 'Onbekend'
-    dealsPerUser[name] = (dealsPerUser[name] ?? 0) + 1
-  }
-
-  // Merge into per-user stats
-  const allNames = new Set([...Object.keys(leadsPerUser), ...Object.keys(dealsPerUser)])
-  const perUser: Record<string, { leads: number; openDeals: number }> = {}
-  for (const name of allNames) {
-    perUser[name] = {
-      leads: leadsPerUser[name] ?? 0,
-      openDeals: dealsPerUser[name] ?? 0,
-    }
+    const date = (deal.add_time ?? '').split(' ')[0]
+    if (date) bucket(name).openDealDates.push(date)
   }
 
   return NextResponse.json({ perUser })

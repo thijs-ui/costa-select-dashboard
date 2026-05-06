@@ -46,8 +46,8 @@ interface Afspraak {
 }
 
 interface PipedriveStats {
-  leads: number
-  openDeals: number
+  leadDates: string[]
+  openDealDates: string[]
 }
 
 interface MakelaarStats {
@@ -87,7 +87,7 @@ function matchPipedriveStats(
   m: { naam: string; pipedrive_naam: string | null },
   perUser: Record<string, PipedriveStats>
 ): PipedriveStats {
-  const empty: PipedriveStats = { leads: 0, openDeals: 0 }
+  const empty: PipedriveStats = { leadDates: [], openDealDates: [] }
   const explicit = m.pipedrive_naam?.trim()
   if (explicit) {
     const target = normalizeName(explicit)
@@ -165,7 +165,12 @@ export default function MakelaarsPage() {
         const gepland = mAfspraken.filter(a => a.status === 'Gepland').length
         const sales = mDeals.length
 
-        const { leads, openDeals } = matchPipedriveStats(m, pipedrivePerUser)
+        // Periode-filter toepassen: leads en open-deals vallen onder de
+        // geselecteerde range op basis van Pipedrive's add_time. Zonder
+        // dit toonden we lifetime-totalen, ongeacht de picker.
+        const pdStats = matchPipedriveStats(m, pipedrivePerUser)
+        const leads = pdStats.leadDates.filter(d => isInRange(d, range)).length
+        const openDeals = pdStats.openDealDates.filter(d => isInRange(d, range)).length
 
         return {
           makelaar: m,
