@@ -10,73 +10,40 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import * as React from 'react'
 import { ShortlistPDF } from '../app/api/woninglijst/pdf/route'
 
-const items = [
-  {
-    title: 'Casa independiente in Marbella',
-    url: 'https://idealista.com/inmueble/123',
-    price: 1780000,
-    location: 'Marbella',
-    bedrooms: 4,
-    bathrooms: 4,
-    size_m2: 280,
+// 14 items om de exacte user-scenario te reproduceren waar cards 4 en 12
+// over 2 pagina's gesplitst werden. Lange titles ingeforceerd.
+const items = Array.from({ length: 14 }, (_, i) => {
+  const longTitles = [
+    'Casa independiente in Marbella',
+    'Casa independiente',
+    'Casa independiente en calle Francisco Zurbarán, 11',
+    'Casa independiente',
+    'Casa independiente',
+    'Casa independiente',
+    'Piso en Arrabal del Altos Rodeo',
+    'Casa independiente en avenida Generalife',
+    'Casa independiente en Diseminado Poligono 26',
+    'Piso',
+    'Piso en Urbanización La Reserva s/n',
+    'Piso en avenida Aguamarina',
+    'Piso en calle del Green',
+    'Casa independiente',
+  ]
+  return {
+    title: longTitles[i],
+    url: `https://idealista.com/inmueble/${i}`,
+    price: [1780000, 1695000, 595000, 575000, 583500, 595000, 595000, 2650000, 2895000, 245000, 299000, 300000, 279000, 1795000][i],
+    location: ['Marbella','Marbella','Jávea/Xàbia','Jávea/Xàbia','Jávea/Xàbia','Jávea/Xàbia','Marbella','Marbella','Marbella','Estepona','Marbella','Benalmádena','Estepona','Marbella'][i],
+    bedrooms: [4,4,3,3,3,3,2,4,4,2,2,2,2,4][i],
+    bathrooms: [4,4,2,2,2,2,2,4,4,2,2,1,2,3][i],
+    size_m2: [280,240,156,141,234,210,92,418,294,79,115,80,98,248][i],
+    plot_m2: null,
     thumbnail: null,
     source: 'idealista',
-    notities: 'Perfecte ligging — klant wil graag bezichtigen volgende week.',
-    is_favorite: true,
-  },
-  {
-    title: 'Casa independiente in calle Francisco Zurbarán, 11',
-    url: 'https://idealista.com/inmueble/456',
-    price: 595000,
-    location: 'Jávea/Xàbia',
-    bedrooms: 3,
-    bathrooms: 2,
-    size_m2: 156,
-    thumbnail: null,
-    source: 'idealista',
-    notities: '',
-    is_favorite: false,
-  },
-  {
-    title: 'Casa independiente',
-    url: 'https://idealista.com/inmueble/789',
-    price: 575000,
-    location: 'Jávea/Xàbia',
-    bedrooms: 3,
-    bathrooms: 2,
-    size_m2: 141,
-    thumbnail: null,
-    source: 'idealista',
-    notities: '',
-    is_favorite: true,
-  },
-  {
-    title: 'Piso en Arrabal del Altos Rodeo',
-    url: 'https://idealista.com/inmueble/abc',
-    price: 595000,
-    location: 'Marbella',
-    bedrooms: 2,
-    bathrooms: 2,
-    size_m2: 92,
-    thumbnail: null,
-    source: 'idealista',
-    notities: '',
-    is_favorite: false,
-  },
-  {
-    title: 'Casa independiente en avenida Generalife',
-    url: 'https://idealista.com/inmueble/def',
-    price: 2650000,
-    location: 'Marbella',
-    bedrooms: 4,
-    bathrooms: 4,
-    size_m2: 418,
-    thumbnail: null,
-    source: 'idealista',
-    notities: '',
-    is_favorite: false,
-  },
-]
+    notities: i === 0 ? 'Perfecte ligging — klant wil graag bezichtigen volgende week.' : '',
+    is_favorite: i < 2,
+  }
+})
 
 async function main() {
   const buffer = await renderToBuffer(

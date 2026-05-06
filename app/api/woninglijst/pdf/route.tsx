@@ -881,7 +881,18 @@ function CardInfo({ item, variant, isFav }: CardProps & { isFav: boolean }) {
       {item.location ? (
         <Text style={s.cardLoc} wrap={false}>{item.location}</Text>
       ) : null}
-      <Text style={titleStyles}>
+      {/* maxLines={2} cap'pt lange titles ('Casa independiente en calle
+          Francisco Zurbarán, 11.') op 2 regels met ellipsis. Voorkomt dat
+          card-hoogte uitloopt en @react-pdf de cards splitst over pagina's. */}
+      <Text
+        style={[
+          ...titleStyles,
+          {
+            maxLines: variant === 'solo' ? 3 : 2,
+            textOverflow: 'ellipsis',
+          },
+        ]}
+      >
         {(item.title || 'Woning zonder titel') + '.'}
       </Text>
 
@@ -963,12 +974,25 @@ function ListingCard({ item, index, variant }: CardProps) {
   const isFav =
     variant === 'favorite' ||
     ((variant === 'solo' || variant === 'compact' || variant === 'grid') && item.is_favorite)
-  return (
-    <View style={isFav ? s.cardFav : s.card}>
+  // wrap={false}: voorkomt dat @react-pdf de card halverwege splitst over
+  // twee pagina's (image op page N, info op page N+1) wanneer een lange
+  // title de card-hoogte boven de allocated 50% van page-body uitduwt.
+  // Card wordt dan in z'n geheel doorgeschoven naar de volgende pagina.
+  const cardInner = (
+    <View style={isFav ? s.cardFav : s.card} wrap={false}>
       <CardThumb item={item} index={index} variant={variant} isFav={isFav} />
       <CardInfo item={item} variant={variant} isFav={isFav} />
     </View>
   )
+  // Sun-tint outer ring (3pt) om favorites — design's "frame ring" effect.
+  if (isFav && variant !== 'solo') {
+    return (
+      <View style={s.favOuter} wrap={false}>
+        {cardInner}
+      </View>
+    )
+  }
+  return cardInner
 }
 
 // ─── Pages ────────────────────────────────────────────────────────────────
