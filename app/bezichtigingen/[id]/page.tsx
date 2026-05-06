@@ -136,6 +136,7 @@ export default function BezichtigingDetailPage({
   const [stops, setStops] = useState<Stop[]>([])
   const [loading, setLoading] = useState(true)
   const [optimizing, setOptimizing] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [error, setError] = useState('')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -359,6 +360,46 @@ export default function BezichtigingDetailPage({
     }
   }
 
+  // ─── PDF download ─────────────────────────────
+  // Stuur de huidige trip + stops + route naar de PDF-route. Server rendert
+  // via @react-pdf en stuurt PDF binary terug; we triggeren een download via
+  // een blob-URL.
+  async function downloadPDF() {
+    if (!trip || !trip.route_data) return
+    setDownloading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/bezichtigingen/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          trip,
+          stops,
+          route: trip.route_data,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Mislukt' }))
+        throw new Error(data.error || 'PDF-export mislukt')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safe = (trip.client_name || 'klant').replace(/\s+/g, '-').toLowerCase()
+      a.download = `bezichtigingsdag-${safe}-${trip.trip_date}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PDF-export mislukt')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   // ─── Render ───────────────────────────────────
   if (loading) {
     return (
@@ -489,11 +530,19 @@ export default function BezichtigingDetailPage({
                 </BzButton>
                 <BzButton
                   variant="ghost"
-                  disabled={!route}
-                  onClick={() => window.print()}
+                  disabled={!route || downloading}
+                  onClick={downloadPDF}
                   className="flex-1"
                 >
-                  <Printer size={14} strokeWidth={2} /> Print
+                  {downloading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" strokeWidth={2} /> PDF maken…
+                    </>
+                  ) : (
+                    <>
+                      <Printer size={14} strokeWidth={2} /> Download PDF
+                    </>
+                  )}
                 </BzButton>
               </div>
 
