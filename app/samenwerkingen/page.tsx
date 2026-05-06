@@ -17,6 +17,7 @@ import {
   SamTypeToggle,
 } from '@/components/samenwerkingen/parts'
 import { SamModal } from '@/components/samenwerkingen/Modal'
+import { SamCreateModal } from '@/components/samenwerkingen/CreateModal'
 import {
   REGIONS_AGENCY,
   REGIONS_PARTNER,
@@ -144,6 +145,7 @@ export default function SamenwerkingenPage() {
   const [group, setGroup] = useState(false)
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' })
   const [opened, setOpened] = useState<AnyItem | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -274,8 +276,18 @@ export default function SamenwerkingenPage() {
   }
 
   const onCreate = () => {
-    const label = type === 'agencies' ? 'makelaar' : type === 'team' ? 'teamlid' : 'partner'
-    alert(`Nieuwe ${label} toevoegen — binnenkort beschikbaar.`)
+    if (type === 'team') {
+      alert('Team-leden zijn read-only — voeg toe via Supabase Studio.')
+      return
+    }
+    setCreateOpen(true)
+  }
+  const onCreated = (item: Agency | Partner) => {
+    if (type === 'agencies') {
+      setAgencies(prev => [normalizeAgency(item as RawAgency), ...prev])
+    } else {
+      setPartners(prev => [normalizePartner(item as RawPartner), ...prev])
+    }
   }
   const onEdit = (item: AnyItem) =>
     alert(`"${item.name}" bewerken — binnenkort beschikbaar.`)
@@ -536,6 +548,14 @@ export default function SamenwerkingenPage() {
           onEdit={onEdit}
           onTogglePreferred={onTogglePreferred}
           onToggleActive={onToggleActive}
+        />
+      )}
+
+      {createOpen && type !== 'team' && (
+        <SamCreateModal
+          type={type}
+          onClose={() => setCreateOpen(false)}
+          onCreated={onCreated}
         />
       )}
     </div>

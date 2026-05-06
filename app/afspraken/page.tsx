@@ -61,6 +61,12 @@ const emptyForm = {
 
 const AD_POSTEN = ['Google Ads', 'Meta Ads (Facebook/Instagram)', 'LinkedIn Ads']
 
+// Sorteer afspraken aflopend op datum (meest recente boven). Toegepast na
+// elke setAfspraken zodat datum-wijziging direct herordent.
+function byDateDesc(a: { datum: string }, b: { datum: string }): number {
+  return b.datum.localeCompare(a.datum)
+}
+
 export default function AfsprakenPage() {
   const { entity, setEntity } = useEntity()
   const [afspraken, setAfspraken] = useState<Afspraak[]>([])
@@ -98,7 +104,7 @@ export default function AfsprakenPage() {
       const kData = kRes.status === 'fulfilled' ? (kRes.value.data ?? []) : []
       const pData = pRes.status === 'fulfilled' ? (pRes.value.data ?? []) : []
 
-      setAfspraken(aData as Afspraak[])
+      setAfspraken((aData as Afspraak[]).sort(byDateDesc))
       setMakelaars(mData as Makelaar[])
       setPartners(pData as Partner[])
       setAllAdPosten(kData as unknown as AdPost[])
@@ -158,11 +164,11 @@ export default function AfsprakenPage() {
     }
     if (editingId) {
       await supabase.from('afspraken').update(payload).eq('id', editingId)
-      setAfspraken((prev) => prev.map((a) => a.id === editingId ? { ...a, ...payload } as Afspraak : a))
+      setAfspraken((prev) => prev.map((a) => a.id === editingId ? { ...a, ...payload } as Afspraak : a).sort(byDateDesc))
       setEditingId(null)
     } else {
       const { data } = await supabase.from('afspraken').insert(payload).select().single()
-      if (data) setAfspraken([data as Afspraak, ...afspraken])
+      if (data) setAfspraken([data as Afspraak, ...afspraken].sort(byDateDesc))
     }
     setForm(emptyForm)
     setSaving(false)
@@ -170,12 +176,12 @@ export default function AfsprakenPage() {
 
   async function updateStatus(id: string, status: string) {
     await supabase.from('afspraken').update({ status }).eq('id', id)
-    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, status } : a))
+    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, status } : a).sort(byDateDesc))
   }
 
   async function updateResultaat(id: string, resultaat: string) {
     await supabase.from('afspraken').update({ resultaat: resultaat || null }).eq('id', id)
-    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, resultaat: resultaat || null } : a))
+    setAfspraken((prev) => prev.map((a) => a.id === id ? { ...a, resultaat: resultaat || null } : a).sort(byDateDesc))
   }
 
   async function deleteAfspraak(id: string, naam: string) {
