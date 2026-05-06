@@ -403,8 +403,12 @@ const s = StyleSheet.create({
   cardsGrid2x2Row: { flexDirection: 'row' },
 
   // ── Card (regular, horizontal: thumb left, info right) ──
+  // Vaste height + overflow hidden: forceert 2-per-pagina ongeacht content.
+  // Body landscape A4 (595pt) − header (39) − bodyPad (42) = 514pt.
+  // SectionTitle ~60pt → ~454 voor cards − 12 margin / 2 = 221 per card.
+  // 215pt geeft veiligheidsmarge voor section-title varianten.
   card: {
-    flex: 1,
+    height: 215,
     flexDirection: 'row',
     backgroundColor: MARBLE,
     borderWidth: 1,
@@ -415,12 +419,12 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   cardLast: { marginBottom: 0 },
-  // Favorite outer wrapper — 3pt sun-tint ring
+  // Favorite outer wrapper — 3pt sun-tint ring (height = card+padding*2)
   favOuter: {
     backgroundColor: SUN_TINT,
     padding: 3,
     borderRadius: 2,
-    flex: 1,
+    height: 215,
     marginBottom: 12,
   },
   favOuterLast: { marginBottom: 0 },
@@ -883,7 +887,17 @@ function CardInfo({ item, variant, isFav }: CardProps & { isFav: boolean }) {
       {showNote && (
         <View style={noteStyles}>
           <Text style={s.cardNoteLbl}>Notitie consultant</Text>
-          <Text style={noteTextStyles}>{item.notities}</Text>
+          <Text
+            style={[
+              ...noteTextStyles,
+              {
+                maxLines: variant === 'compact' ? 2 : 3,
+                textOverflow: 'ellipsis',
+              },
+            ]}
+          >
+            {item.notities}
+          </Text>
         </View>
       )}
 
@@ -991,10 +1005,6 @@ function CoverPage({
   beeldmerkSrc?: string
 }) {
   const hero = pickHero(items)
-  const total = items.length
-  const favCount = items.filter(i => i.is_favorite).length
-  const regions = uniqueRegions(items)
-  const regionsText = regions.slice(0, 4).join(' · ')
 
   return (
     <Page size="A4" orientation="landscape" style={s.page}>
@@ -1014,26 +1024,6 @@ function CoverPage({
             <Text style={s.coverPre}>Een persoonlijke selectie</Text>
             <Text style={s.coverTitle}>Voor</Text>
             <Text style={s.coverName}>{klantNaam + '.'}</Text>
-            <View style={s.coverTick} />
-
-            <View style={s.coverMeta}>
-              <View style={s.coverMetaItem}>
-                <Text style={s.coverMetaL}>Woningen</Text>
-                <Text style={s.coverMetaV}>{total}</Text>
-              </View>
-              {favCount > 0 && (
-                <View style={s.coverMetaItem}>
-                  <Text style={s.coverMetaL}>Favorieten</Text>
-                  <Text style={s.coverMetaV}>{favCount}</Text>
-                </View>
-              )}
-              {regionsText ? (
-                <View style={[s.coverMetaItem, s.coverMetaItemLast]}>
-                  <Text style={s.coverMetaL}>{"Regio's"}</Text>
-                  <Text style={[s.coverMetaV, s.coverMetaVSm]}>{regionsText}</Text>
-                </View>
-              ) : null}
-            </View>
           </View>
         </View>
 
@@ -1075,7 +1065,7 @@ function ListingPage({
   h2?: string
 }) {
   return (
-    <Page size="A4" orientation="landscape" style={s.page}>
+    <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
       <HeaderBar wordmarkSrc={wordmarkSrc} />
       <View style={s.body}>
         <SectionTitle eyebrow="De selectie" h2={h2 || 'Geselecteerde woningen.'} />

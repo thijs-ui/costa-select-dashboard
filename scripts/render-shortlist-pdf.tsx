@@ -40,8 +40,15 @@ const items = Array.from({ length: 14 }, (_, i) => {
     plot_m2: null,
     thumbnail: null,
     source: 'idealista',
-    notities: i === 0 ? 'Perfecte ligging — klant wil graag bezichtigen volgende week.' : '',
-    is_favorite: i < 2,
+    notities:
+      i === 0
+        ? 'Perfecte ligging op loopafstand van het strand. Klant wil graag bezichtigen volgende week en heeft al budgettoezegging van de bank gekregen voor dit prijssegment. De golfvereniging om de hoek is bovendien een grote plus.'
+        : i === 1
+        ? 'Recent gerenoveerd, kwalitatief sterk afgewerkt. Eigenaar is gemotiveerd. Onderhandelingsruimte vermoed ik op ~5%.'
+        : i === 7
+        ? 'Top-3 match op basis van de voorkeuren — modern, ruim, en een privé zwembad. Notitie: er is een kleine zaak met de buren over een muur die we vóór bezichtiging willen uitvragen bij de makelaar.'
+        : '',
+    is_favorite: i === 0 || i === 1 || i === 7,
   }
 })
 
