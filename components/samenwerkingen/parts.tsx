@@ -9,7 +9,6 @@ import {
   Eye,
   Home,
   Lock,
-  Mail,
   MapPin,
   MoreHorizontal,
   Phone,
@@ -553,11 +552,6 @@ export function SamAgencyTable({
             {lc.label}
           </span>
         </td>
-        <td className="actions" onClick={e => e.stopPropagation()}>
-          <button className="sam-row-action" onClick={() => onContact(a, 'email')} title="E-mail">
-            <Mail size={14} />
-          </button>
-        </td>
       </tr>
     )
   }
@@ -590,7 +584,6 @@ export function SamAgencyTable({
         >
           Laatste contact <SortArrow k="last_contact_days" sort={sort} />
         </th>
-        <th></th>
       </tr>
     </thead>
   )
@@ -611,7 +604,7 @@ export function SamAgencyTable({
             {keys.map(k => (
               <Fragment key={`g-${k}`}>
                 <tr className="group-header">
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     {k}
                     <span className="group-cnt">{groups[k].length}</span>
                   </td>
@@ -694,11 +687,6 @@ export function SamPartnerTable({
             {lc.label}
           </span>
         </td>
-        <td className="actions" onClick={e => e.stopPropagation()}>
-          <button className="sam-row-action" onClick={() => onContact(p, 'email')} title="E-mail">
-            <Mail size={14} />
-          </button>
-        </td>
       </tr>
     )
   }
@@ -733,7 +721,6 @@ export function SamPartnerTable({
         >
           Laatste contact <SortArrow k="last_contact_days" sort={sort} />
         </th>
-        <th></th>
       </tr>
     </thead>
   )
@@ -755,7 +742,7 @@ export function SamPartnerTable({
             {keys.map(k => (
               <Fragment key={`g-${k}`}>
                 <tr className="group-header">
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     {k}
                     <span className="group-cnt">{groups[k].length}</span>
                   </td>
