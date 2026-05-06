@@ -273,17 +273,19 @@ export function SamStats({ items, type }: { items: (Agency | Partner | TeamMembe
           Top-tier samenwerking
         </span>
       </div>
-      <div className="sam-stat">
-        <span className="sam-stat-label">Gem. betrouwbaarheid</span>
-        <span className="sam-stat-value">
-          {avgRel}
-          <span style={{ fontSize: 14, opacity: 0.5, fontWeight: 600, marginLeft: 2 }}>/5</span>
-        </span>
-        <span className="sam-stat-foot">
-          <TrendingUp size={11} />
-          Op basis van laatste deals
-        </span>
-      </div>
+      {type !== 'team' && (
+        <div className="sam-stat">
+          <span className="sam-stat-label">Gem. betrouwbaarheid</span>
+          <span className="sam-stat-value">
+            {avgRel}
+            <span style={{ fontSize: 14, opacity: 0.5, fontWeight: 600, marginLeft: 2 }}>/5</span>
+          </span>
+          <span className="sam-stat-foot">
+            <TrendingUp size={11} />
+            Op basis van laatste deals
+          </span>
+        </div>
+      )}
       <div className="sam-stat">
         <span className="sam-stat-label">Contact recency</span>
         <span className="sam-stat-value" style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -834,9 +836,6 @@ export function SamTeamTable({
             </span>
           )}
         </td>
-        <td>
-          <Reliability value={m.reliability_score} />
-        </td>
         <td className="hide-sm">
           <span className={`sam-last-contact ${lc.cls}`}>
             <span className="sam-contact-dot" />
@@ -866,9 +865,6 @@ export function SamTeamTable({
             Regio <SortArrow k="region" sort={sort} />
           </th>
         )}
-        <th className={thCls('reliability_score', sort)} onClick={() => onSort('reliability_score')}>
-          Betrouwbaarheid <SortArrow k="reliability_score" sort={sort} />
-        </th>
         <th
           className={thCls('last_contact_days', sort, 'hide-sm')}
           onClick={() => onSort('last_contact_days')}
@@ -896,7 +892,7 @@ export function SamTeamTable({
             {keys.map(k => (
               <Fragment key={`g-${k}`}>
                 <tr className="group-header">
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     {k}
                     <span className="group-cnt">{groups[k].length}</span>
                   </td>
@@ -954,7 +950,7 @@ export function SamCardView({
                 <div className="sam-card-name">{i.name}</div>
                 <div className="sam-card-sub">{sub}</div>
               </div>
-              <Reliability value={i.reliability_score} hideNum />
+              {!isTeam && <Reliability value={i.reliability_score} hideNum />}
             </div>
             {!isTeam && (
               <div className="sam-card-badges">

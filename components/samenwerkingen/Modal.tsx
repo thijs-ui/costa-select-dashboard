@@ -102,16 +102,18 @@ export function SamModal({
         </div>
 
         <div className="sam-modal-body">
-          {/* Reliability */}
-          <div className="sam-modal-section">
-            <div className="sam-modal-rel">
-              <span className="sam-modal-rel-label">Betrouwbaarheid</span>
-              <Reliability value={item.reliability_score} />
-              <span style={{ fontSize: 11, color: 'var(--fg-muted)', marginLeft: 6 }}>
-                {item.reliability_score ? REL_LABEL[item.reliability_score] : ''}
-              </span>
+          {/* Reliability — niet relevant voor eigen team-leden */}
+          {!isTeam && (
+            <div className="sam-modal-section">
+              <div className="sam-modal-rel">
+                <span className="sam-modal-rel-label">Betrouwbaarheid</span>
+                <Reliability value={item.reliability_score} />
+                <span style={{ fontSize: 11, color: 'var(--fg-muted)', marginLeft: 6 }}>
+                  {item.reliability_score ? REL_LABEL[item.reliability_score] : ''}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Contact */}
           <div className="sam-modal-section">
