@@ -21,6 +21,7 @@ import {
   type Agency,
   type Partner,
   type SamType,
+  type TeamMember,
 } from './types'
 
 export function SamModal({
@@ -33,19 +34,21 @@ export function SamModal({
   onTogglePreferred,
   onToggleActive,
 }: {
-  item: Agency | Partner
+  item: Agency | Partner | TeamMember
   type: SamType
   isAdmin: boolean
   onClose: () => void
-  onContact: (item: Agency | Partner, kind: 'email' | 'whatsapp') => void
-  onEdit: (item: Agency | Partner) => void
-  onTogglePreferred: (item: Agency | Partner) => void
-  onToggleActive: (item: Agency | Partner) => void
+  onContact: (item: Agency | Partner | TeamMember, kind: 'email' | 'whatsapp') => void
+  onEdit: (item: Agency | Partner | TeamMember) => void
+  onTogglePreferred: (item: Agency | Partner | TeamMember) => void
+  onToggleActive: (item: Agency | Partner | TeamMember) => void
 }) {
   const isAgency = type === 'agencies'
+  const isTeam = type === 'team'
   const agency = item as Agency
   const partner = item as Partner
-  const headerTypeClass = isAgency ? '' : `partner-${partner.type}`
+  const teamMember = item as TeamMember
+  const headerTypeClass = isAgency ? '' : isTeam ? '' : `partner-${partner.type}`
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -57,6 +60,8 @@ export function SamModal({
 
   const eyebrow = isAgency
     ? `MAKELAAR · ${agency.region}`
+    : isTeam
+    ? `TEAM${teamMember.role ? ' · ' + teamMember.role.toUpperCase() : ''}${teamMember.region ? ' · ' + teamMember.region : ''}`
     : `${(TYPE_LABELS[partner.type] || 'Partner').toUpperCase()}${partner.region ? ' · ' + partner.region : ''}`
 
   const lc = fmtLastContact(item.last_contact_days)
@@ -86,9 +91,11 @@ export function SamModal({
               </span>
             )}
           </div>
-          <div className="sam-modal-badges">
-            <Badges item={item} isAgency={isAgency} />
-          </div>
+          {!isTeam && (
+            <div className="sam-modal-badges">
+              <Badges item={item as Agency | Partner} isAgency={isAgency} />
+            </div>
+          )}
           <button className="sam-modal-close" onClick={onClose} aria-label="Sluiten">
             <X size={16} />
           </button>
@@ -138,24 +145,28 @@ export function SamModal({
                   )}
                 </span>
               </div>
-              <div className="sam-field-readonly">
-                <span className="lbl">Website</span>
-                <span className="val">
-                  {item.website ? (
-                    <a href={item.website} target="_blank" rel="noopener noreferrer">
-                      {item.website.replace(/^https?:\/\//, '')}
-                    </a>
-                  ) : (
-                    <span className="muted">—</span>
-                  )}
-                </span>
-              </div>
-              <div className="sam-field-readonly">
-                <span className="lbl">Talen</span>
-                <span className="val">
-                  <Langs langs={item.languages} />
-                </span>
-              </div>
+              {!isTeam && (
+                <div className="sam-field-readonly">
+                  <span className="lbl">Website</span>
+                  <span className="val">
+                    {(item as Agency | Partner).website ? (
+                      <a href={(item as Agency | Partner).website!} target="_blank" rel="noopener noreferrer">
+                        {(item as Agency | Partner).website!.replace(/^https?:\/\//, '')}
+                      </a>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {!isTeam && (
+                <div className="sam-field-readonly">
+                  <span className="lbl">Talen</span>
+                  <span className="val">
+                    <Langs langs={(item as Agency | Partner).languages} />
+                  </span>
+                </div>
+              )}
               <div className="sam-field-readonly">
                 <span className="lbl">Laatste contact</span>
                 <span className="val">
@@ -198,6 +209,19 @@ export function SamModal({
                     </span>
                   </div>
                 </>
+              ) : isTeam ? (
+                <>
+                  <div className="sam-field-readonly">
+                    <span className="lbl">Rol</span>
+                    <span className="val">{teamMember.role || <span className="muted">—</span>}</span>
+                  </div>
+                  <div className="sam-field-readonly">
+                    <span className="lbl">Regio</span>
+                    <span className="val">
+                      {teamMember.region || <span className="muted">Heel Spanje</span>}
+                    </span>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="sam-field-readonly">
@@ -225,8 +249,8 @@ export function SamModal({
             </div>
           </div>
 
-          {/* Commission / arrangement */}
-          {((isAgency && agency.commission_notes) ||
+          {/* Commission / arrangement (alleen agency/partner) */}
+          {!isTeam && ((isAgency && agency.commission_notes) ||
             (!isAgency && partner.commission_arrangement)) && (
             <div className="sam-modal-section">
               <h4 className="sam-modal-section-title">
@@ -239,14 +263,19 @@ export function SamModal({
           )}
 
           {/* Internal notes */}
-          {(isAgency ? agency.notes : partner.internal_notes) && (
-            <div className="sam-modal-section">
-              <h4 className="sam-modal-section-title">Interne notities</h4>
-              <div className="sam-notes-block">
-                {isAgency ? agency.notes : partner.internal_notes}
+          {(() => {
+            const notes = isAgency
+              ? agency.notes
+              : isTeam
+              ? teamMember.internal_notes
+              : partner.internal_notes
+            return notes ? (
+              <div className="sam-modal-section">
+                <h4 className="sam-modal-section-title">Interne notities</h4>
+                <div className="sam-notes-block">{notes}</div>
               </div>
-            </div>
-          )}
+            ) : null
+          })()}
         </div>
 
         <div className="sam-modal-footer">

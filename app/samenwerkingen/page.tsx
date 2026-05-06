@@ -12,6 +12,7 @@ import {
   SamPartnerTable,
   SamRegionStrip,
   SamStats,
+  SamTeamTable,
   SamToolbar,
   SamTypeToggle,
 } from '@/components/samenwerkingen/parts'
@@ -19,6 +20,7 @@ import { SamModal } from '@/components/samenwerkingen/Modal'
 import {
   REGIONS_AGENCY,
   REGIONS_PARTNER,
+  REGIONS_TEAM,
   TYPE_LABELS,
   type Agency,
   type Lang,
@@ -27,9 +29,10 @@ import {
   type SamView,
   type SortKey,
   type SortState,
+  type TeamMember,
 } from '@/components/samenwerkingen/types'
 
-type AnyItem = Agency | Partner
+type AnyItem = Agency | Partner | TeamMember
 
 interface RawAgency extends Omit<Agency, 'is_preferred' | 'languages' | 'last_contact_days'> {
   is_preferred?: boolean
@@ -43,6 +46,12 @@ interface RawPartner extends Omit<Partner, 'is_preferred' | 'languages' | 'last_
   languages?: Lang[]
   last_contact_days?: number | null
   reliability_score?: number | null
+}
+
+interface RawTeamMember extends Omit<TeamMember, 'is_preferred' | 'last_contact_days' | 'is_active'> {
+  is_active?: boolean
+  is_preferred?: boolean
+  last_contact_days?: number | null
 }
 
 function normalizeAgency(a: RawAgency): Agency {
@@ -66,6 +75,16 @@ function normalizePartner(p: RawPartner): Partner {
   }
 }
 
+function normalizeTeamMember(m: RawTeamMember): TeamMember {
+  return {
+    ...m,
+    is_active: m.is_active ?? true,
+    is_preferred: m.is_preferred ?? false,
+    last_contact_days: m.last_contact_days ?? null,
+    reliability_score: m.reliability_score ?? null,
+  }
+}
+
 function getSortValue(item: AnyItem, key: SortKey): string | number {
   switch (key) {
     case 'name':
@@ -73,7 +92,11 @@ function getSortValue(item: AnyItem, key: SortKey): string | number {
     case 'region':
       return (item.region ?? '').toLowerCase()
     case 'type':
-      return 'type' in item ? (item as Partner).type : ''
+      // Partner heeft 'type' enum, TeamMember heeft 'role' string. Beide
+      // sorteerbaar via dezelfde key voor UI-consistency.
+      if ('type' in item) return (item as Partner).type
+      if ('role' in item) return ((item as TeamMember).role ?? '').toLowerCase()
+      return ''
     case 'reliability_score':
       return item.reliability_score ?? -1
     case 'last_contact_days':
@@ -109,6 +132,7 @@ export default function SamenwerkingenPage() {
 
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
+  const [team, setTeam] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
 
   const [type, setType] = useState<SamType>('agencies')
@@ -123,9 +147,10 @@ export default function SamenwerkingenPage() {
 
   const load = useCallback(async () => {
     try {
-      const [aRes, pRes] = await Promise.allSettled([
+      const [aRes, pRes, tRes] = await Promise.allSettled([
         fetch('/api/agentschappen', { credentials: 'include', cache: 'no-store' }),
         fetch('/api/samenwerkingen', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/team', { credentials: 'include', cache: 'no-store' }),
       ])
       if (aRes.status === 'fulfilled' && aRes.value.ok) {
         const data: RawAgency[] = await aRes.value.json()
@@ -134,6 +159,10 @@ export default function SamenwerkingenPage() {
       if (pRes.status === 'fulfilled' && pRes.value.ok) {
         const data: RawPartner[] = await pRes.value.json()
         setPartners(data.map(normalizePartner))
+      }
+      if (tRes.status === 'fulfilled' && tRes.value.ok) {
+        const data: RawTeamMember[] = await tRes.value.json()
+        setTeam(data.map(normalizeTeamMember))
       }
     } catch (e) {
       console.error('[load] failed:', e)
@@ -160,8 +189,14 @@ export default function SamenwerkingenPage() {
     setGroup(type === 'agencies')
   }, [type])
 
-  const sourceItems: AnyItem[] = type === 'agencies' ? agencies : partners
-  const regions = type === 'agencies' ? REGIONS_AGENCY : REGIONS_PARTNER
+  const sourceItems: AnyItem[] =
+    type === 'agencies' ? agencies :
+    type === 'team'     ? team :
+                          partners
+  const regions =
+    type === 'agencies' ? REGIONS_AGENCY :
+    type === 'team'     ? REGIONS_TEAM :
+                          REGIONS_PARTNER
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -178,8 +213,10 @@ export default function SamenwerkingenPage() {
         i.region,
         (i as Agency).city,
         (i as Partner).specialism,
+        (i as TeamMember).role,
         (i as Agency).notes,
         (i as Partner).internal_notes,
+        (i as TeamMember).internal_notes,
       ]
         .filter(Boolean)
         .join(' ')
@@ -236,12 +273,18 @@ export default function SamenwerkingenPage() {
     }
   }
 
-  const onCreate = () =>
-    alert(`Nieuwe ${type === 'agencies' ? 'makelaar' : 'partner'} toevoegen — binnenkort beschikbaar.`)
+  const onCreate = () => {
+    const label = type === 'agencies' ? 'makelaar' : type === 'team' ? 'teamlid' : 'partner'
+    alert(`Nieuwe ${label} toevoegen — binnenkort beschikbaar.`)
+  }
   const onEdit = (item: AnyItem) =>
     alert(`"${item.name}" bewerken — binnenkort beschikbaar.`)
 
   const onTogglePreferred = async (item: AnyItem) => {
+    if (type === 'team') {
+      alert('Team-leden zijn read-only — bewerk in Supabase.')
+      return
+    }
     const next = !item.is_preferred
     const path = type === 'agencies' ? '/api/agentschappen' : '/api/samenwerkingen'
     const res = await fetch(path, {
@@ -264,6 +307,10 @@ export default function SamenwerkingenPage() {
   }
 
   const onToggleActive = async (item: AnyItem) => {
+    if (type === 'team') {
+      alert('Team-leden zijn read-only — bewerk in Supabase.')
+      return
+    }
     const next = !(item.is_active !== false)
     const path = type === 'agencies' ? '/api/agentschappen' : '/api/samenwerkingen'
     const res = await fetch(path, {
@@ -355,12 +402,43 @@ export default function SamenwerkingenPage() {
       })
       downloadCSV(`partners-${new Date().toISOString().slice(0, 10)}.csv`, rows)
     }
+    if (type === 'team') {
+      const rows: string[][] = [
+        [
+          'Naam',
+          'Rol',
+          'Regio',
+          'Contact',
+          'Telefoon',
+          'E-mail',
+          'Betrouwbaarheid',
+          'Laatste contact (dagen)',
+          'Preferred',
+          'Actief',
+        ],
+      ]
+      ;(sorted as TeamMember[]).forEach(m => {
+        rows.push([
+          m.name,
+          m.role ?? '',
+          m.region ?? '',
+          m.contact_name ?? '',
+          m.contact_phone ?? '',
+          m.contact_email ?? '',
+          m.reliability_score?.toString() ?? '',
+          m.last_contact_days?.toString() ?? '',
+          m.is_preferred ? 'ja' : 'nee',
+          m.is_active === false ? 'nee' : 'ja',
+        ])
+      })
+      downloadCSV(`team-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+    }
   }
 
   const activeCount =
-    type === 'agencies'
-      ? agencies.filter(a => a.is_active !== false).length
-      : partners.filter(p => p.is_active !== false).length
+    type === 'agencies' ? agencies.filter(a => a.is_active !== false).length :
+    type === 'team'     ? team.filter(m => m.is_active !== false).length :
+                          partners.filter(p => p.is_active !== false).length
 
   return (
     <div className="sam-page">
@@ -380,6 +458,7 @@ export default function SamenwerkingenPage() {
               onChange={handleTypeChange}
               agencyCount={agencies.filter(a => a.is_active !== false).length}
               partnerCount={partners.filter(p => p.is_active !== false).length}
+              teamCount={team.filter(m => m.is_active !== false).length}
             />
           </div>
 
@@ -421,6 +500,15 @@ export default function SamenwerkingenPage() {
           ) : type === 'agencies' ? (
             <SamAgencyTable
               items={sorted as Agency[]}
+              group={group}
+              sort={sort}
+              onSort={handleSort}
+              onOpen={onOpen}
+              onContact={onContact}
+            />
+          ) : type === 'team' ? (
+            <SamTeamTable
+              items={sorted as TeamMember[]}
               group={group}
               sort={sort}
               onSort={handleSort}

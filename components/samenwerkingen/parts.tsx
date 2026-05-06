@@ -23,6 +23,7 @@ import {
   Star,
   TrendingUp,
   User,
+  Users,
   LayoutGrid,
   X,
 } from 'lucide-react'
@@ -39,6 +40,7 @@ import {
   type SamView,
   type SortKey,
   type SortState,
+  type TeamMember,
 } from './types'
 
 /* ── Reliability ─────────────────────────────────────── */
@@ -118,7 +120,18 @@ export function SamHeader({
   onCreate: () => void
   onExport: () => void
 }) {
-  const typeLabel = type === 'agencies' ? 'Makelaars' : 'Partners'
+  const typeLabel =
+    type === 'agencies' ? 'Makelaars' :
+    type === 'team'     ? 'Teamleden' :
+                          'Partners'
+  const subtitle =
+    type === 'agencies' ? 'Lokale makelaars waarmee we co-broker afspraken hebben in heel Spanje.' :
+    type === 'team'     ? 'Costa Select team — consultants, marketing, operations.' :
+                          'Adviseurs en notarissen die we doorverwijzen aan onze klanten.'
+  const createLabel =
+    type === 'agencies' ? 'makelaar' :
+    type === 'team'     ? 'teamlid' :
+                          'partner'
   return (
     <header className="sam-header">
       <div className="titles">
@@ -134,22 +147,23 @@ export function SamHeader({
             </span>
           )}
         </h1>
-        <p className="subtitle">
-          {type === 'agencies'
-            ? 'Lokale makelaars waarmee we co-broker afspraken hebben in heel Spanje.'
-            : 'Adviseurs en notarissen die we doorverwijzen aan onze klanten.'}
-        </p>
+        <p className="subtitle">{subtitle}</p>
       </div>
       <div className="sam-header-right">
-        {isAdmin && (
+        {isAdmin && type !== 'team' && (
           <>
             <button className="sam-btn sam-btn-ghost" onClick={onExport}>
               <Download size={14} /> Export CSV
             </button>
             <button className="sam-btn sam-btn-primary" onClick={onCreate}>
-              <Plus size={14} /> Nieuwe {type === 'agencies' ? 'makelaar' : 'partner'}
+              <Plus size={14} /> Nieuwe {createLabel}
             </button>
           </>
+        )}
+        {type === 'team' && (
+          <button className="sam-btn sam-btn-ghost" onClick={onExport}>
+            <Download size={14} /> Export CSV
+          </button>
         )}
       </div>
     </header>
@@ -162,11 +176,13 @@ export function SamTypeToggle({
   onChange,
   agencyCount,
   partnerCount,
+  teamCount,
 }: {
   value: SamType
   onChange: (v: SamType) => void
   agencyCount: number
   partnerCount: number
+  teamCount: number
 }) {
   return (
     <div className="sam-type-toggle" role="tablist">
@@ -188,12 +204,21 @@ export function SamTypeToggle({
         Partners
         <span className="cnt">{partnerCount}</span>
       </button>
+      <button
+        role="tab"
+        className={value === 'team' ? 'on' : ''}
+        onClick={() => onChange('team')}
+      >
+        <Users size={13} />
+        Team
+        <span className="cnt">{teamCount}</span>
+      </button>
     </div>
   )
 }
 
 /* ── Stats ───────────────────────────────────────────── */
-export function SamStats({ items, type }: { items: (Agency | Partner)[]; type: SamType }) {
+export function SamStats({ items, type }: { items: (Agency | Partner | TeamMember)[]; type: SamType }) {
   const { total, preferred, active, avgRel, fresh, spark } = useMemo(() => {
     const total = items.length
     const preferred = items.filter(i => i.is_preferred).length
@@ -232,7 +257,7 @@ export function SamStats({ items, type }: { items: (Agency | Partner)[]; type: S
     <div className="sam-stats">
       <div className="sam-stat">
         <span className="sam-stat-label">
-          Totaal {type === 'agencies' ? 'makelaars' : 'partners'}
+          Totaal {type === 'agencies' ? 'makelaars' : type === 'team' ? 'teamleden' : 'partners'}
         </span>
         <span className="sam-stat-value">{total}</span>
         <span className="sam-stat-foot">
@@ -286,7 +311,7 @@ export function SamRegionStrip({
   onRegionClick,
   type,
 }: {
-  items: (Agency | Partner)[]
+  items: (Agency | Partner | TeamMember)[]
   regions: string[]
   activeRegion: string
   onRegionClick: (r: string) => void
@@ -310,7 +335,7 @@ export function SamRegionStrip({
     <div className="sam-region-strip">
       <div className="sam-region-strip-head">
         <span className="sam-region-strip-title">
-          Dekking per regio · {type === 'agencies' ? 'Makelaars' : 'Partners'}
+          Dekking per regio · {type === 'agencies' ? 'Makelaars' : type === 'team' ? 'Team' : 'Partners'}
         </span>
         <span className="sam-region-strip-hint">Klik om te filteren</span>
       </div>
@@ -320,13 +345,15 @@ export function SamRegionStrip({
           const h = Math.max(c === 0 ? 3 : 6, (c / max) * 56)
           const isActive = activeRegion === r
           const cls = `sam-region-bar ${isActive ? 'active' : ''} ${c === 0 ? 'empty' : ''}`
+          const labelSing = type === 'agencies' ? 'makelaar' : type === 'team' ? 'teamlid' : 'partner'
+          const labelPlural = type === 'agencies' ? 'makelaars' : type === 'team' ? 'teamleden' : 'partners'
           return (
             <button
               key={r}
               type="button"
               className={cls}
               onClick={() => onRegionClick(isActive ? '' : r)}
-              title={`${r} — ${c} ${c === 1 ? (type === 'agencies' ? 'makelaar' : 'partner') : type === 'agencies' ? 'makelaars' : 'partners'}`}
+              title={`${r} — ${c} ${c === 1 ? labelSing : labelPlural}`}
             >
               <span className="cnt">{c}</span>
               <div className="bar" style={{ height: h + 'px' }} />
@@ -422,9 +449,9 @@ export function SamToolbar({
         Toon inactieve
       </label>
       <div className="sam-toolbar-spacer" />
-      <label className="sam-toggle-line" title={type === 'agencies' ? 'Groepeer per regio' : 'Groepeer per type'}>
+      <label className="sam-toggle-line" title={type === 'partners' ? 'Groepeer per type' : 'Groepeer per regio'}>
         <input type="checkbox" checked={group} onChange={e => onGroup(e.target.checked)} />
-        Groepeer per {type === 'agencies' ? 'regio' : 'type'}
+        Groepeer per {type === 'partners' ? 'type' : 'regio'}
       </label>
       <div className="sam-view-toggle">
         <button
@@ -750,23 +777,169 @@ export function SamPartnerTable({
   )
 }
 
+/* ── Team table ──────────────────────────────────────── */
+// Duplicate van SamPartnerTable met `role` (free-text) i.p.v. `type` (enum) en
+// zonder talen-kolom. Group-by-regio (niet by type).
+export function SamTeamTable({
+  items,
+  group,
+  sort,
+  onSort,
+  onOpen,
+  onContact,
+}: {
+  items: TeamMember[]
+  group: boolean
+  sort: SortState
+  onSort: (k: SortKey) => void
+  onOpen: (m: TeamMember) => void
+  onContact: (m: TeamMember, kind: 'email' | 'whatsapp') => void
+}) {
+  const renderRow = (m: TeamMember) => {
+    const lc = fmtLastContact(m.last_contact_days)
+    return (
+      <tr key={m.id} className={m.is_active === false ? 'inactive' : ''} onClick={() => onOpen(m)}>
+        <td>
+          <div className="sam-name">
+            <div className="sam-name-row">
+              <span className="sam-name-text">{m.name}</span>
+              {m.is_preferred && (
+                <span className="sam-pref-pill" title="Preferred">
+                  <Star size={10} fill="currentColor" />
+                </span>
+              )}
+            </div>
+            <span className="sam-name-sub">{m.contact_name || m.contact_email || '—'}</span>
+          </div>
+        </td>
+        <td>
+          {m.role ? (
+            <span className="sam-type-pill" data-type="anders">
+              <User size={11} />
+              {m.role}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--fg-subtle)', fontSize: 12 }}>—</span>
+          )}
+        </td>
+        <td>
+          {m.region ? (
+            <span className="sam-region">
+              <MapPin size={12} />
+              {m.region}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--fg-subtle)', fontSize: 12, fontStyle: 'italic' }}>
+              Heel Spanje
+            </span>
+          )}
+        </td>
+        <td>
+          <Reliability value={m.reliability_score} />
+        </td>
+        <td className="hide-sm">
+          <span className={`sam-last-contact ${lc.cls}`}>
+            <span className="sam-contact-dot" />
+            {lc.label}
+          </span>
+        </td>
+        <td className="actions" onClick={e => e.stopPropagation()}>
+          <button className="sam-row-action" onClick={() => onContact(m, 'email')} title="E-mail">
+            <Mail size={14} />
+          </button>
+        </td>
+      </tr>
+    )
+  }
+
+  const head = (
+    <thead>
+      <tr>
+        <th className={thCls('name', sort)} onClick={() => onSort('name')} style={{ minWidth: 240 }}>
+          Naam <SortArrow k="name" sort={sort} />
+        </th>
+        <th>Rol</th>
+        {group ? (
+          <th>Regio</th>
+        ) : (
+          <th className={thCls('region', sort)} onClick={() => onSort('region')}>
+            Regio <SortArrow k="region" sort={sort} />
+          </th>
+        )}
+        <th className={thCls('reliability_score', sort)} onClick={() => onSort('reliability_score')}>
+          Betrouwbaarheid <SortArrow k="reliability_score" sort={sort} />
+        </th>
+        <th
+          className={thCls('last_contact_days', sort, 'hide-sm')}
+          onClick={() => onSort('last_contact_days')}
+        >
+          Laatste contact <SortArrow k="last_contact_days" sort={sort} />
+        </th>
+        <th></th>
+      </tr>
+    </thead>
+  )
+
+  if (group) {
+    const groups: Record<string, TeamMember[]> = {}
+    items.forEach(m => {
+      const k = m.region || 'Heel Spanje'
+      if (!groups[k]) groups[k] = []
+      groups[k].push(m)
+    })
+    const keys = Object.keys(groups).sort()
+    return (
+      <div className="sam-table-wrap">
+        <table className="sam-table">
+          {head}
+          <tbody>
+            {keys.map(k => (
+              <Fragment key={`g-${k}`}>
+                <tr className="group-header">
+                  <td colSpan={6}>
+                    {k}
+                    <span className="group-cnt">{groups[k].length}</span>
+                  </td>
+                </tr>
+                {groups[k].map(renderRow)}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  return (
+    <div className="sam-table-wrap">
+      <table className="sam-table">
+        {head}
+        <tbody>{items.map(renderRow)}</tbody>
+      </table>
+    </div>
+  )
+}
+
 /* ── Card view ───────────────────────────────────────── */
 export function SamCardView({
   items,
   type,
   onOpen,
 }: {
-  items: (Agency | Partner)[]
+  items: (Agency | Partner | TeamMember)[]
   type: SamType
-  onOpen: (item: Agency | Partner) => void
+  onOpen: (item: Agency | Partner | TeamMember) => void
 }) {
   return (
     <div className="sam-cards">
       {items.map(i => {
         const isAgency = type === 'agencies'
+        const isTeam = type === 'team'
         const lc = fmtLastContact(i.last_contact_days)
         const sub = isAgency
           ? `${(i as Agency).region}${(i as Agency).city ? ` · ${(i as Agency).city}` : ''}`
+          : isTeam
+          ? `${(i as TeamMember).role || 'Teamlid'}${(i as TeamMember).region ? ` · ${(i as TeamMember).region}` : ''}`
           : TYPE_LABELS[(i as Partner).type] +
             ((i as Partner).region ? ` · ${(i as Partner).region}` : '')
         return (
@@ -783,9 +956,11 @@ export function SamCardView({
               </div>
               <Reliability value={i.reliability_score} hideNum />
             </div>
-            <div className="sam-card-badges">
-              <Badges item={i} isAgency={isAgency} />
-            </div>
+            {!isTeam && (
+              <div className="sam-card-badges">
+                <Badges item={i as Agency | Partner} isAgency={isAgency} />
+              </div>
+            )}
             <div className="sam-card-meta">
               <span className="item">
                 <User size={12} />
@@ -797,7 +972,7 @@ export function SamCardView({
               </span>
             </div>
             <div className="sam-card-foot">
-              <Langs langs={i.languages} />
+              {!isTeam && <Langs langs={(i as Agency | Partner).languages} />}
               <span className={`sam-last-contact ${lc.cls}`}>
                 <span className="sam-contact-dot" />
                 {lc.label}
@@ -820,7 +995,13 @@ export function SamEmpty({
   hasFilters: boolean
   onReset: () => void
 }) {
-  const Icon = hasFilters ? SearchX : type === 'agencies' ? Building2 : Briefcase
+  const Icon = hasFilters
+    ? SearchX
+    : type === 'agencies'
+    ? Building2
+    : type === 'team'
+    ? Users
+    : Briefcase
   return (
     <div className="sam-empty">
       <div className="sam-empty-icon">
@@ -831,7 +1012,9 @@ export function SamEmpty({
           ? 'Geen resultaten'
           : type === 'agencies'
             ? 'Nog geen makelaars'
-            : 'Nog geen partners'}
+            : type === 'team'
+              ? 'Nog geen teamleden'
+              : 'Nog geen partners'}
       </div>
       <p className="sam-empty-text">
         {hasFilters

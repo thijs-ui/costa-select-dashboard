@@ -1,4 +1,4 @@
-export type SamType = 'agencies' | 'partners'
+export type SamType = 'agencies' | 'partners' | 'team'
 export type SamView = 'table' | 'cards'
 export type SamSortDir = 'asc' | 'desc'
 export type Lang = 'nl' | 'en' | 'es' | 'de'
@@ -38,6 +38,21 @@ export interface Partner {
   is_preferred?: boolean
   reliability_score?: number | null
   languages?: Lang[]
+  last_contact_days?: number | null
+}
+
+export interface TeamMember {
+  id: string
+  name: string
+  role: string | null                  // free-text functie ('Senior consultant', 'Marketing', etc.)
+  region: string | null
+  contact_name: string | null
+  contact_phone: string | null
+  contact_email: string | null
+  internal_notes: string | null
+  reliability_score: number | null
+  is_active?: boolean
+  is_preferred?: boolean
   last_contact_days?: number | null
 }
 
@@ -91,6 +106,17 @@ export const REGIONS_PARTNER = [
   'Costa Blanca Zuid',
   'Alicante',
   'Costa del Sol',
+]
+
+export const REGIONS_TEAM = [
+  'Costa Brava',
+  'Costa Dorada',
+  'Valencia',
+  'Costa Blanca Noord',
+  'Costa Blanca Zuid',
+  'Costa Cálida',
+  'Costa del Sol',
+  'Heel Spanje',
 ]
 
 export const REL_LABEL: Record<number, string> = {
