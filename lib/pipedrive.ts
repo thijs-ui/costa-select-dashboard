@@ -170,12 +170,15 @@ export async function fetchLeadLabels(token: string): Promise<PipedriveLeadLabel
   return json.data ?? []
 }
 
-export async function fetchLeads(token: string): Promise<PipedriveLead[]> {
+export async function fetchLeads(
+  token: string,
+  archivedStatus: 'not_archived' | 'archived' | 'all' = 'not_archived'
+): Promise<PipedriveLead[]> {
   const results: PipedriveLead[] = []
   let start = 0
   while (true) {
     const res = await fetch(
-      `${BASE_URL}/leads?api_token=${token}&limit=500&start=${start}&archived_status=not_archived`,
+      `${BASE_URL}/leads?api_token=${token}&limit=500&start=${start}&archived_status=${archivedStatus}`,
       { cache: 'no-store' }
     )
     if (!res.ok) break

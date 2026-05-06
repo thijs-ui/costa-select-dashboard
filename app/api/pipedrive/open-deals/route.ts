@@ -60,8 +60,10 @@ export async function GET() {
       status: deal.status as string,
       value: (deal.value as number) ?? 0,
       regio,
+      person_id: person?.value ?? null,
       person_name: person?.name ?? (deal.person_name as string | null) ?? null,
       add_time: (deal.add_time as string)?.split(' ')[0] ?? '',
+      origin_id: (deal.origin_id as string | null) ?? null,
     }
   })
 

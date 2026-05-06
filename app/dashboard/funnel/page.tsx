@@ -11,6 +11,8 @@ import {
   FinCountChip,
   FinFunnelBars,
   FinHeader,
+  FinKpi,
+  FinKpiGrid,
   FinPctBadge,
   FinPeriodPicker,
   FinSection,
@@ -21,6 +23,7 @@ import AfhandelingSection from '@/components/afhandeling-section'
 interface Sale {
   regio: string | null
   datum_passering: string
+  created_at: string
 }
 interface PipedriveDealRow {
   id: number
@@ -29,11 +32,14 @@ interface PipedriveDealRow {
   status: string
   value: number
   add_time: string
+  person_id?: number | null
+  origin_id?: string | null
 }
 interface PipedriveLeadRow {
   id: string
   regio: string
   add_time: string
+  person_id?: number | null
 }
 interface RegioFunnel {
   regio: string
@@ -51,6 +57,14 @@ function isAfhandeling(regio: string) {
 function pct(num: number, den: number): number | null {
   return den > 0 ? Math.round((num / den) * 100) : null
 }
+function daysBetween(later: string, earlier: string): number | null {
+  if (!later || !earlier) return null
+  const a = new Date(later).getTime()
+  const b = new Date(earlier).getTime()
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  const diff = (a - b) / (1000 * 60 * 60 * 24)
+  return diff >= 0 ? diff : null
+}
 
 export default function FunnelPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
@@ -63,9 +77,12 @@ export default function FunnelPage() {
     setLoading(true)
     try {
       const [salesRes, dealsRes, leadsRes] = await Promise.allSettled([
-        supabase.from('deals').select('regio, datum_passering'),
+        // created_at meegehaald voor de Deal → Sale doorlooptijd
+        supabase.from('deals').select('regio, datum_passering, created_at'),
         fetch('/api/pipedrive/open-deals', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { allDeals: [] })),
-        fetch('/api/pipedrive/leads', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { leads: [] })),
+        // archived=all: ook geconverteerde leads, anders mist de lead-zijde
+        // van de Lead → Deal koppeling
+        fetch('/api/pipedrive/leads?archived=all', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { leads: [] })),
       ])
       const salesData = salesRes.status === 'fulfilled' ? (salesRes.value.data ?? []) : []
       const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value ?? { allDeals: [] }) : { allDeals: [] }
@@ -131,6 +148,47 @@ export default function FunnelPage() {
       })
       .sort((a, b) => b.leads - a.leads)
 
+    // ── Doorlooptijden ───────────────────────────────────────────────────
+    // Deal → Sale: per supabase-deal met passering in periode.
+    const salesInRange = sales.filter(s => isInRange(s.datum_passering, range))
+    const dealToSaleDays = salesInRange
+      .map(s => daysBetween(s.datum_passering, s.created_at))
+      .filter((n): n is number => n != null)
+    const dealToSaleAvg = dealToSaleDays.length > 0
+      ? Math.round(dealToSaleDays.reduce((a, b) => a + b, 0) / dealToSaleDays.length)
+      : null
+
+    // Lead → Deal: voor elke Pipedrive deal in periode (alle statuses, ex
+    // afhandeling), zoek matching lead via origin_id (canoniek) of via
+    // person_id (vroegste lead van die persoon als fallback).
+    const leadById = new Map<string, PipedriveLeadRow>()
+    const earliestLeadByPerson = new Map<number, PipedriveLeadRow>()
+    for (const l of pipedriveLeads) {
+      leadById.set(l.id, l)
+      if (l.person_id != null) {
+        const prev = earliestLeadByPerson.get(l.person_id)
+        if (!prev || l.add_time < prev.add_time) earliestLeadByPerson.set(l.person_id, l)
+      }
+    }
+    const dealsInRange = pipedriveDeals.filter(
+      d => isInRange(d.add_time, range) && !isAfhandeling(d.regio)
+    )
+    let leadToDealMatched = 0
+    const leadToDealDays: number[] = []
+    for (const d of dealsInRange) {
+      let lead: PipedriveLeadRow | undefined
+      if (d.origin_id) lead = leadById.get(d.origin_id)
+      if (!lead && d.person_id != null) lead = earliestLeadByPerson.get(d.person_id)
+      if (!lead) continue
+      const delta = daysBetween(d.add_time, lead.add_time)
+      if (delta == null) continue
+      leadToDealDays.push(delta)
+      leadToDealMatched++
+    }
+    const leadToDealAvg = leadToDealDays.length > 0
+      ? Math.round(leadToDealDays.reduce((a, b) => a + b, 0) / leadToDealDays.length)
+      : null
+
     return {
       filteredLeads,
       regularDeals,
@@ -141,6 +199,11 @@ export default function FunnelPage() {
       totalDeals,
       totalSales,
       regioFunnels,
+      dealToSaleAvg,
+      dealToSaleN: dealToSaleDays.length,
+      leadToDealAvg,
+      leadToDealN: leadToDealMatched,
+      leadToDealTotal: dealsInRange.length,
     }
   }, [pipedriveLeads, pipedriveDeals, sales, range])
 
@@ -218,6 +281,40 @@ export default function FunnelPage() {
                   </strong>
                 </span>
               </div>
+            </FinSection>
+
+            <FinSection title="Doorlooptijd" meta="gemiddelde dagen per stap">
+              <FinKpiGrid cols={3}>
+                <FinKpi
+                  label="Lead → Deal"
+                  value={data.leadToDealAvg != null ? `${data.leadToDealAvg} dgn` : '—'}
+                  sub={
+                    data.leadToDealAvg != null
+                      ? `${data.leadToDealN} van ${data.leadToDealTotal} deals gekoppeld`
+                      : 'geen gekoppelde leads in periode'
+                  }
+                  tone="accent"
+                />
+                <FinKpi
+                  label="Deal → Sale"
+                  value={data.dealToSaleAvg != null ? `${data.dealToSaleAvg} dgn` : '—'}
+                  sub={
+                    data.dealToSaleAvg != null
+                      ? `${data.dealToSaleN} ${data.dealToSaleN === 1 ? 'sale' : 'sales'} in periode`
+                      : 'geen sales in periode'
+                  }
+                  tone="accent"
+                />
+                <FinKpi
+                  label="Lead → Sale"
+                  value={
+                    data.leadToDealAvg != null && data.dealToSaleAvg != null
+                      ? `${data.leadToDealAvg + data.dealToSaleAvg} dgn`
+                      : '—'
+                  }
+                  sub="som van beide stappen"
+                />
+              </FinKpiGrid>
             </FinSection>
 
             {data.regioFunnels.length > 0 && (

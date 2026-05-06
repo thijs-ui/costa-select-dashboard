@@ -15,7 +15,7 @@ async function getToken(): Promise<string | null> {
   return data?.value as string | null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const auth = await requireAdmin()
   if (auth instanceof NextResponse) return auth
 
@@ -24,12 +24,15 @@ export async function GET() {
     return NextResponse.json({ error: 'Geen API token' }, { status: 400 })
   }
 
+  const archivedParam = new URL(req.url).searchParams.get('archived')
+  const archivedStatus: 'not_archived' | 'archived' | 'all' =
+    archivedParam === 'all' || archivedParam === 'archived' ? archivedParam : 'not_archived'
+
   const [leads, labels] = await Promise.all([
-    fetchLeads(token),
+    fetchLeads(token, archivedStatus),
     fetchLeadLabels(token),
   ])
 
-  // Build label id → name map
   const labelMap = new Map<string, string>()
   for (const l of labels) {
     labelMap.set(l.id, l.name)
@@ -46,8 +49,10 @@ export async function GET() {
       id: lead.id,
       title: lead.title,
       regio,
+      person_id: person?.value ?? null,
       person_name: person?.name ?? null,
       add_time: (lead.add_time as string)?.split('T')[0] ?? '',
+      is_archived: Boolean(lead.is_archived),
     }
   })
 

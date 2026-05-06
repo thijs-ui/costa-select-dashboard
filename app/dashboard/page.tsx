@@ -38,6 +38,16 @@ interface KostenRow {
 interface SettingRow { key: string; value: unknown }
 
 const AD_POSTEN = ['Google Ads', 'Meta Ads (Facebook/Instagram)', 'LinkedIn Ads']
+// Afspraak-types die we groeperen: NL & Teams (digitaal/lokaal NL) vs Spanje
+// (fysiek bezoek). Dedup gebeurt op lead_naam zodat één persoon die zowel
+// in NL als in Spanje is geweest in elke categorie 1× telt — en exact die
+// overlap is de NL→ES conversie.
+const TYPES_NL_TEAMS = ['Bezoek Nederland', 'Afspraak Teams']
+const TYPES_SPANJE = ['Bezoek Spanje']
+
+function normalizeLeadKey(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase()
+}
 
 export default function DashboardPage() {
   const { entity, setEntity } = useEntity()
@@ -45,7 +55,9 @@ export default function DashboardPage() {
   const [maandkosten, setMaandkosten] = useState<KostenRow[]>([])
   const [targets, setTargets] = useState({ deals_2026: 20, netto_omzet_2026: 200000 })
   const [leads, setLeads] = useState<{ regio: string; add_time: string }[]>([])
-  const [afspraken, setAfspraken] = useState<{ bron: string | null; datum: string; regio: string | null }[]>([])
+  const [afspraken, setAfspraken] = useState<
+    { bron: string | null; datum: string; regio: string | null; type: string | null; lead_naam: string | null }[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
 
@@ -57,7 +69,7 @@ export default function DashboardPage() {
           supabase.from('maandkosten').select('bedrag, jaar, maand, entiteit, kosten_posten(naam)'),
           supabase.from('settings').select('key, value'),
           fetch('/api/pipedrive/leads', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null),
-          supabase.from('afspraken').select('bron, datum, regio'),
+          supabase.from('afspraken').select('bron, datum, regio, type, lead_naam'),
         ])
         const dealsData = dealsRes.status === 'fulfilled' ? (dealsRes.value.data ?? []) : []
         const kostenData = kostenRes.status === 'fulfilled' ? (kostenRes.value.data ?? []) : []
@@ -67,7 +79,9 @@ export default function DashboardPage() {
         setDeals(dealsData as DealRow[])
         setMaandkosten(kostenData as unknown as KostenRow[])
         if (leadsData?.leads) setLeads(leadsData.leads as { regio: string; add_time: string }[])
-        setAfspraken(afsprakenData as { bron: string | null; datum: string; regio: string | null }[])
+        setAfspraken(
+          afsprakenData as { bron: string | null; datum: string; regio: string | null; type: string | null; lead_naam: string | null }[]
+        )
         const map: Record<string, unknown> = {}
         ;(settingsData as SettingRow[]).forEach(r => {
           map[r.key] = r.value
@@ -114,6 +128,23 @@ export default function DashboardPage() {
     const klantReferralPct = totaalAfspraken > 0 ? Math.round((klantReferrals / totaalAfspraken) * 100) : null
     const partnerReferralPct = totaalAfspraken > 0 ? Math.round((partnerReferrals / totaalAfspraken) * 100) : null
 
+    // NL+Teams vs Spanje, gededupt op lead-naam zodat overlap meetbaar is
+    const leadsNlTeams = new Set<string>()
+    const leadsSpanje = new Set<string>()
+    for (const a of filteredAfspraken) {
+      const key = normalizeLeadKey(a.lead_naam)
+      if (!key) continue
+      if (TYPES_NL_TEAMS.includes(a.type ?? '')) leadsNlTeams.add(key)
+      else if (TYPES_SPANJE.includes(a.type ?? '')) leadsSpanje.add(key)
+    }
+    let nlNaarEsCount = 0
+    leadsNlTeams.forEach(k => { if (leadsSpanje.has(k)) nlNaarEsCount++ })
+    const nlNaarEsPct = leadsNlTeams.size > 0
+      ? Math.round((nlNaarEsCount / leadsNlTeams.size) * 100)
+      : null
+    const afsprakenNlTeams = leadsNlTeams.size
+    const afsprakenSpanje = leadsSpanje.size
+
     const gemAankoopprijs = totaalDeals > 0 ? totaalAankoopwaarde / totaalDeals : 0
     const gemBrutoCommissie = totaalDeals > 0 ? brutoCommissie / totaalDeals : 0
     const nettoMarge = brutoCommissie > 0 ? (nettoOmzet / brutoCommissie) * 100 : 0
@@ -134,6 +165,10 @@ export default function DashboardPage() {
       klantReferralPct,
       partnerReferralPct,
       totaalAfspraken,
+      afsprakenNlTeams,
+      afsprakenSpanje,
+      nlNaarEsCount,
+      nlNaarEsPct,
       gemAankoopprijs,
       gemBrutoCommissie,
       nettoMarge,
@@ -276,8 +311,13 @@ export default function DashboardPage() {
               </FinChartCard>
             </div>
 
-            {/* Sub KPI's */}
-            <FinKpiGrid cols={3}>
+            {/* Sub KPI's — bruto omzet eerst, dan aankoop-stats */}
+            <FinKpiGrid>
+              <FinKpi
+                label="Bruto omzet"
+                value={formatEuro(computed.brutoCommissie)}
+                sub="totale commissie vóór afdrachten"
+              />
               <FinKpi
                 label="Aankoopwaarde"
                 value={formatEuro(computed.totaalAankoopwaarde)}
@@ -318,6 +358,28 @@ export default function DashboardPage() {
                 }
                 sub={`${computed.totaalDeals} sales · ${computed.filteredLeads.length} leads`}
                 icon={Coins}
+              />
+            </FinKpiGrid>
+
+            <FinKpiGrid cols={3}>
+              <FinKpi
+                label="Afspraken NL & Teams"
+                value={computed.afsprakenNlTeams}
+                sub={`unieke leads · ${range.label}`}
+                icon={Users}
+              />
+              <FinKpi
+                label="Afspraken Spanje"
+                value={computed.afsprakenSpanje}
+                sub={`unieke leads · ${range.label}`}
+                icon={Users}
+                tone="accent"
+              />
+              <FinKpi
+                label="Conversie NL → ES"
+                value={computed.nlNaarEsPct != null ? `${computed.nlNaarEsPct}%` : '—'}
+                sub={`${computed.nlNaarEsCount} van ${computed.afsprakenNlTeams} doorgegaan naar Spanje`}
+                tone={computed.nlNaarEsPct != null && computed.nlNaarEsPct >= 50 ? 'positive' : undefined}
               />
             </FinKpiGrid>
 
