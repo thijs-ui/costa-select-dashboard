@@ -31,8 +31,12 @@ export async function GET(req: Request) {
   }
 
   const archivedParam = new URL(req.url).searchParams.get('archived')
+  // Default 'all' — geconverteerde leads zijn archived in Pipedrive,
+  // anders missen we ze in de telling.
   const archivedStatus: 'not_archived' | 'archived' | 'all' =
-    archivedParam === 'all' || archivedParam === 'archived' ? archivedParam : 'not_archived'
+    archivedParam === 'archived' || archivedParam === 'not_archived'
+      ? archivedParam
+      : 'all'
 
   const [leadsRaw, users] = await Promise.all([
     fetchLeads(token, archivedStatus),
@@ -42,9 +46,10 @@ export async function GET(req: Request) {
   const userMap = new Map<number, string>()
   for (const u of users) userMap.set(u.id, u.name)
 
-  // Tellingen per owner-naam over de volledige set
+  // Tellingen per owner-naam over de volledige set, plus per-jaar-uitsplitsing
   const ownerCounts: Record<string, number> = {}
   const creatorCounts: Record<string, number> = {}
+  const ownerByYear: Record<string, Record<string, number>> = {}
   for (const l of leadsRaw) {
     const ownerName = userMap.get(l.owner_id as number) ?? `Onbekend(${l.owner_id ?? 'null'})`
     ownerCounts[ownerName] = (ownerCounts[ownerName] ?? 0) + 1
@@ -53,6 +58,9 @@ export async function GET(req: Request) {
       ? (userMap.get(creatorId) ?? `Onbekend(${creatorId})`)
       : '—'
     creatorCounts[creatorName] = (creatorCounts[creatorName] ?? 0) + 1
+    const year = ((l.add_time as string) ?? '').slice(0, 4) || 'onbekend'
+    ownerByYear[ownerName] ??= {}
+    ownerByYear[ownerName][year] = (ownerByYear[ownerName][year] ?? 0) + 1
   }
 
   // Sample: eerste 20 leads volledig
@@ -77,6 +85,7 @@ export async function GET(req: Request) {
     users_loaded: users.length,
     user_list: users.map(u => ({ id: u.id, name: u.name, active: u.active_flag })),
     owner_counts: ownerCounts,
+    owner_by_year: ownerByYear,
     creator_counts: creatorCounts,
     sample,
   })
