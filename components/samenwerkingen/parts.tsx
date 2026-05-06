@@ -842,11 +842,6 @@ export function SamTeamTable({
             {lc.label}
           </span>
         </td>
-        <td className="actions" onClick={e => e.stopPropagation()}>
-          <button className="sam-row-action" onClick={() => onContact(m, 'email')} title="E-mail">
-            <Mail size={14} />
-          </button>
-        </td>
       </tr>
     )
   }
@@ -871,7 +866,6 @@ export function SamTeamTable({
         >
           Laatste contact <SortArrow k="last_contact_days" sort={sort} />
         </th>
-        <th></th>
       </tr>
     </thead>
   )
@@ -892,7 +886,7 @@ export function SamTeamTable({
             {keys.map(k => (
               <Fragment key={`g-${k}`}>
                 <tr className="group-header">
-                  <td colSpan={5}>
+                  <td colSpan={4}>
                     {k}
                     <span className="group-cnt">{groups[k].length}</span>
                   </td>
