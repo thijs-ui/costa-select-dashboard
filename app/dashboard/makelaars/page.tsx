@@ -67,6 +67,43 @@ function pct(num: number, den: number): number | null {
   return den > 0 ? Math.round((num / den) * 100) : null
 }
 
+// Pipedrive-users hebben de volledige naam ("Marc Stam", "Ed Bouterse"), de
+// makelaars-tabel heeft soms alleen de voornaam of een variant met accent
+// ("Daniëlle" vs Pipedrive's "Danielle"). Strikte string-equal mist daardoor
+// alle koppelingen waar pipedrive_naam niet expliciet is gezet — visueel
+// lijkt dat alsof alle leads bij de enige geconfigureerde consultant
+// landen. Strippen accenten + voornaam-fallback maakt de match robuust.
+function normalizeName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+}
+function firstName(s: string): string {
+  return normalizeName(s).split(/\s+/)[0] ?? ''
+}
+function matchPipedriveStats(
+  m: { naam: string; pipedrive_naam: string | null },
+  perUser: Record<string, PipedriveStats>
+): PipedriveStats {
+  const empty: PipedriveStats = { leads: 0, openDeals: 0 }
+  const explicit = m.pipedrive_naam?.trim()
+  if (explicit) {
+    const target = normalizeName(explicit)
+    for (const [name, stats] of Object.entries(perUser)) {
+      if (normalizeName(name) === target) return stats
+    }
+    return empty
+  }
+  const candidate = firstName(m.naam)
+  if (!candidate) return empty
+  for (const [name, stats] of Object.entries(perUser)) {
+    if (firstName(name) === candidate) return stats
+  }
+  return empty
+}
+
 export default function MakelaarsPage() {
   const { entity, setEntity } = useEntity()
   const [datePreset, setDatePreset] = useState<DatePreset>('dit_jaar')
@@ -128,12 +165,7 @@ export default function MakelaarsPage() {
         const gepland = mAfspraken.filter(a => a.status === 'Gepland').length
         const sales = mDeals.length
 
-        const matchKey = (m.pipedrive_naam ?? m.naam).trim().toLowerCase()
-        const pdEntry = Object.entries(pipedrivePerUser).find(
-          ([name]) => name.trim().toLowerCase() === matchKey
-        )
-        const leads = pdEntry?.[1].leads ?? 0
-        const openDeals = pdEntry?.[1].openDeals ?? 0
+        const { leads, openDeals } = matchPipedriveStats(m, pipedrivePerUser)
 
         return {
           makelaar: m,
