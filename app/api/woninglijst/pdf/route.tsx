@@ -84,14 +84,6 @@ function fmtEuro(n: number | null | undefined): string {
   return `€ ${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(n)}`
 }
 
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('nl-NL', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
 function uniqueRegions(items: Item[]): string[] {
   const set = new Set<string>()
   items.forEach(i => {
@@ -182,14 +174,6 @@ const s = StyleSheet.create({
     height: 1.5,
     backgroundColor: SUN,
     marginBottom: 6,
-  },
-  coverTagMeta: {
-    fontFamily: 'Raleway',
-    fontSize: 7,
-    fontWeight: 500,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: ON_DARK_45,
   },
   coverBody: {
     flex: 1,
@@ -999,12 +983,10 @@ function ListingCard({ item, index, variant }: CardProps) {
 
 function CoverPage({
   klantNaam,
-  date,
   items,
   beeldmerkSrc,
 }: {
   klantNaam: string
-  date: string
   items: Item[]
   beeldmerkSrc?: string
 }) {
@@ -1025,7 +1007,6 @@ function CoverPage({
             <View style={s.coverTag}>
               <Text style={s.coverTagEyebrow}>Shortlist</Text>
               <View style={s.coverTagRule} />
-              <Text style={s.coverTagMeta}>{date}</Text>
             </View>
           </View>
 
@@ -1047,15 +1028,11 @@ function CoverPage({
                 </View>
               )}
               {regionsText ? (
-                <View style={s.coverMetaItem}>
+                <View style={[s.coverMetaItem, s.coverMetaItemLast]}>
                   <Text style={s.coverMetaL}>{"Regio's"}</Text>
                   <Text style={[s.coverMetaV, s.coverMetaVSm]}>{regionsText}</Text>
                 </View>
               ) : null}
-              <View style={[s.coverMetaItem, s.coverMetaItemLast]}>
-                <Text style={s.coverMetaL}>Datum</Text>
-                <Text style={[s.coverMetaV, s.coverMetaVSm]}>{date}</Text>
-              </View>
             </View>
           </View>
         </View>
@@ -1305,7 +1282,6 @@ export function ShortlistPDF({
   beeldmerkSrc?: string
   wordmarkSrc?: string
 }) {
-  const date = fmtDate(new Date())
   const sorted = sortFavoritesFirst(items)
 
   // Page-mode dispatch op basis van item count
@@ -1314,7 +1290,6 @@ export function ShortlistPDF({
       <Document>
         <CoverPage
           klantNaam={klantNaam}
-          date={date}
           items={sorted.map(i => ({ ...i, is_favorite: true }))}
           beeldmerkSrc={beeldmerkSrc}
         />
@@ -1328,7 +1303,6 @@ export function ShortlistPDF({
       <Document>
         <CoverPage
           klantNaam={klantNaam}
-          date={date}
           items={sorted}
           beeldmerkSrc={beeldmerkSrc}
         />
@@ -1342,7 +1316,6 @@ export function ShortlistPDF({
       <Document>
         <CoverPage
           klantNaam={klantNaam}
-          date={date}
           items={sorted}
           beeldmerkSrc={beeldmerkSrc}
         />
@@ -1362,7 +1335,6 @@ export function ShortlistPDF({
     <Document>
       <CoverPage
         klantNaam={klantNaam}
-        date={date}
         items={sorted}
         beeldmerkSrc={beeldmerkSrc}
       />
