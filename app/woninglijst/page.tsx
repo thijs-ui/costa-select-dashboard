@@ -354,9 +354,15 @@ export default function WoninglijstPage() {
     if (!detail) return
     setPdfLoading(true)
     try {
-      const items = favOnly
-        ? detail.shortlist_items.filter(i => i.is_favorite)
-        : detail.shortlist_items
+      // Selectie heeft voorrang: als de consultant 1+ checkbox heeft
+      // aangevinkt, exporteren we exact die items. Geen selectie → alles
+      // in de shortlist (met favOnly-filter als die actief staat).
+      const items =
+        selectedItems.size > 0
+          ? detail.shortlist_items.filter(i => selectedItems.has(i.id))
+          : favOnly
+            ? detail.shortlist_items.filter(i => i.is_favorite)
+            : detail.shortlist_items
       const res = await fetch('/api/woninglijst/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -840,7 +846,9 @@ function DetailView({
               ) : (
                 <Download size={14} strokeWidth={2} />
               )}
-              Download PDF
+              {selectedItems.size > 0
+                ? `Download PDF (${selectedItems.size})`
+                : 'Download PDF'}
             </button>
             <button
               type="button"
