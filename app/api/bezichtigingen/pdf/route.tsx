@@ -1034,7 +1034,12 @@ type Node =
   | { kind: 'lunch'; time: string; endTime: string; duration: number; title: string }
   | { kind: 'end'; time: string; title: string; subtitle: string }
 
-function buildNodes(trip: Trip, stops: Stop[], route: RouteData): Node[] {
+function buildNodes(
+  trip: Trip,
+  stops: Stop[],
+  route: RouteData,
+  options?: { endAddressOverride?: string },
+): Node[] {
   const list: Node[] = []
   list.push({
     kind: 'start',
@@ -1071,13 +1076,15 @@ function buildNodes(trip: Trip, stops: Stop[], route: RouteData): Node[] {
       })
     }
   })
+  // End-node-locatie: bij gesplitste itinerary geeft splitItineraryPages
+  // het originele hotel-adres als override mee zodat 'Terug bij ...' niet
+  // de page-2 vertrek-tekst herhaalt.
+  const endAddress = options?.endAddressOverride ?? trip.start_address
   list.push({
     kind: 'end',
     time: route.estimated_end_time,
     title: 'Einde',
-    subtitle: trip.start_address
-      ? `Terug bij ${trip.start_address.split(',')[0]}`
-      : 'Afronding',
+    subtitle: endAddress ? `Terug bij ${endAddress.split(',')[0]}` : 'Afronding',
   })
   return list
 }
@@ -1087,14 +1094,20 @@ function ItineraryPage({
   stops,
   route,
   wordmarkSrc,
+  partLabel,
+  endAddressOverride,
 }: {
   trip: Trip
   stops: Stop[]
   route: RouteData
   wordmarkSrc?: string
+  partLabel?: string
+  endAddressOverride?: string
 }) {
+  // Dense modus pas vanaf 5 stops op één pagina. Bij gesplitste itinerary
+  // hebben we typisch 4 of minder per pagina, dus geen dense.
   const isDense = stops.length >= 5
-  const nodes = buildNodes(trip, stops, route)
+  const nodes = buildNodes(trip, stops, route, { endAddressOverride })
 
   return (
     <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
@@ -1102,7 +1115,9 @@ function ItineraryPage({
       <View style={s.body}>
         <View style={s.stitle}>
           <View style={s.stitleLeft}>
-            <Text style={s.stitleEyebrow}>De dag in één lijn</Text>
+            <Text style={s.stitleEyebrow}>
+              De dag in één lijn{partLabel ? ` · ${partLabel}` : ''}
+            </Text>
             <View style={s.stitleSunTick} />
             <Text style={s.stitleH2}>Bezichtigingsroute · {fmtDateShort(trip.trip_date)}</Text>
           </View>
@@ -1484,6 +1499,14 @@ export function BezichtigingPDF({
   // Stop-detail grid: 2-kol bij ≤4 stops, anders 3-kol (handoff regel)
   const detailCols: 2 | 3 = stops.length >= 5 ? 3 : 2
 
+  // Itinerary opdelen: bij ≤6 stops past alles in één horizontale track
+  // (dense-modus dekt 5-6). Vanaf 7 stops worden de cellen onleesbaar smal,
+  // dus splitsen we naar 2 pagina's. Lunch is de natuurlijke breakpoint;
+  // zonder lunch valt de split in de helft.
+  const itineraryPages = route
+    ? splitItineraryPages(trip, stops, route)
+    : []
+
   return (
     <Document>
       <CoverPage
@@ -1493,9 +1516,17 @@ export function BezichtigingPDF({
         beeldmerkSrc={beeldmerkSrc}
         heroSrc={heroSrc}
       />
-      {route && (
-        <ItineraryPage trip={trip} stops={stops} route={route} wordmarkSrc={wordmarkSrc} />
-      )}
+      {itineraryPages.map((page, i) => (
+        <ItineraryPage
+          key={`it-${i}`}
+          trip={page.trip}
+          stops={page.stops}
+          route={page.route}
+          wordmarkSrc={wordmarkSrc}
+          partLabel={itineraryPages.length > 1 ? `Deel ${i + 1} van ${itineraryPages.length}` : undefined}
+          endAddressOverride={page.endAddressOverride}
+        />
+      ))}
       {route && stops.length > 0 && (
         <StopDetailPage
           trip={trip}
@@ -1507,6 +1538,70 @@ export function BezichtigingPDF({
       )}
     </Document>
   )
+}
+
+// ─── Itinerary splitting ─────────────────────────────────────────────────
+// Bij 7+ stops is de horizontale track op één A4-landscape onleesbaar smal.
+// Splits dan naar 2 pagina's, met lunch (indien aanwezig) als natuurlijke
+// breakpoint. Pagina 2 krijgt een "vervolg"-trip met start_time op
+// lunch.end en de eerste post-lunch stop als startpunt.
+function splitItineraryPages(
+  trip: Trip,
+  stops: Stop[],
+  route: RouteData
+): Array<{ trip: Trip; stops: Stop[]; route: RouteData; endAddressOverride?: string }> {
+  if (stops.length <= 6) {
+    return [{ trip, stops, route }]
+  }
+
+  const sortedRouteStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order)
+  const splitOrder =
+    route.lunch?.after_stop_order ?? Math.ceil(sortedRouteStops.length / 2)
+
+  const beforeRouteStops = sortedRouteStops.filter(rs => rs.sort_order <= splitOrder)
+  const afterRouteStops = sortedRouteStops.filter(rs => rs.sort_order > splitOrder)
+  const beforeIds = new Set(beforeRouteStops.map(rs => rs.stop_id))
+  const stopsBefore = stops.filter(s => beforeIds.has(s.id))
+  const stopsAfter = stops.filter(s => !beforeIds.has(s.id))
+
+  const lastBeforeDeparture =
+    beforeRouteStops[beforeRouteStops.length - 1]?.estimated_departure ?? trip.start_time
+
+  // Pagina 1: oorspronkelijke trip + lunch (indien op deze helft valt) +
+  // einde wordt lunch.end of laatste departure.
+  const page1Route: RouteData = {
+    ...route,
+    stops: beforeRouteStops,
+    estimated_end_time: route.lunch?.end_time ?? lastBeforeDeparture,
+  }
+
+  // Pagina 2: trip krijgt nieuwe start_time/start_address zodat de
+  // "Vertrekpunt"-card de continuatie aanduidt. Lunch op pagina 2
+  // weglaten — die staat al op pagina 1.
+  const page2Trip: Trip = {
+    ...trip,
+    start_time: route.lunch?.end_time ?? lastBeforeDeparture,
+    start_address: route.lunch
+      ? 'Vervolg na lunchpauze'
+      : `Vervolg vanaf ${trip.start_address ?? 'startpunt'}`,
+  }
+  const page2Route: RouteData = {
+    ...route,
+    stops: afterRouteStops,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    lunch: undefined as any,
+  }
+
+  return [
+    { trip, stops: stopsBefore, route: page1Route },
+    {
+      trip: page2Trip,
+      stops: stopsAfter,
+      route: page2Route,
+      // Eind-node toont het echte hotel-adres ipv de page-2 vertrek-tekst.
+      endAddressOverride: trip.start_address ?? undefined,
+    },
+  ]
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────
