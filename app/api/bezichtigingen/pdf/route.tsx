@@ -135,6 +135,12 @@ function diffMinHM(a: string, b: string): number {
   return Math.max(0, toMin(b) - toMin(a))
 }
 
+// Tijden uit Postgres komen vaak als 'HH:MM:SS'; PDF mag enkel HH:MM tonen.
+function formatTime(t: string | null | undefined): string {
+  if (!t) return ''
+  return t.substring(0, 5)
+}
+
 function formatDuration(mins: number | null | undefined): string {
   if (mins == null) return '—'
   const h = Math.floor(mins / 60)
@@ -962,7 +968,7 @@ function CoverPage({
               </View>
               <View style={s.coverMetaItem}>
                 <Text style={s.coverMetaL}>Vertrek</Text>
-                <Text style={s.coverMetaV} wrap={false}>{trip.start_time}</Text>
+                <Text style={s.coverMetaV} wrap={false}>{formatTime(trip.start_time)}</Text>
               </View>
               <View style={s.coverMetaItem}>
                 <Text style={s.coverMetaL}>Einde</Text>
@@ -984,7 +990,7 @@ function CoverPage({
               </View>
               {route?.lunch && (
                 <View style={s.coverChip}>
-                  <Text style={s.coverChipNum} wrap={false}>{route.lunch.start_time}</Text>
+                  <Text style={s.coverChipNum} wrap={false}>{formatTime(route.lunch.start_time)}</Text>
                   <Text style={s.coverChipText} wrap={false}>
                     lunchpauze · {route.lunch.end_time}
                   </Text>
@@ -1043,7 +1049,7 @@ function buildNodes(
   const list: Node[] = []
   list.push({
     kind: 'start',
-    time: trip.start_time,
+    time: formatTime(trip.start_time),
     title: 'Vertrek',
     subtitle: trip.start_address || '—',
   })
@@ -1051,7 +1057,7 @@ function buildNodes(
   rs.forEach((r, idx) => {
     const prevTravel =
       idx === 0
-        ? diffMinHM(trip.start_time, r.estimated_arrival)
+        ? diffMinHM(formatTime(trip.start_time), r.estimated_arrival)
         : rs[idx - 1].travel_time_to_next_minutes
     list.push({ kind: 'segment', minutes: prevTravel, lunch: false })
     const stop = stops.find(st => st.id === r.stop_id)
@@ -1128,7 +1134,7 @@ function ItineraryPage({
           <View style={s.stitleRight}>
             <View style={[s.stitleStat, s.stitleStatFirst]}>
               <Text style={s.stitleStatL}>Start</Text>
-              <Text style={s.stitleStatV} wrap={false}>{trip.start_time}</Text>
+              <Text style={s.stitleStatV} wrap={false}>{formatTime(trip.start_time)}</Text>
             </View>
             <View style={s.stitleStat}>
               <Text style={s.stitleStatL}>Rijtijd</Text>
@@ -1154,17 +1160,6 @@ function ItineraryPage({
           })}
         </View>
 
-        {route.route_summary && (
-          <View style={s.routelogic}>
-            <View style={s.routelogicIcon}>
-              <Text style={s.routelogicIconText}>✦</Text>
-            </View>
-            <View style={s.routelogicBody}>
-              <Text style={s.routelogicLbl}>Route-logica</Text>
-              <Text style={s.routelogicTxt}>{route.route_summary}</Text>
-            </View>
-          </View>
-        )}
       </View>
     </Page>
   )
@@ -1182,7 +1177,9 @@ function Segment({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const segStyle: any[] = [s.hseg]
   if (isDense) segStyle.push(s.hsegDense)
-  else if (minutes >= 25) segStyle.push(s.hsegWide)
+  // Wide-variant verwijderd: variabele segment-breedte gaf inconsistente
+  // stop-card-formaten tussen pagina 1 en pagina 2 van een gesplitste
+  // itinerary. Vaste 48pt segments → identieke layout op alle pagina's.
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineStyle: any[] = [s.hsegLine]
