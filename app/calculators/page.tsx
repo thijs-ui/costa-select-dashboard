@@ -440,12 +440,11 @@ export default function CalculatorPage() {
           const data = await res.json()
           if (Array.isArray(data) && data.length > 0) {
             setRegions(data)
-            // Default: Costa del Sol / first
+            // Default: Andalusia / Andalucía / Costa del Sol → eerste in lijst.
             const preferred =
               data.find((r: RegionalSettings) =>
-                r.region.toLowerCase().includes('costa del sol') ||
-                r.region.toLowerCase().includes('andalucía') ||
-                r.region.toLowerCase().includes('andalucia')
+                r.region.toLowerCase().includes('andalu') ||
+                r.region.toLowerCase().includes('costa del sol')
               ) || data[0]
             setState(s => ({ ...s, regionId: preferred.id }))
           }
