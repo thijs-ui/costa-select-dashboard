@@ -124,6 +124,15 @@ function diffMinutes(a: string, b: string): number {
   return Math.max(0, bh * 60 + bm - (ah * 60 + am))
 }
 
+function addMinutes(time: string, mins: number): string {
+  if (!time) return time
+  const [h, m] = time.split(':').map(Number)
+  const total = h * 60 + m + mins
+  const nh = Math.floor(total / 60) % 24
+  const nm = total % 60
+  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`
+}
+
 // ───────── Page ─────────
 export default function BezichtigingDetailPage({
   params,
@@ -193,6 +202,48 @@ export default function BezichtigingDetailPage({
     pingSave(patch)
   }
 
+  // Mutate route_data zonder te invalideren — voor handmatige tijd-edits na
+  // een optimize. estimated_end_time wordt automatisch hergesynced naar de
+  // laatste departure zodat het header-overzicht klopt.
+  function updateRouteData(updater: (prev: RouteData) => RouteData) {
+    if (!trip?.route_data) return
+    const next = updater(trip.route_data)
+    const last = next.stops[next.stops.length - 1]
+    const synced: RouteData = {
+      ...next,
+      estimated_end_time: last?.estimated_departure ?? next.estimated_end_time,
+    }
+    setTrip({ ...trip, route_data: synced })
+    pingSave({ route_data: synced })
+  }
+
+  function setStopArrival(stopId: string, value: string) {
+    updateRouteData(prev => ({
+      ...prev,
+      stops: prev.stops.map(rs =>
+        rs.stop_id === stopId ? { ...rs, estimated_arrival: value } : rs
+      ),
+    }))
+  }
+  function setStopDeparture(stopId: string, value: string) {
+    updateRouteData(prev => ({
+      ...prev,
+      stops: prev.stops.map(rs =>
+        rs.stop_id === stopId ? { ...rs, estimated_departure: value } : rs
+      ),
+    }))
+  }
+  function setLunchStart(value: string) {
+    updateRouteData(prev => {
+      if (!prev.lunch) return prev
+      const dur = trip?.lunch_duration_minutes ?? 60
+      return {
+        ...prev,
+        lunch: { ...prev.lunch, start_time: value, end_time: addMinutes(value, dur) },
+      }
+    })
+  }
+
   function changeStatus(status: 'concept' | 'gepland' | 'afgerond') {
     updateTrip({ status })
   }
@@ -258,8 +309,19 @@ export default function BezichtigingDetailPage({
     reordered.splice(toIdx, 0, moved)
     const withOrder = reordered.map((s, k) => ({ ...s, sort_order: k + 1 }))
     setStops(withOrder)
+
+    // Behoud route_data; sort_orders in route_data.stops mee opschuiven
+    // zodat de timeline direct in nieuwe volgorde toont (tijden blijven
+    // staan — consultant past ze handmatig aan via de tijd-dropdowns).
     if (trip?.route_data) {
-      setTrip({ ...trip, route_data: null })
+      const idMap = new Map(trip.route_data.stops.map(rs => [rs.stop_id, rs]))
+      const newRouteStops = withOrder
+        .map((s, k) => {
+          const existing = idMap.get(s.id)
+          return existing ? { ...existing, sort_order: k + 1 } : null
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null)
+      updateRouteData(prev => ({ ...prev, stops: newRouteStops }))
     }
 
     // Persist alleen de sort_orders die wijzigen.
@@ -283,8 +345,18 @@ export default function BezichtigingDetailPage({
     ;[reordered[i], reordered[j]] = [reordered[j], reordered[i]]
     const withOrder = reordered.map((s, k) => ({ ...s, sort_order: k + 1 }))
     setStops(withOrder)
+
+    // Behoud route_data zoals bij reorderStop — sort_orders updaten,
+    // tijden ongemoeid laten zodat consultant zelf herijkt.
     if (trip?.route_data) {
-      setTrip({ ...trip, route_data: null })
+      const idMap = new Map(trip.route_data.stops.map(rs => [rs.stop_id, rs]))
+      const newRouteStops = withOrder
+        .map((s, k) => {
+          const existing = idMap.get(s.id)
+          return existing ? { ...existing, sort_order: k + 1 } : null
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null)
+      updateRouteData(prev => ({ ...prev, stops: newRouteStops }))
     }
 
     // Persist new sort_order for the two swapped stops in parallel
@@ -584,7 +656,14 @@ export default function BezichtigingDetailPage({
                 </div>
               )}
 
-              <Timeline trip={trip} stops={stops} route={route} />
+              <Timeline
+                trip={trip}
+                stops={stops}
+                route={route}
+                onSetStopArrival={setStopArrival}
+                onSetStopDeparture={setStopDeparture}
+                onSetLunchStart={setLunchStart}
+              />
             </div>
           </div>
         </div>
@@ -1199,10 +1278,16 @@ function Timeline({
   trip,
   stops,
   route,
+  onSetStopArrival,
+  onSetStopDeparture,
+  onSetLunchStart,
 }: {
   trip: Trip
   stops: Stop[]
   route: RouteData | null
+  onSetStopArrival: (stopId: string, value: string) => void
+  onSetStopDeparture: (stopId: string, value: string) => void
+  onSetLunchStart: (value: string) => void
 }) {
   const items: TimelineItem[] = useMemo(() => {
     if (!route) return []
@@ -1353,6 +1438,7 @@ function Timeline({
                 endTime={item.endTime}
                 title="Lunchpauze"
                 subtitle={item.subtitle}
+                onTimeChange={onSetLunchStart}
               />
             )
           }
@@ -1364,6 +1450,8 @@ function Timeline({
                 time={item.time}
                 endTime={item.endTime}
                 stop={item.stop}
+                onArrivalChange={v => onSetStopArrival(item.stop.id, v)}
+                onDepartureChange={v => onSetStopDeparture(item.stop.id, v)}
               />
             )
           }
@@ -1454,18 +1542,66 @@ function Segment({ minutes, isLunch }: { minutes: number; isLunch: boolean }) {
   )
 }
 
+// Inline tijd-dropdown voor de timeline-edit. Half-uur grid (TIME_OPTIONS),
+// neemt ook een eventueel niet-on-grid value uit de DB op zodat user zonder
+// data-loss kan vervangen.
+function TimeSelect({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string
+  onChange: (v: string) => void
+  ariaLabel?: string
+}) {
+  const v = formatTime(value)
+  const known = TIME_OPTIONS.includes(v)
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={v}
+      onChange={e => onChange(e.target.value)}
+      className="font-heading font-bold text-deepsea cursor-pointer"
+      style={{
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        MozAppearance: 'none',
+        background: 'transparent',
+        border: 'none',
+        padding: '2px 4px',
+        margin: 0,
+        fontSize: 'inherit',
+        letterSpacing: 'inherit',
+        color: 'inherit',
+        textAlign: 'right',
+        width: '100%',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,75,70,0.06)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+    >
+      {!known && v && <option value={v}>{v}</option>}
+      {TIME_OPTIONS.map(t => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
+  )
+}
+
 function Node({
   kind,
   time,
   endTime,
   title,
   subtitle,
+  onTimeChange,
 }: {
   kind: 'start' | 'lunch' | 'end'
   time: string
   endTime?: string
   title: string
   subtitle?: string
+  onTimeChange?: (v: string) => void
 }) {
   const dotColors = {
     start: { bg: '#004B46', color: '#FFFFFF' },
@@ -1477,13 +1613,18 @@ function Node({
     lunch: <Utensils size={15} strokeWidth={2.2} />,
     end: <Flag size={15} strokeWidth={2.2} />,
   }
+  const editable = kind === 'lunch' && !!onTimeChange
   return (
     <div className="flex items-start" style={{ gap: 14, padding: '6px 0', position: 'relative' }}>
       <div
         className="font-heading font-bold text-deepsea shrink-0 text-right"
         style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
       >
-        {time}
+        {editable ? (
+          <TimeSelect value={time} onChange={onTimeChange!} ariaLabel="Lunchtijd" />
+        ) : (
+          time
+        )}
         {endTime && (
           <span
             className="block font-body"
@@ -1550,11 +1691,15 @@ function StopNode({
   time,
   endTime,
   stop,
+  onArrivalChange,
+  onDepartureChange,
 }: {
   sortOrder: number
   time: string
   endTime: string
   stop: Stop
+  onArrivalChange?: (v: string) => void
+  onDepartureChange?: (v: string) => void
 }) {
   return (
     <div className="flex items-start" style={{ gap: 14, padding: '6px 0', position: 'relative' }}>
@@ -1562,7 +1707,11 @@ function StopNode({
         className="font-heading font-bold text-deepsea shrink-0 text-right"
         style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
       >
-        {time}
+        {onArrivalChange ? (
+          <TimeSelect value={time} onChange={onArrivalChange} ariaLabel="Aankomsttijd" />
+        ) : (
+          time
+        )}
         {endTime && (
           <span
             className="block font-body"
@@ -1574,7 +1723,11 @@ function StopNode({
               letterSpacing: 0,
             }}
           >
-            → {endTime}
+            {onDepartureChange ? (
+              <TimeSelect value={endTime} onChange={onDepartureChange} ariaLabel="Vertrektijd" />
+            ) : (
+              <>→ {endTime}</>
+            )}
           </span>
         )}
       </div>
