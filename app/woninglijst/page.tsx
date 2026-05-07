@@ -113,6 +113,7 @@ export default function WoninglijstPage() {
   const [favOnly, setFavOnly] = useState(false)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
 
   // Dossier modal
@@ -303,6 +304,21 @@ export default function WoninglijstPage() {
     loadDetail(selectedId)
   }
 
+  // Consultant-edit van de titel — overschrijft de auto-scraped titel uit
+  // Idealista/Supabase die er soms slordig uitziet. Lege waarde resets
+  // (server zet 'm op null en de UI valt dan terug op de URL).
+  async function saveTitle(itemId: string, text: string) {
+    if (!selectedId) return
+    await fetch(`/api/woninglijst/${selectedId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, item_title: text }),
+      cache: 'no-store',
+    })
+    setEditingTitleId(null)
+    loadDetail(selectedId)
+  }
+
   async function deleteItem(itemId: string) {
     if (!selectedId) return
     await fetch(`/api/woninglijst/${selectedId}/items`, {
@@ -409,8 +425,11 @@ export default function WoninglijstPage() {
             setSelectedItems={setSelectedItems}
             editingNoteId={editingNoteId}
             setEditingNoteId={setEditingNoteId}
+            editingTitleId={editingTitleId}
+            setEditingTitleId={setEditingTitleId}
             onToggleFav={toggleFavorite}
             onSaveNote={saveNote}
+            onSaveTitle={saveTitle}
             onDeleteItem={deleteItem}
             onBulkDelete={bulkDelete}
             onDownloadPdf={downloadPdf}
@@ -668,8 +687,11 @@ function DetailView({
   setSelectedItems,
   editingNoteId,
   setEditingNoteId,
+  editingTitleId,
+  setEditingTitleId,
   onToggleFav,
   onSaveNote,
+  onSaveTitle,
   onDeleteItem,
   onBulkDelete,
   onDownloadPdf,
@@ -698,8 +720,11 @@ function DetailView({
   setSelectedItems: (s: Set<string>) => void
   editingNoteId: string | null
   setEditingNoteId: (id: string | null) => void
+  editingTitleId: string | null
+  setEditingTitleId: (id: string | null) => void
   onToggleFav: (id: string, current: boolean) => void
   onSaveNote: (id: string, text: string) => void
+  onSaveTitle: (id: string, text: string) => void
   onDeleteItem: (id: string) => void
   onBulkDelete: () => void
   onDownloadPdf: () => void
@@ -957,6 +982,10 @@ function DetailView({
                     onStartEditNote={() => setEditingNoteId(item.id)}
                     onCancelEditNote={() => setEditingNoteId(null)}
                     onSaveNote={text => onSaveNote(item.id, text)}
+                    isEditingTitle={editingTitleId === item.id}
+                    onStartEditTitle={() => setEditingTitleId(item.id)}
+                    onCancelEditTitle={() => setEditingTitleId(null)}
+                    onSaveTitle={text => onSaveTitle(item.id, text)}
                   />
                 ))}
               </div>
@@ -1219,6 +1248,10 @@ function PropertyCard({
   onStartEditNote,
   onCancelEditNote,
   onSaveNote,
+  isEditingTitle,
+  onStartEditTitle,
+  onCancelEditTitle,
+  onSaveTitle,
 }: {
   item: ShortlistItem
   selected: boolean
@@ -1230,6 +1263,10 @@ function PropertyCard({
   onStartEditNote: () => void
   onCancelEditNote: () => void
   onSaveNote: (text: string) => void
+  isEditingTitle: boolean
+  onStartEditTitle: () => void
+  onCancelEditTitle: () => void
+  onSaveTitle: (text: string) => void
 }) {
   const kk = item.price ? Math.round(item.price * 0.1) : null
   const hasTitle = !!item.title
@@ -1257,16 +1294,48 @@ function PropertyCard({
           </div>
         )}
         <div className="c-title-row">
-          <h3
-            className={hasTitle ? 'c-title' : 'c-title'}
-            style={
-              hasTitle
-                ? undefined
-                : { fontFamily: 'var(--font-body)', fontSize: 13.5, fontWeight: 500, color: '#5F7472' }
-            }
-          >
-            {hasTitle ? item.title : item.url}
-          </h3>
+          {isEditingTitle ? (
+            <input
+              autoFocus
+              defaultValue={hasTitle ? (item.title ?? '') : ''}
+              placeholder="Titel voor deze woning"
+              onBlur={e => onSaveTitle(e.currentTarget.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  onSaveTitle(e.currentTarget.value)
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  onCancelEditTitle()
+                }
+              }}
+              className="c-title"
+              style={{
+                background: 'transparent',
+                border: '1px dashed rgba(0,75,70,0.35)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                margin: '-2px -6px',
+                outline: 'none',
+                width: '100%',
+                color: '#004B46',
+              }}
+            />
+          ) : (
+            <h3
+              className="c-title"
+              onClick={onStartEditTitle}
+              title="Klik om te bewerken"
+              style={{
+                cursor: 'text',
+                ...(hasTitle
+                  ? null
+                  : { fontFamily: 'var(--font-body)', fontSize: 13.5, fontWeight: 500, color: '#5F7472' }),
+              }}
+            >
+              {hasTitle ? item.title : item.url}
+            </h3>
+          )}
           {item.is_favorite && (
             <span className="c-fav-icon">
               <Star size={18} fill="#F5AF40" stroke="#D4921A" strokeWidth={1.5} />

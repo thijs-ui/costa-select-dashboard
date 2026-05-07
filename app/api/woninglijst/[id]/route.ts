@@ -70,6 +70,19 @@ export async function PATCH(
     return NextResponse.json({ ok: true })
   }
 
+  // Update item title (consultant-edited override op de auto-scraped titel)
+  if (body.item_id && body.item_title !== undefined) {
+    const trimmed = String(body.item_title).trim()
+    const { error } = await supabase
+      .from('shortlist_items')
+      .update({ title: trimmed || null })
+      .eq('id', body.item_id)
+      .eq('shortlist_id', id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
+
   // Update shortlist itself
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.klant_naam !== undefined) updates.klant_naam = body.klant_naam
