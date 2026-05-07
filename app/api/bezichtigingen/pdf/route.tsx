@@ -1038,7 +1038,7 @@ function buildNodes(
   trip: Trip,
   stops: Stop[],
   route: RouteData,
-  options?: { endAddressOverride?: string },
+  options?: { endAddressOverride?: string; omitEndNode?: boolean },
 ): Node[] {
   const list: Node[] = []
   list.push({
@@ -1076,16 +1076,18 @@ function buildNodes(
       })
     }
   })
-  // End-node-locatie: bij gesplitste itinerary geeft splitItineraryPages
-  // het originele hotel-adres als override mee zodat 'Terug bij ...' niet
-  // de page-2 vertrek-tekst herhaalt.
-  const endAddress = options?.endAddressOverride ?? trip.start_address
-  list.push({
-    kind: 'end',
-    time: route.estimated_end_time,
-    title: 'Einde',
-    subtitle: endAddress ? `Terug bij ${endAddress.split(',')[0]}` : 'Afronding',
-  })
+  // End-node alleen op de laatste itinerary-pagina; bij split blijft pagina 1
+  // hangen op de lunch (geen 'Einde 14:00' die suggereert dat de dag voorbij
+  // is terwijl er nog een tweede pagina volgt).
+  if (!options?.omitEndNode) {
+    const endAddress = options?.endAddressOverride ?? trip.start_address
+    list.push({
+      kind: 'end',
+      time: route.estimated_end_time,
+      title: 'Einde',
+      subtitle: endAddress ? `Terug bij ${endAddress.split(',')[0]}` : 'Afronding',
+    })
+  }
   return list
 }
 
@@ -1096,6 +1098,7 @@ function ItineraryPage({
   wordmarkSrc,
   partLabel,
   endAddressOverride,
+  omitEndNode,
 }: {
   trip: Trip
   stops: Stop[]
@@ -1103,11 +1106,12 @@ function ItineraryPage({
   wordmarkSrc?: string
   partLabel?: string
   endAddressOverride?: string
+  omitEndNode?: boolean
 }) {
   // Dense modus pas vanaf 5 stops op één pagina. Bij gesplitste itinerary
   // hebben we typisch 4 of minder per pagina, dus geen dense.
   const isDense = stops.length >= 5
-  const nodes = buildNodes(trip, stops, route, { endAddressOverride })
+  const nodes = buildNodes(trip, stops, route, { endAddressOverride, omitEndNode })
 
   return (
     <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
@@ -1292,22 +1296,36 @@ function StopNodeBody({
         <Text style={s.hnodeEyebrowNum}>{String(node.sortOrder).padStart(2, '0')}</Text>
         <Text style={s.hnodeEyebrowText}>{lastSeg}</Text>
       </View>
-      <Text
-        style={[
-          ...titleStyles,
-          { maxLines: 3, textOverflow: 'ellipsis' },
-        ]}
-      >
-        {node.stop.property_title || node.stop.address}
-      </Text>
-      <Text
-        style={[
-          ...addrStyles,
-          { maxLines: 2, textOverflow: 'ellipsis' },
-        ]}
-      >
-        {node.stop.address}
-      </Text>
+      {/* Title + address: als property_title leeg is OF gelijk aan address,
+          tonen we alleen het adres als titel — anders zou het identieke
+          adres dubbel verschijnen (eenmaal als heading, eenmaal als
+          subtitle) zoals consultants in de PDF zagen. */}
+      {(() => {
+        const t = node.stop.property_title?.trim()
+        const showSeparate = !!t && t !== node.stop.address
+        return (
+          <>
+            <Text
+              style={[
+                ...titleStyles,
+                { maxLines: 3, textOverflow: 'ellipsis' },
+              ]}
+            >
+              {t || node.stop.address}
+            </Text>
+            {showSeparate && (
+              <Text
+                style={[
+                  ...addrStyles,
+                  { maxLines: 2, textOverflow: 'ellipsis' },
+                ]}
+              >
+                {node.stop.address}
+              </Text>
+            )}
+          </>
+        )
+      })()}
       {node.stop.price != null && (
         <Text style={priceStyles} wrap={false}>{fmtPrice(node.stop.price)}</Text>
       )}
@@ -1496,9 +1514,6 @@ export function BezichtigingPDF({
   wordmarkSrc?: string
   heroSrc?: string
 }) {
-  // Stop-detail grid: 2-kol bij ≤4 stops, anders 3-kol (handoff regel)
-  const detailCols: 2 | 3 = stops.length >= 5 ? 3 : 2
-
   // Itinerary opdelen: bij ≤6 stops past alles in één horizontale track
   // (dense-modus dekt 5-6). Vanaf 7 stops worden de cellen onleesbaar smal,
   // dus splitsen we naar 2 pagina's. Lunch is de natuurlijke breakpoint;
@@ -1506,6 +1521,10 @@ export function BezichtigingPDF({
   const itineraryPages = route
     ? splitItineraryPages(trip, stops, route)
     : []
+  const lastIdx = itineraryPages.length - 1
+  // Hero-fallback hier i.p.v. in POST handler zodat zowel productie als
+  // het lokale render-script dezelfde default krijgen.
+  const effectiveHeroSrc = heroSrc ?? getAssetBase64('hero-villa-default.jpg')
 
   return (
     <Document>
@@ -1514,7 +1533,7 @@ export function BezichtigingPDF({
         stops={stops}
         route={route}
         beeldmerkSrc={beeldmerkSrc}
-        heroSrc={heroSrc}
+        heroSrc={effectiveHeroSrc}
       />
       {itineraryPages.map((page, i) => (
         <ItineraryPage
@@ -1525,17 +1544,12 @@ export function BezichtigingPDF({
           wordmarkSrc={wordmarkSrc}
           partLabel={itineraryPages.length > 1 ? `Deel ${i + 1} van ${itineraryPages.length}` : undefined}
           endAddressOverride={page.endAddressOverride}
+          // Einde-node alleen op de laatste itinerary-pagina; tussen-pagina's
+          // bij split eindigen impliciet (lunch, of "wordt vervolgd" na de
+          // laatste stop op die pagina).
+          omitEndNode={i < lastIdx}
         />
       ))}
-      {route && stops.length > 0 && (
-        <StopDetailPage
-          trip={trip}
-          stops={stops}
-          route={route}
-          cols={detailCols}
-          wordmarkSrc={wordmarkSrc}
-        />
-      )}
     </Document>
   )
 }
