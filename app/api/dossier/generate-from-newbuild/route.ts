@@ -234,6 +234,7 @@ export async function POST(request: Request) {
     source: 'idealista_newbuild',
     bots_listing_id: listing_id,
     units_data: unitsData,
+    created_by: auth.id,
     ...(pitchContent ? { pitch_content: pitchContent, pitch_generated_at: new Date().toISOString() } : {}),
   }).select('id').single()
 

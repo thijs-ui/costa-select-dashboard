@@ -244,6 +244,7 @@ export async function POST(request: Request) {
           url: String(propertyData.url || ''),
           dossier_data: dossierResult,
           brochure_type: 'presentatie',
+          created_by: auth.id,
         })
         .select('id')
         .single()
@@ -382,6 +383,7 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
         brochure_type: 'pitch',
         pitch_content: pitchContent,
         pitch_generated_at: new Date().toISOString(),
+        created_by: auth.id,
       })
       .select('id')
       .single()
