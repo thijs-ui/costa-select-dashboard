@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Bath,
   Bed,
+  Building,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -22,7 +23,7 @@ import {
   Send,
   Sparkles,
   Trash2,
-  TrendingUp,
+  Trees,
   User as UserIcon,
   UserPlus,
   X,
@@ -77,7 +78,7 @@ interface Customer {
   item_count?: number
 }
 
-type SuggestionIcon = 'building' | 'home' | 'sparkles' | 'trending-up' | 'map-pin'
+type SuggestionIcon = 'building' | 'home' | 'sparkles' | 'penthouse' | 'finca' | 'townhouse'
 
 interface Suggestion {
   text: string
@@ -85,12 +86,18 @@ interface Suggestion {
   topic?: boolean
 }
 
+// Voorbeelden zijn de eerste sturing voor consultants: ze laten zien welke
+// dimensies zinvol zijn om in een prompt op te nemen (regio of stad,
+// type woning, slaapkamers, budget-range, must-haves zoals zwembad of
+// zeezicht). Gespreid over types en regio's zodat consultants zien dat
+// het concept werkt voor instap, mid-segment én premium.
 const SUGGESTIONS: Suggestion[] = [
   { text: 'Appartement Costa del Sol, 2 slpk, max 300k', icon: 'building' },
   { text: 'Villa Marbella, 4 slpk, zwembad, 1M+', icon: 'home' },
-  { text: 'Nieuwbouw Costa Blanca, 2 slpk, zeezicht', icon: 'sparkles' },
-  { text: 'Prijzen Marbella', icon: 'trending-up', topic: true },
-  { text: 'Buurt Jávea', icon: 'map-pin', topic: true },
+  { text: 'Nieuwbouw Costa Blanca Noord, 2 slpk, zeezicht', icon: 'sparkles' },
+  { text: 'Penthouse Estepona, 3 slpk, ruim terras, 500–700k', icon: 'penthouse' },
+  { text: 'Finca Mijas, 3 slpk, perceel 2000m²+, privacy', icon: 'finca' },
+  { text: 'Townhouse Jávea, 3 slpk, communaal zwembad, max 500k', icon: 'townhouse' },
 ]
 
 // ───────── Utils ─────────
@@ -133,8 +140,9 @@ function SuggestionIconEl({ name, size = 14 }: { name: SuggestionIcon; size?: nu
   if (name === 'building') return <Building2 {...props} />
   if (name === 'home') return <Home {...props} />
   if (name === 'sparkles') return <Sparkles {...props} />
-  if (name === 'trending-up') return <TrendingUp {...props} />
-  return <MapPin {...props} />
+  if (name === 'penthouse') return <Building {...props} />
+  if (name === 'finca') return <Trees {...props} />
+  return <Home {...props} />
 }
 
 // ───────── Page ─────────
