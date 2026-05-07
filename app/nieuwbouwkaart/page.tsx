@@ -141,8 +141,13 @@ export default function NieuwbouwkaartPage() {
   // Filtered listings — used for pins + stats
   const filtered = useMemo(() => listings.filter(l => {
     if (filters.search) {
-      const q = filters.search.toLowerCase()
-      const hay = `${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''}`.toLowerCase()
+      // Lower-case + accent-strip aan beide kanten zodat 'Xabia' matched
+      // met 'Xàbia', 'Javea' met 'Jávea', enz. NFD splitst diacrieten af,
+      // de regex haalt ze weg.
+      const fold = (str: string) =>
+        str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      const q = fold(filters.search)
+      const hay = fold(`${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''}`)
       if (!hay.includes(q)) return false
     }
     if (filters.region && l.region !== filters.region) return false
