@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Bricolage_Grotesque, JetBrains_Mono, Raleway } from 'next/font/google'
 import './globals.css'
 import ClientLayout from '@/components/client-layout'
@@ -27,6 +27,15 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Costa Select — Intern Platform',
   description: 'Intern platform voor Costa Select medewerkers',
+}
+
+// Viewport: zonder deze meta zoomt mobile Safari/Chrome standaard uit
+// alsof de pagina een desktop is, waardoor responsive CSS niet aangrijpt.
+// initial-scale=1 koppelt CSS-pixels aan device-pixels.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

@@ -9490,3 +9490,89 @@ tr.fin-spread-post:hover .fin-vaste-btn { opacity: 1; }
   100% { background-color: transparent; box-shadow: inset 4px 0 0 transparent; }
 }
 .dossier-row-pulse { animation: dossier-row-pulse 2.4s ease-out; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE OVERRIDES — alleen actief onder 760px
+   ───────────────────────────────────────────────────────────────────────────
+   Dit blok bevat UITSLUITEND mobiel-specifieke overrides. Er wordt geen
+   bestaande regel bovenin het bestand gewijzigd; deze regels overrulen via
+   media query alleen onder 760px. Desktop renderen blijft 1:1 ongewijzigd.
+
+   Breakpoint 760px is consistent met de bestaande sidebar-mobile-trigger
+   (regels 1766+ en 1793) — boven 760 zien we sidebar permanent en is het
+   layout desktop. Onder 760 verschijnt de hamburger-topbar uit
+   client-layout.tsx en moeten pagina's hun ruimte verkleinen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 760px) {
+  /* ── Globale shell ─────────────────────────────────────────────────── */
+  /* Voorkom horizontale page-scroll door iets dat te breed wordt. */
+  html, body { max-width: 100vw; overflow-x: hidden; }
+
+  /* ── Financieel dashboard (.fin-*) ─────────────────────────────────── */
+  /* Horizontale padding strakker zodat de hele content past zonder scroll. */
+  .fin-shell { padding: 0 16px; }
+
+  /* Header: stack verticaal, kleinere h1, knoppen onder titel. */
+  .fin-header {
+    padding: 16px 0 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .fin-header h1 { font-size: 22px; }
+  .fin-header .subtitle { font-size: 12.5px; }
+  .fin-header-right { width: 100%; }
+  .fin-period, .fin-entity { width: 100%; justify-content: flex-start; }
+
+  /* KPI-grid: bij 3- of 4-col grid op mobiel naar 1-col stacken. */
+  .fin-kpi-row,
+  .fin-kpi-row.cols-3 { grid-template-columns: 1fr !important; gap: 10px; }
+
+  /* Charts naast elkaar → onder elkaar. */
+  .fin-charts { grid-template-columns: 1fr !important; gap: 12px; }
+
+  /* Section header stackbaar maken. */
+  .fin-section-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+  /* Tabellen: laat container horizontaal scrollen zodat brede tabellen
+     bereikbaar blijven zonder dat de hele page scrollt. -webkit-overflow-
+     scrolling geeft momentum-scroll op iOS. */
+  .fin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fin-table { min-width: 560px; }
+  .fin-table th, .fin-table td { white-space: nowrap; }
+
+  /* Modals: full-screen. Overlay-padding nul zodat de modal zelf de hele
+     viewport kan vullen op mobiel. Form-inputs blijven zo bruikbaar. */
+  .fin-modal-overlay { padding: 0; align-items: flex-start; }
+  .fin-modal,
+  .fin-modal.lg {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  /* Form-grids in modals → 1-col. */
+  .fin-form-grid { grid-template-columns: 1fr !important; }
+
+  /* ── Generieke pagina-shells (consultant-tools) ─────────────────────── */
+  /* Veel consultant-pagina's gebruiken een max-width container met
+     32-48px horizontale padding. Op mobiel willen we 16px en geen
+     vaste min-widths. Targets zijn de meest voorkomende wrapper-classes
+     in pages — op deze breakpoint heeft alleen de override-class effect. */
+  .results-body,
+  .breakdown-card { padding-left: 16px !important; padding-right: 16px !important; }
+
+  /* Voorkom dat fixed widths op interactieve cards/forms overstroomen. */
+  .fin-banner,
+  .fin-form-grid > * { max-width: 100%; }
+
+  /* Knoppen in toolbars wrappen netjes. */
+  .fin-period,
+  .fin-entity { flex-wrap: wrap; }
+}
