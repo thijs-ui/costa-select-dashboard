@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Plus,
   Send,
+  Square,
   Sparkles,
   Trash2,
   Trees,
@@ -153,6 +154,10 @@ export default function WoningbotPage() {
   const [chatId, setChatId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // AbortController voor de actieve chat-fetch zodat de gebruiker een
+  // lopende zoekvraag kan onderbreken (de externe service blijft doorlopen
+  // maar de UI stopt het wachten en kan een nieuwe vraag starten).
+  const abortRef = useRef<AbortController | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [history, setHistory] = useState<SavedChat[]>([])
   const [selectedProps, setSelectedProps] = useState<Set<string>>(new Set())
@@ -222,11 +227,17 @@ export default function WoningbotPage() {
     setInput('')
     setLoading(true)
 
+    // Nieuwe controller voor deze request — als de user op stop klikt
+    // wordt deze ge-aborteerd en valt de catch in.
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
       const res = await fetch('/api/woningbot/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: value, sessionId }),
+        signal: controller.signal,
       })
       const data = await res.json()
       if (data.sessionId) setSessionId(data.sessionId)
@@ -254,19 +265,33 @@ export default function WoningbotPage() {
       setMessages(updated)
       setLoading(false)
       saveChat(updated, data.sessionId || sessionId, chatId).catch(() => {})
-    } catch {
-      const updated = [
-        ...next,
-        {
-          role: 'bot' as const,
-          content: 'Er ging iets mis met de verbinding naar de woningbot. Probeer het opnieuw.',
-        },
-      ]
-      setMessages(updated)
-      setLoading(false)
+    } catch (err) {
+      // Door user gestopt: geen foutmelding tonen, gewoon loading
+      // afsluiten zodat de input weer klaar staat voor een nieuwe vraag.
+      const aborted =
+        (err as Error)?.name === 'AbortError' ||
+        controller.signal.aborted
+      if (aborted) {
+        setLoading(false)
+      } else {
+        const updated = [
+          ...next,
+          {
+            role: 'bot' as const,
+            content: 'Er ging iets mis met de verbinding naar de woningbot. Probeer het opnieuw.',
+          },
+        ]
+        setMessages(updated)
+        setLoading(false)
+      }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       inputRef.current?.focus()
     }
+  }
+
+  function stopRequest() {
+    abortRef.current?.abort()
   }
 
   function startNewChat() {
@@ -687,6 +712,20 @@ export default function WoningbotPage() {
           >
             <Send size={16} strokeWidth={2} />
           </button>
+          {loading && (
+            <button
+              type="button"
+              onClick={stopRequest}
+              aria-label="Zoekopdracht stoppen"
+              className="flex items-center justify-center rounded-[10px] text-marble transition-colors cursor-pointer"
+              style={{ width: 40, height: 40, background: '#C24040', marginLeft: 6 }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#A82F2F')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#C24040')}
+              title="Zoekopdracht stoppen"
+            >
+              <Square size={14} strokeWidth={0} fill="currentColor" />
+            </button>
+          )}
         </form>
         <div
           className="mx-auto flex items-center justify-between mt-2.5 font-body"
