@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
+  Download,
   Hammer,
   Home,
   Info,
@@ -19,7 +20,14 @@ import {
   Sparkles,
   TrendingUp,
   Wallet,
+  X,
 } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import type {
+  CalculatorViewModel,
+  KkRow,
+  ProjectionRow as VmProjectionRow,
+} from '@/lib/calculator-pdf-types'
 
 // ════════════════════ Constants & tokens ════════════════════
 
@@ -424,10 +432,12 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 // ════════════════════ Page ════════════════════
 
 export default function CalculatorPage() {
+  const { naam } = useAuth()
   const [state, setState] = useState<CalcState>(DEFAULT_STATE)
   const [regions, setRegions] = useState<RegionalSettings[]>([])
   const [regionsLoaded, setRegionsLoaded] = useState(false)
   const [examplesOpen, setExamplesOpen] = useState(false)
+  const [pdfOpen, setPdfOpen] = useState(false)
 
   const patch = (p: PartialState) => setState(s => ({ ...s, ...p }))
 
@@ -511,7 +521,23 @@ export default function CalculatorPage() {
         setExamplesOpen={setExamplesOpen}
         onLoadExample={loadExample}
         onReset={reset}
+        onShare={() => setPdfOpen(true)}
       />
+
+      {pdfOpen && (
+        <PdfDownloadModal
+          state={state}
+          region={region}
+          buyer={buyer}
+          fin={fin}
+          rental={rental}
+          sl={sl}
+          flip={flip}
+          projection={projection}
+          consultant={naam ?? 'Costa Select'}
+          onClose={() => setPdfOpen(false)}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto" style={{ overflowX: 'hidden' }}>
         <div className="mx-auto" style={{ maxWidth: 1280, padding: '22px 36px 80px' }}>
@@ -997,12 +1023,14 @@ function CalcHeader({
   setExamplesOpen,
   onLoadExample,
   onReset,
+  onShare,
 }: {
   mode: ModeId
   examplesOpen: boolean
   setExamplesOpen: (v: boolean) => void
   onLoadExample: (ex: { label: string } & PartialState) => void
   onReset: () => void
+  onShare: () => void
 }) {
   const examples = EXAMPLE_SCENARIOS[mode] || []
   const modeLabel = CALC_MODES.find(m => m.id === mode)?.label ?? ''
@@ -1097,7 +1125,7 @@ function CalcHeader({
             </div>
           )}
         </div>
-        <CalcButton variant="primary" title="(placeholder) Scenario delen">
+        <CalcButton variant="primary" onClick={onShare} title="Calculatie delen als PDF">
           <Share2 size={13} strokeWidth={2} /> Scenario delen
         </CalcButton>
       </div>
@@ -2858,5 +2886,372 @@ function CalcButton({
     >
       {children}
     </button>
+  )
+}
+
+// ════════════════════ PDF view-model builder ════════════════════
+// Convert CalcState + computed values to the server-side PDF view-model.
+// All numbers come from the same calc-functions used for the on-screen UI;
+// we just shape them and humanize the labels.
+function buildPdfViewModel(args: {
+  state: CalcState
+  region: RegionalSettings | null
+  buyer: BuyerCosts
+  fin: { downPayment: number; mortgage: number; ltv: number }
+  rental: ReturnType<typeof calcRental>
+  sl: ReturnType<typeof calcSL>
+  flip: ReturnType<typeof calcFlip>
+  projection: ProjectionRow[]
+  klantnaam: string
+  consultant: string
+}): CalculatorViewModel {
+  const { state, region, buyer, fin, rental, sl, flip, projection, klantnaam, consultant } = args
+  const ltvMax = state.isResident ? MAX_LTV_RESIDENT : MAX_LTV_NON_RESIDENT
+  const totalKK = buyer.total
+  const totalAankoop = state.price
+  const totalSom = totalAankoop + totalKK
+  const totalInleg = fin.downPayment + totalKK
+  const monthlyMortgage = fin.mortgage > 0 ? monthlyAnnuity(fin.mortgage, state.rate, state.years) : 0
+  const monthlyTotal = monthlyMortgage + state.ibiMonthly + state.vveMonthly + state.insuranceMonthly
+
+  const kkRows: KkRow[] = buyer.rows.map(r => ({
+    t: r.label,
+    s: r.sub,
+    val: r.value,
+    pct: state.price > 0 ? (r.value / state.price) * 100 : null,
+  }))
+
+  const modeMeta = CALC_MODES.find(m => m.id === state.mode)
+  const modeLabel = modeMeta?.label ?? 'Calculator'
+  const regionName = region?.region ?? 'Regio onbekend'
+  const propTypeLabel = state.propType === 'new' ? 'Nieuwbouw' : 'Bestaande bouw'
+  const residentLabel = state.isResident ? 'Resident' : 'Niet-resident'
+
+  const vm: CalculatorViewModel = {
+    mode: state.mode,
+    modeLabel,
+    klantnaam,
+    consultant,
+    dateIso: new Date().toISOString(),
+    region: regionName,
+    regionShort: regionName,
+    regionId: region?.id ?? '',
+    propType: propTypeLabel,
+    isResident: state.isResident,
+    residentLabel,
+    price: state.price,
+    kkRows,
+    kkTotal: totalKK,
+    kkPct: buyer.pct,
+    ltv: fin.ltv,
+    ltvMax,
+    rate: state.rate,
+    years: state.years,
+    mortgage: fin.mortgage,
+    downPayment: fin.downPayment,
+    totalInleg,
+    totalAankoop,
+    totalKK,
+    totalSom,
+    monthly: {
+      mortgage: monthlyMortgage,
+      ibi: state.ibiMonthly,
+      vve: state.vveMonthly,
+      insurance: state.insuranceMonthly,
+      total: monthlyTotal,
+    },
+  }
+
+  // Verhuur-data alleen voor verhuur + sl modes
+  if (state.mode === 'verhuur' || state.mode === 'sl') {
+    const occupancy = 100  // huidige UI heeft nog geen bezetting-input; default 100%.
+    vm.rental = {
+      monthlyRent: state.monthlyRent,
+      annualGross: rental.annualRent,
+      occupancy,
+      effectiveRent: rental.annualRent,
+      managementPct: state.managementPct,
+      managementCost: rental.management,
+      maintenancePct: state.maintenancePct,
+      maintenanceCost: rental.maintenance,
+      fixedCosts: rental.fixedCostsYear,
+      netOperating: rental.preTax,
+      irnrPct: state.mode === 'verhuur' ? RENO_SETTINGS.irnr_pct : null,
+      irnrTax: state.mode === 'verhuur' ? rental.irnr : null,
+      netAfterTax: state.mode === 'verhuur' ? rental.netAfterTax : null,
+      yieldOnPrice: rental.yieldOnPrice,
+      yieldOnEquity: rental.yieldOnEquity,
+    }
+  }
+
+  // SL-data
+  if (state.mode === 'sl') {
+    const grossProfit = rental.preTax + rental.annualInterestApprox  // operationeel resultaat vóór rente-aftrek
+    vm.sl = {
+      buildingValue: sl.buildingValue,
+      depreciationPct: RENO_SETTINGS.depreciation_pct,
+      depreciation: sl.depreciation,
+      interestDeductible: rental.annualInterestApprox,
+      adminCost: state.slAdmin,
+      grossProfit,
+      taxableProfit: sl.taxable,
+      vpbPctYoung: RENO_SETTINGS.vpb_young_pct,
+      vpbPctMature: RENO_SETTINGS.vpb_mature_pct,
+      vpbAge: state.slAge,
+      vpb: sl.vpb,
+      netInSL: sl.netInSL,
+      voordeelVsPrive: Math.max(0, sl.netInSL - rental.netAfterTax),
+    }
+    // Privé vs SL compare-tabel
+    vm.compare = {
+      rows: [
+        { l: 'Bruto verhuurinkomsten', s: 'Per jaar', prive: rental.annualRent, sl: rental.annualRent, delta: 0, winner: null },
+        { l: 'Operationele kosten', s: 'Beheer + onderhoud + vaste lasten', prive: rental.management + rental.maintenance + rental.fixedCostsYear, sl: rental.management + rental.maintenance + rental.fixedCostsYear, delta: 0, winner: null },
+        { l: 'Aftrekbare hypotheekrente', s: '100% in SL · beperkt privé', prive: 0, sl: rental.annualInterestApprox, delta: rental.annualInterestApprox, winner: 'sl' },
+        { l: `Afschrijving ${RENO_SETTINGS.depreciation_pct}% gebouwwaarde`, s: 'Alleen via SL fiscaal aftrekbaar', prive: 0, sl: sl.depreciation, delta: sl.depreciation, winner: 'sl' },
+        { l: 'SL administratie', s: 'Forfait per jaar', prive: 0, sl: state.slAdmin, delta: state.slAdmin, winner: 'prive' },
+        { l: 'Belasting (IRNR / VPB)', s: `IRNR ${RENO_SETTINGS.irnr_pct}% · VPB ${state.slAge === 'young' ? RENO_SETTINGS.vpb_young_pct : RENO_SETTINGS.vpb_mature_pct}%`, prive: rental.irnr, sl: sl.vpb, delta: sl.vpb - rental.irnr, winner: sl.vpb < rental.irnr ? 'sl' : 'prive' },
+      ],
+      totalPrive: rental.netAfterTax,
+      totalSL: sl.netInSL,
+      totalDelta: sl.netInSL - rental.netAfterTax,
+      winner: sl.netInSL > rental.netAfterTax ? 'sl' : 'prive',
+    }
+  }
+
+  // Projectie alleen wanneer enabled
+  if (projection.length > 0) {
+    vm.projection = projection.map((row): VmProjectionRow => {
+      const interest = (row.balance + (row.year > 1 ? projection[row.year - 2].balance : fin.mortgage)) / 2 * (state.rate / 100)
+      const ops = (row.rent * (state.managementPct + state.maintenancePct)) / 100 + (state.ibiMonthly + state.vveMonthly + state.insuranceMonthly) * 12
+      return {
+        y: row.year,
+        hyp: row.mortgagePaid,
+        huur: row.rent,
+        kosten: ops + Math.max(0, row.rent - ops - interest) * (RENO_SETTINGS.irnr_pct / 100),
+        cashflow: row.cashflow,
+        cum: row.cumulative,
+        restschuld: row.balance,
+      }
+    })
+  }
+
+  // Reno/Flip-data
+  if (state.mode === 'flip') {
+    vm.reno = {
+      budget: state.renoBudget,
+      supervisionPct: RENO_SETTINGS.supervision_pct,
+      supervisionCost: flip.supervision,
+      contingencyPct: RENO_SETTINGS.contingency_pct,
+      contingencyCost: flip.contingency,
+      renoMonths: state.renoMonths,
+      saleMonths: state.saleMonths,
+      durationMonths: state.renoMonths + state.saleMonths,
+      sellPrice: state.sellPrice,
+      agentPct: state.agentPct,
+      agentFee: flip.agent,
+      plusvaliaPct: RENO_SETTINGS.plusvalia_pct,
+      plusvalia: flip.plusvalia,
+      cgtPct: RENO_SETTINGS.cgt_pct,
+      totalInvestment: flip.totalInvest,
+      grossProfit: flip.grossProfit,
+      cgt: flip.cgt,
+      netProfit: flip.netProfit,
+      roi: flip.roi,
+      roiPerYear: flip.roiPerYear,
+    }
+  }
+
+  return vm
+}
+
+// ════════════════════ PDF DOWNLOAD MODAL ════════════════════
+function PdfDownloadModal({
+  state, region, buyer, fin, rental, sl, flip, projection, consultant, onClose,
+}: {
+  state: CalcState
+  region: RegionalSettings | null
+  buyer: BuyerCosts
+  fin: { downPayment: number; mortgage: number; ltv: number; hasMortgage: boolean }
+  rental: ReturnType<typeof calcRental>
+  sl: ReturnType<typeof calcSL>
+  flip: ReturnType<typeof calcFlip>
+  projection: ProjectionRow[]
+  consultant: string
+  onClose: () => void
+}) {
+  const [klantnaam, setKlantnaam] = useState('')
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  async function download() {
+    if (!klantnaam.trim()) {
+      setError('Klantnaam is verplicht')
+      return
+    }
+    if (!region) {
+      setError('Selecteer eerst een regio in de calculator')
+      return
+    }
+    setDownloading(true)
+    setError(null)
+    try {
+      const vm = buildPdfViewModel({
+        state, region, buyer, fin, rental, sl, flip, projection,
+        klantnaam: klantnaam.trim(),
+        consultant,
+      })
+      const res = await fetch('/api/calculators/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ vm }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `costa-select-calculatie-${klantnaam.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Download mislukt')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(7,42,36,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#FFFAEF', borderRadius: 12,
+          width: '100%', maxWidth: 480,
+          boxShadow: '0 24px 60px rgba(7,42,36,0.25)',
+          overflow: 'hidden',
+          fontFamily: 'inherit',
+        }}
+      >
+        <div style={{ padding: '20px 24px 0', position: 'relative' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#C58118', marginBottom: 6 }}>
+            Calculatie delen
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: '#004B46', margin: 0, letterSpacing: '-0.02em' }}>
+            PDF downloaden<span style={{ color: '#F5AF40' }}>.</span>
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Sluiten"
+            style={{
+              position: 'absolute', top: 16, right: 16,
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              color: '#7A8C8B',
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 24px 0' }}>
+          <p style={{ fontSize: 12.5, color: '#4A5A57', lineHeight: 1.5, margin: '8px 0 16px' }}>
+            We genereren een PDF op basis van de huidige scenario-instellingen. Vul de naam van de
+            klant in — die verschijnt op de cover.
+          </p>
+
+          <label style={{ display: 'block', marginBottom: 14 }}>
+            <span style={{ display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#5F7472', marginBottom: 5 }}>
+              Klantnaam
+            </span>
+            <input
+              autoFocus
+              value={klantnaam}
+              onChange={e => setKlantnaam(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') download() }}
+              placeholder="Bv. Familie van der Berg"
+              disabled={downloading}
+              style={{
+                width: '100%', padding: '10px 12px',
+                border: '1px solid rgba(0,75,70,0.18)',
+                borderRadius: 8,
+                fontSize: 14, fontFamily: 'inherit',
+                color: '#004B46', background: '#fff',
+                outline: 'none',
+              }}
+            />
+          </label>
+
+          {error && (
+            <div style={{
+              background: '#FFEBE8', border: '1px solid #B81D13', color: '#7A1D13',
+              padding: '8px 12px', borderRadius: 6, fontSize: 12, marginBottom: 14,
+            }}>{error}</div>
+          )}
+
+          <div style={{ fontSize: 11, color: '#7A8C8B', marginBottom: 16 }}>
+            Mode: <strong style={{ color: '#004B46' }}>{CALC_MODES.find(m => m.id === state.mode)?.label}</strong>
+            {' · '}Regio: <strong style={{ color: '#004B46' }}>{region?.region ?? '—'}</strong>
+            {' · '}Aankoopprijs: <strong style={{ color: '#004B46' }}>{fmtEUR(state.price)}</strong>
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', gap: 8,
+          padding: '14px 24px 18px',
+          borderTop: '1px solid rgba(0,75,70,0.10)',
+          background: '#F4EDDD',
+        }}>
+          <button
+            onClick={onClose}
+            disabled={downloading}
+            style={{
+              padding: '8px 14px', border: '1px solid rgba(0,75,70,0.18)',
+              background: 'transparent', borderRadius: 6,
+              fontSize: 13, fontWeight: 600, color: '#4A5A57',
+              cursor: downloading ? 'not-allowed' : 'pointer',
+              opacity: downloading ? 0.6 : 1,
+            }}
+          >
+            Annuleren
+          </button>
+          <button
+            onClick={download}
+            disabled={downloading || !klantnaam.trim()}
+            style={{
+              padding: '8px 14px', border: 'none',
+              background: '#004B46', borderRadius: 6,
+              fontSize: 13, fontWeight: 600, color: '#FFFAEF',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              cursor: downloading || !klantnaam.trim() ? 'not-allowed' : 'pointer',
+              opacity: downloading || !klantnaam.trim() ? 0.6 : 1,
+            }}
+          >
+            <Download size={14} strokeWidth={2.2} />
+            {downloading ? 'Genereren…' : 'PDF downloaden'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
