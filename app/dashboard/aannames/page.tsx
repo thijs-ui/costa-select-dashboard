@@ -443,6 +443,38 @@ function UsersSection({
     })
   }
 
+  // Handmatig wachtwoord zetten — fallback voor wanneer Supabase password-
+  // reset emails niet aankomen (deliverability-issue, niet onze bug). Admin
+  // tikt het wachtwoord in en deelt het via een veilig kanaal met de
+  // gebruiker; die kan 't daarna zelf wijzigen via /login.
+  async function handleSetPassword(id: string, email: string) {
+    const password = window.prompt(
+      `Nieuw wachtwoord voor ${email}\n\nMinimaal 8 tekens. Deel veilig (geen email/Slack-DM) en vraag de gebruiker het direct na eerste login te wijzigen.`,
+      ''
+    )
+    if (!password) return
+    if (password.length < 8) {
+      flashToast('error', 'Wachtwoord moet minimaal 8 tekens zijn')
+      return
+    }
+    try {
+      const res = await fetch('/api/users/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: id, password }),
+        cache: 'no-store',
+      })
+      if (res.ok) {
+        flashToast('ok', `Wachtwoord gezet voor ${email}`)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        flashToast('error', data.error || 'Wachtwoord zetten mislukt')
+      }
+    } catch {
+      flashToast('error', 'Wachtwoord zetten mislukt')
+    }
+  }
+
   async function invite() {
     setInviteErr('')
     if (!newUser.email.trim()) { setInviteErr('Email is verplicht'); return }
@@ -519,14 +551,25 @@ function UsersSection({
               />
             </td>
             <td className="act">
-              <button
-                className="aa-btn aa-btn--icon danger"
-                onClick={() => handleDelete(u.id, u.email)}
-                type="button"
-                aria-label={`Verwijder ${u.email}`}
-              >
-                <AaIcon name="trash" size={13} />
-              </button>
+              <div style={{ display: 'inline-flex', gap: 6 }}>
+                <button
+                  className="aa-btn aa-btn--icon"
+                  onClick={() => handleSetPassword(u.id, u.email)}
+                  type="button"
+                  aria-label={`Stel wachtwoord in voor ${u.email}`}
+                  title="Wachtwoord instellen"
+                >
+                  <AaIcon name="key" size={13} />
+                </button>
+                <button
+                  className="aa-btn aa-btn--icon danger"
+                  onClick={() => handleDelete(u.id, u.email)}
+                  type="button"
+                  aria-label={`Verwijder ${u.email}`}
+                >
+                  <AaIcon name="trash" size={13} />
+                </button>
+              </div>
             </td>
           </>
         )}
