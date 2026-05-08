@@ -179,13 +179,25 @@ export default function AfsprakenPage() {
       notities: form.notities || null,
     }
     if (editingId) {
-      await supabase.from('afspraken').update(payload).eq('id', editingId)
+      const { error } = await supabase.from('afspraken').update(payload).eq('id', editingId)
+      if (error) {
+        console.error('[saveAfspraak] update failed:', error)
+        alert(`Opslaan mislukt: ${error.message}`)
+        setSaving(false)
+        return
+      }
       setAfspraken(prev =>
         prev.map(a => (a.id === editingId ? ({ ...a, ...payload } as Afspraak) : a)).sort(byDateDesc)
       )
       setEditingId(null)
     } else {
-      const { data } = await supabase.from('afspraken').insert(payload).select().single()
+      const { data, error } = await supabase.from('afspraken').insert(payload).select().single()
+      if (error) {
+        console.error('[saveAfspraak] insert failed:', error)
+        alert(`Opslaan mislukt: ${error.message}`)
+        setSaving(false)
+        return
+      }
       if (data) setAfspraken([data as Afspraak, ...afspraken].sort(byDateDesc))
     }
     setForm(emptyForm)
