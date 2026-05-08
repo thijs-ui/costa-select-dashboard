@@ -17,6 +17,7 @@ import { Badges, Langs, Reliability } from './parts'
 import {
   REL_LABEL,
   TYPE_LABELS,
+  effectiveRegions,
   fmtLastContact,
   type Agency,
   type Partner,
@@ -58,11 +59,15 @@ export function SamModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const itemRegions = isAgency
+    ? (agency.region ? [agency.region] : [])
+    : effectiveRegions(isTeam ? teamMember : partner)
+  const regionEyebrow = itemRegions.length > 0 ? ' · ' + itemRegions.join(' · ') : ''
   const eyebrow = isAgency
-    ? `MAKELAAR · ${agency.region}`
+    ? `MAKELAAR${regionEyebrow}`
     : isTeam
-    ? `TEAM${teamMember.role ? ' · ' + teamMember.role.toUpperCase() : ''}${teamMember.region ? ' · ' + teamMember.region : ''}`
-    : `${(TYPE_LABELS[partner.type] || 'Partner').toUpperCase()}${partner.region ? ' · ' + partner.region : ''}`
+    ? `TEAM${teamMember.role ? ' · ' + teamMember.role.toUpperCase() : ''}${regionEyebrow}`
+    : `${(TYPE_LABELS[partner.type] || 'Partner').toUpperCase()}${regionEyebrow}`
 
   const lc = fmtLastContact(item.last_contact_days)
 
@@ -220,7 +225,7 @@ export function SamModal({
                   <div className="sam-field-readonly">
                     <span className="lbl">Regio</span>
                     <span className="val">
-                      {teamMember.region || <span className="muted">Heel Spanje</span>}
+                      {effectiveRegions(teamMember).join(' · ')}
                     </span>
                   </div>
                 </>
@@ -237,7 +242,7 @@ export function SamModal({
                   <div className="sam-field-readonly">
                     <span className="lbl">Regio</span>
                     <span className="val">
-                      {partner.region || <span className="muted">Heel Spanje</span>}
+                      {effectiveRegions(partner).join(' · ')}
                     </span>
                   </div>
                   {partner.specialism && (

@@ -27,6 +27,7 @@ export interface Partner {
   name: string
   type: PartnerType
   region: string | null
+  regions: string[] | null
   contact_name: string | null
   contact_phone: string | null
   contact_email: string | null
@@ -46,6 +47,7 @@ export interface TeamMember {
   name: string
   role: string | null                  // free-text functie ('Senior consultant', 'Marketing', etc.)
   region: string | null
+  regions: string[] | null
   contact_name: string | null
   contact_phone: string | null
   contact_email: string | null
@@ -61,6 +63,14 @@ export type PartnerType =
   | 'hypotheekadviseur'
   | 'notaris'
   | 'belastingadviseur'
+  | 'advocaat'
+  | 'gestor'
+  | 'architect'
+  | 'aannemer'
+  | 'taxateur'
+  | 'verzekeringsadviseur'
+  | 'interieurontwerper'
+  | 'beheerder'
   | 'anders'
 
 export const PARTNER_TYPES: { value: PartnerType; label: string }[] = [
@@ -68,6 +78,14 @@ export const PARTNER_TYPES: { value: PartnerType; label: string }[] = [
   { value: 'hypotheekadviseur', label: 'Hypotheekadviseur' },
   { value: 'notaris', label: 'Notaris' },
   { value: 'belastingadviseur', label: 'Belastingadviseur' },
+  { value: 'advocaat', label: 'Advocaat' },
+  { value: 'gestor', label: 'Gestor' },
+  { value: 'architect', label: 'Architect' },
+  { value: 'aannemer', label: 'Aannemer' },
+  { value: 'taxateur', label: 'Taxateur' },
+  { value: 'verzekeringsadviseur', label: 'Verzekeringsadviseur' },
+  { value: 'interieurontwerper', label: 'Interieurontwerper' },
+  { value: 'beheerder', label: 'Beheerder' },
   { value: 'anders', label: 'Anders' },
 ]
 
@@ -76,12 +94,21 @@ export const TYPE_LABELS: Record<PartnerType, string> = {
   hypotheekadviseur: 'Hypotheekadviseur',
   notaris: 'Notaris',
   belastingadviseur: 'Belastingadviseur',
+  advocaat: 'Advocaat',
+  gestor: 'Gestor',
+  architect: 'Architect',
+  aannemer: 'Aannemer',
+  taxateur: 'Taxateur',
+  verzekeringsadviseur: 'Verzekeringsadviseur',
+  interieurontwerper: 'Interieurontwerper',
+  beheerder: 'Beheerder',
   anders: 'Anders',
 }
 
 export const LANG_LABELS: Record<Lang, string> = { nl: 'NL', en: 'EN', es: 'ES', de: 'DE' }
 
 export const REGIONS_AGENCY = [
+  'Spanje',
   'Costa Brava',
   'Costa Dorada',
   'Costa de Valencia',
@@ -98,26 +125,12 @@ export const REGIONS_AGENCY = [
   'Costa de la Luz',
 ]
 
-export const REGIONS_PARTNER = [
-  'Costa Brava',
-  'Costa Dorada',
-  'Valencia',
-  'Costa Blanca Noord',
-  'Costa Blanca Zuid',
-  'Alicante',
-  'Costa del Sol',
-]
+// Partners en team gebruiken dezelfde uitgebreide regio-lijst als agencies +
+// 'Spanje' als opt-in voor 'werkt in heel Spanje'. Zo voorkomen we drift
+// tussen lijsten en kunnen ook partners in alle regio's zichtbaar zijn.
+export const REGIONS_PARTNER = REGIONS_AGENCY
 
-export const REGIONS_TEAM = [
-  'Costa Brava',
-  'Costa Dorada',
-  'Valencia',
-  'Costa Blanca Noord',
-  'Costa Blanca Zuid',
-  'Costa Cálida',
-  'Costa del Sol',
-  'Heel Spanje',
-]
+export const REGIONS_TEAM = REGIONS_AGENCY
 
 export const REL_LABEL: Record<number, string> = {
   1: 'Onbetrouwbaar',
@@ -149,4 +162,12 @@ export function fmtLastContact(days: number | null | undefined): LastContactInfo
   if (days <= 7) return { label: `${days}d geleden`, cls: 'fresh' }
   if (days <= 30) return { label: `${days}d geleden`, cls: 'warm' }
   return { label: `${days}d geleden`, cls: 'cold' }
+}
+
+// Helper: krijg effectieve regio-lijst voor een partner of teamlid. Valt
+// terug van array → single → 'Spanje' fallback voor display.
+export function effectiveRegions(item: { regions?: string[] | null; region?: string | null }): string[] {
+  if (item.regions && item.regions.length > 0) return item.regions
+  if (item.region) return [item.region]
+  return ['Spanje']
 }

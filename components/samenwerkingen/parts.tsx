@@ -30,6 +30,7 @@ import {
   LANG_LABELS,
   PARTNER_TYPES,
   TYPE_LABELS,
+  effectiveRegions,
   fmtLastContact,
   type Agency,
   type Lang,
@@ -41,6 +42,23 @@ import {
   type SortState,
   type TeamMember,
 } from './types'
+
+/* ── RegionList ──────────────────────────────────────── */
+// Multi-regio chip-list. Toont elke regio als pill; voor Spanje geen MapPin
+// pin om visueel onderscheid te houden.
+function RegionList({ regions }: { regions: string[] }) {
+  if (regions.length === 0) return <span style={{ color: 'var(--fg-subtle)', fontSize: 12, fontStyle: 'italic' }}>—</span>
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
+      {regions.map(r => (
+        <span key={r} className="sam-region">
+          <MapPin size={12} />
+          {r}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 /* ── Reliability ─────────────────────────────────────── */
 export function Reliability({ value, hideNum }: { value: number | null | undefined; hideNum?: boolean }) {
@@ -325,8 +343,11 @@ export function SamRegionStrip({
     })
     items.forEach(i => {
       if (i.is_active === false) return
-      const r = i.region
-      if (r && m[r] != null) m[r]++
+      // Multi-regio: tel partner/team-lid in elke regio waar hij actief is.
+      // Agency heeft alleen single region; effectiveRegions valt daarop terug.
+      effectiveRegions(i).forEach(r => {
+        if (m[r] != null) m[r]++
+      })
     })
     return m
   }, [items, regions])
@@ -482,6 +503,14 @@ const TYPE_ICON: Record<PartnerType, React.ReactNode> = {
   hypotheekadviseur: <Home size={11} />,
   notaris: <ScrollText size={11} />,
   belastingadviseur: <Receipt size={11} />,
+  advocaat: <Briefcase size={11} />,
+  gestor: <Briefcase size={11} />,
+  architect: <Building2 size={11} />,
+  aannemer: <Building2 size={11} />,
+  taxateur: <Receipt size={11} />,
+  verzekeringsadviseur: <Lock size={11} />,
+  interieurontwerper: <Home size={11} />,
+  beheerder: <Users size={11} />,
   anders: <MoreHorizontal size={11} />,
 }
 
@@ -664,16 +693,7 @@ export function SamPartnerTable({
           </span>
         </td>
         <td>
-          {p.region ? (
-            <span className="sam-region">
-              <MapPin size={12} />
-              {p.region}
-            </span>
-          ) : (
-            <span style={{ color: 'var(--fg-subtle)', fontSize: 12, fontStyle: 'italic' }}>
-              Heel Spanje
-            </span>
-          )}
+          <RegionList regions={effectiveRegions(p)} />
         </td>
         <td className="hide-sm">
           <Langs langs={p.languages} />
@@ -812,16 +832,7 @@ export function SamTeamTable({
           )}
         </td>
         <td>
-          {m.region ? (
-            <span className="sam-region">
-              <MapPin size={12} />
-              {m.region}
-            </span>
-          ) : (
-            <span style={{ color: 'var(--fg-subtle)', fontSize: 12, fontStyle: 'italic' }}>
-              Heel Spanje
-            </span>
-          )}
+          <RegionList regions={effectiveRegions(m)} />
         </td>
         <td className="hide-sm">
           <span className={`sam-last-contact ${lc.cls}`}>
@@ -860,7 +871,7 @@ export function SamTeamTable({
   if (group) {
     const groups: Record<string, TeamMember[]> = {}
     items.forEach(m => {
-      const k = m.region || 'Heel Spanje'
+      const k = m.region || 'Spanje'
       if (!groups[k]) groups[k] = []
       groups[k].push(m)
     })

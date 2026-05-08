@@ -24,7 +24,9 @@ interface Props {
 // (read-only per design).
 export function SamCreateModal({ type, onClose, onCreated }: Props) {
   const [name, setName] = useState('')
-  const [region, setRegion] = useState('')
+  // Agencies: single region (oude schema). Partners: multi-region.
+  const [region, setRegion] = useState('') // alleen agencies
+  const [regions, setRegions] = useState<string[]>([]) // alleen partners
   const [city, setCity] = useState('') // alleen agencies
   const [partnerType, setPartnerType] = useState<PartnerType>('financieel_adviseur')
   const [contactName, setContactName] = useState('')
@@ -41,8 +43,19 @@ export function SamCreateModal({ type, onClose, onCreated }: Props) {
   }, [onClose])
 
   const isAgency = type === 'agencies'
-  const regions = isAgency ? REGIONS_AGENCY : REGIONS_PARTNER
+  const regionOptions = isAgency ? REGIONS_AGENCY : REGIONS_PARTNER
   const path = isAgency ? '/api/agentschappen' : '/api/samenwerkingen'
+
+  // Toggle een regio aan/uit. 'Spanje' is mutually exclusive met andere regio's
+  // omdat het 'werkt overal' betekent — voorkomt dubbele logica in display.
+  function toggleRegion(r: string) {
+    setRegions(prev => {
+      const has = prev.includes(r)
+      if (r === 'Spanje') return has ? [] : ['Spanje']
+      const next = has ? prev.filter(x => x !== r) : [...prev.filter(x => x !== 'Spanje'), r]
+      return next
+    })
+  }
 
   async function submit() {
     if (!name.trim()) {
@@ -54,16 +67,20 @@ export function SamCreateModal({ type, onClose, onCreated }: Props) {
 
     const body: Record<string, unknown> = {
       name: name.trim(),
-      region: region || null,
       contact_name: contactName.trim() || null,
       contact_email: email.trim() || null,
       contact_phone: phone.trim() || null,
       website: website.trim() || null,
     }
     if (isAgency) {
+      body.region = region || null
       body.city = city.trim() || null
     } else {
       body.type = partnerType
+      body.regions = regions.length > 0 ? regions : null
+      // Legacy single-region kolom blijft bestaan; vul met eerste keuze zodat
+      // bestaande sortering/filters die nog niet rebuild zijn niet breken.
+      body.region = regions[0] ?? null
     }
 
     try {
@@ -150,14 +167,16 @@ export function SamCreateModal({ type, onClose, onCreated }: Props) {
               </Field>
             )}
 
-            <Field label="Regio">
-              <select value={region} onChange={e => setRegion(e.target.value)} style={inputStyle}>
-                <option value="">— kies regio —</option>
-                {regions.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </Field>
+            {isAgency ? (
+              <Field label="Regio">
+                <select value={region} onChange={e => setRegion(e.target.value)} style={inputStyle}>
+                  <option value="">— kies regio —</option>
+                  {regionOptions.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
 
             {isAgency && (
               <Field label="Plaats">
@@ -170,6 +189,36 @@ export function SamCreateModal({ type, onClose, onCreated }: Props) {
               </Field>
             )}
           </div>
+
+          {!isAgency && (
+            <Field label="Regio's (meerdere mogelijk · 'Spanje' = heel het land)">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {regionOptions.map(r => {
+                  const active = regions.includes(r)
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => toggleRegion(r)}
+                      style={{
+                        padding: '6px 11px',
+                        border: `1px solid ${active ? '#004B46' : 'rgba(0,75,70,0.18)'}`,
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: active ? 600 : 500,
+                        background: active ? '#004B46' : '#fff',
+                        color: active ? '#fff' : '#004B46',
+                        cursor: 'pointer',
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      {r}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          )}
 
           <Field label="Contactpersoon">
             <input

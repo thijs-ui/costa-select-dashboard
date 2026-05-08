@@ -14,7 +14,7 @@ export async function GET() {
   const supabase = await createUserClient()
   const { data, error } = await supabase
     .from('partners')
-    .select('id, name, type, region, contact_name, contact_phone, contact_email, website, specialism, internal_notes, commission_arrangement')
+    .select('id, name, type, region, regions, contact_name, contact_phone, contact_email, website, specialism, internal_notes, commission_arrangement, is_active, is_preferred, reliability_score, languages, last_contact_days')
     .order('name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
@@ -26,9 +26,11 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
   const body = await request.json()
-  const { data, error } = await supabase.from('partners').insert({
-    name: body.name, type: body.type || 'anders',
+  const insert: Record<string, unknown> = {
+    name: body.name,
+    type: body.type || 'anders',
     region: body.region || null,
+    regions: Array.isArray(body.regions) && body.regions.length > 0 ? body.regions : null,
     contact_name: body.contact_name || null,
     contact_phone: body.contact_phone || null,
     contact_email: body.contact_email || null,
@@ -36,7 +38,8 @@ export async function POST(request: Request) {
     specialism: body.specialism || null,
     internal_notes: body.internal_notes || null,
     commission_arrangement: body.commission_arrangement || null,
-  }).select().single()
+  }
+  const { data, error } = await supabase.from('partners').insert(insert).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

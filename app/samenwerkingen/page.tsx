@@ -23,6 +23,7 @@ import {
   REGIONS_PARTNER,
   REGIONS_TEAM,
   TYPE_LABELS,
+  effectiveRegions,
   type Agency,
   type Lang,
   type Partner,
@@ -32,6 +33,14 @@ import {
   type SortState,
   type TeamMember,
 } from '@/components/samenwerkingen/types'
+
+// Een item matcht een regio-filter als hij die regio in zijn lijst heeft, of
+// 'Spanje' (impliceert dekking in heel het land).
+function matchesRegion(item: { region?: string | null; regions?: string[] | null }, target: string): boolean {
+  const regs = effectiveRegions(item)
+  if (target === 'Spanje') return regs.includes('Spanje')
+  return regs.includes(target) || regs.includes('Spanje')
+}
 
 type AnyItem = Agency | Partner | TeamMember
 
@@ -204,7 +213,7 @@ export default function SamenwerkingenPage() {
     const q = search.trim().toLowerCase()
     return sourceItems.filter(i => {
       if (!showInactive && i.is_active === false) return false
-      if (region && i.region !== region) return false
+      if (region && !matchesRegion(i, region)) return false
       if (type === 'partners' && partnerType && (i as Partner).type !== partnerType) return false
       if (!q) return true
       const haystack = [
@@ -212,7 +221,7 @@ export default function SamenwerkingenPage() {
         i.contact_name,
         i.contact_email,
         i.contact_phone,
-        i.region,
+        ...effectiveRegions(i),
         (i as Agency).city,
         (i as Partner).specialism,
         (i as TeamMember).role,
@@ -400,7 +409,7 @@ export default function SamenwerkingenPage() {
         rows.push([
           p.name,
           TYPE_LABELS[p.type] ?? p.type,
-          p.region ?? 'Heel Spanje',
+          effectiveRegions(p).join(' / '),
           p.contact_name ?? '',
           p.contact_phone ?? '',
           p.contact_email ?? '',
@@ -432,7 +441,7 @@ export default function SamenwerkingenPage() {
         rows.push([
           m.name,
           m.role ?? '',
-          m.region ?? '',
+          effectiveRegions(m).join(' / '),
           m.contact_name ?? '',
           m.contact_phone ?? '',
           m.contact_email ?? '',
