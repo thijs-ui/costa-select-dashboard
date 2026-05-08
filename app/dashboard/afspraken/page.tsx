@@ -18,7 +18,7 @@ import {
   FinSection,
 } from '@/components/financieel/parts'
 
-interface Makelaar { id: string; naam: string }
+interface Makelaar { id: string; naam: string; rol?: string }
 interface Partner { id: string; naam: string }
 interface Afspraak {
   id: string
@@ -27,6 +27,7 @@ interface Afspraak {
   bron: string | null
   regio: string | null
   makelaar_id: string | null
+  sdr_id: string | null
   type: string
   status: string
   resultaat: string | null
@@ -49,6 +50,7 @@ const emptyForm = {
   regio: '',
   makelaar_id: '',
   partner_id: '',
+  sdr_id: '',
   type: 'Bezichtiging',
   status: 'Gepland',
   resultaat: '',
@@ -96,7 +98,7 @@ export default function AfsprakenPage() {
       try {
         const [aRes, mRes, sRes, kRes, pRes] = await Promise.allSettled([
           supabase.from('afspraken').select('*').order('datum', { ascending: false }),
-          supabase.from('makelaars').select('id, naam').eq('actief', true),
+          supabase.from('makelaars').select('id, naam, rol').eq('actief', true),
           supabase.from('settings').select('key, value'),
           supabase
             .from('maandkosten')
@@ -146,6 +148,7 @@ export default function AfsprakenPage() {
       regio: a.regio ?? '',
       makelaar_id: a.makelaar_id ?? '',
       partner_id: (a as unknown as { partner_id?: string }).partner_id ?? '',
+      sdr_id: a.sdr_id ?? '',
       type: a.type,
       status: a.status,
       resultaat: a.resultaat ?? '',
@@ -169,6 +172,7 @@ export default function AfsprakenPage() {
       regio: form.regio || null,
       makelaar_id: form.makelaar_id || null,
       partner_id: form.bron === 'Referentie van partner' ? form.partner_id || null : null,
+      sdr_id: form.sdr_id || null,
       type: form.type,
       status: form.status,
       resultaat: form.resultaat || null,
@@ -500,6 +504,19 @@ export default function AfsprakenPage() {
                     </select>
                   </div>
                   <div className="fin-field">
+                    <label>SDR contact</label>
+                    <select
+                      className="fin-select"
+                      value={form.sdr_id}
+                      onChange={e => setForm({ ...form, sdr_id: e.target.value })}
+                    >
+                      <option value="">— geen —</option>
+                      {makelaars.filter(m => m.rol === 'sdr').map(m => (
+                        <option key={m.id} value={m.id}>{m.naam}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="fin-field">
                     <label>Status</label>
                     <select
                       className="fin-select"
@@ -563,6 +580,7 @@ export default function AfsprakenPage() {
                         <th>Bron</th>
                         <th>Regio</th>
                         <th>Type</th>
+                        <th>SDR</th>
                         <th>Status</th>
                         <th>Resultaat</th>
                         <th>Notities</th>
@@ -573,7 +591,7 @@ export default function AfsprakenPage() {
                       {gefilterd.length === 0 && (
                         <tr>
                           <td
-                            colSpan={9}
+                            colSpan={10}
                             className="muted"
                             style={{ textAlign: 'center', padding: '24px' }}
                           >
@@ -608,6 +626,19 @@ export default function AfsprakenPage() {
                           <td className="muted">{a.bron ?? '—'}</td>
                           <td>{a.regio && <span className="fin-pill-soft">{a.regio}</span>}</td>
                           <td className="muted">{a.type}</td>
+                          <td>
+                            {a.sdr_id
+                              ? (
+                                <span
+                                  className="fin-pill-soft"
+                                  style={{ background: 'rgba(245,175,64,0.18)', color: 'var(--sun-dark)' }}
+                                >
+                                  {makelaars.find(m => m.id === a.sdr_id)?.naam ?? '?'}
+                                </span>
+                              )
+                              : <span className="muted">—</span>
+                            }
+                          </td>
                           <td>
                             <select
                               value={a.status}

@@ -41,6 +41,7 @@ interface Deal {
 
 interface Afspraak {
   makelaar_id: string | null
+  sdr_id: string | null
   datum: string
   status: string
   type: string | null
@@ -128,7 +129,7 @@ export default function MakelaarsPage() {
         supabase
           .from('deals')
           .select('makelaar_id, aankoopprijs, makelaar_commissie, bruto_commissie, datum_passering, regio, type_deal'),
-        supabase.from('afspraken').select('makelaar_id, datum, status, type, regio'),
+        supabase.from('afspraken').select('makelaar_id, sdr_id, datum, status, type, regio'),
         fetch('/api/pipedrive/consultant-funnel', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { perUser: {} })),
       ])
       const mData = mRes.status === 'fulfilled' ? (mRes.value.data ?? []) : []
@@ -207,21 +208,18 @@ export default function MakelaarsPage() {
   )
 
   // SDR-stats: andere KPI-set dan consultants. SDR ontvangt leads (Pipedrive
-  // owner = SDR), belt en plant afspraken in. Sales/commissie n.v.t. — die
-  // zijn aan de consultant. Lead → Afspraak conversie is dé SDR-metric.
-  // Afspraken-koppeling is heuristisch: afspraken in SDR's regio-pool. De
-  // afspraken-tabel bewaart de uiteindelijke consultant in makelaar_id, dus
-  // we hebben geen directe "gepland_door"-link — dat zou een schemawijziging
-  // vereisen. Voor nu volstaat de regio-pool (Dean is enige SDR).
+  // owner = SDR), spreekt klanten en kwalificeert ze voor een afspraak.
+  // Sales/commissie n.v.t. Afspraken-koppeling is nu via afspraken.sdr_id —
+  // exact en handmatig: een afspraak telt voor de SDR pas mee als de admin
+  // expliciet 'SDR contact' = die SDR heeft gezet op het afspraak-formulier.
+  // regios_assigned blijft beschikbaar als context (welke regio's bedient hij)
+  // maar wordt niet meer voor de telling gebruikt.
   const sdrStats = useMemo(() => {
     const filteredAfspraken = afspraken.filter(a => isInRange(a.datum, range))
     return makelaars
       .filter(m => m.rol === 'sdr')
       .map(m => {
-        const pool = (m.regios_assigned ?? []).map(r => r.trim().toLowerCase())
-        const inPool = (regio: string | null) =>
-          pool.length > 0 && regio != null && pool.includes(regio.trim().toLowerCase())
-        const sdrAfspraken = filteredAfspraken.filter(a => inPool(a.regio))
+        const sdrAfspraken = filteredAfspraken.filter(a => a.sdr_id === m.id)
         const ingepland = sdrAfspraken.length
         const noShow = sdrAfspraken.filter(a => a.status === 'No-show').length
         const noShowPct = ingepland > 0 ? Math.round((noShow / ingepland) * 100) : null
