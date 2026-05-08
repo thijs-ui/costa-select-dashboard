@@ -12,10 +12,10 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth
 
   const supabase = await createUserClient()
-  const { data, error } = await supabase
-    .from('partners')
-    .select('id, name, type, region, regions, contact_name, contact_phone, contact_email, website, specialism, internal_notes, commission_arrangement, is_active, is_preferred, reliability_score, languages, last_contact_days')
-    .order('name')
+  // select('*') zodat de query niet faalt als een nieuwe kolom (zoals regions)
+  // nog niet via migratie is toegevoegd. Onbekende kolommen worden gewoon
+  // genegeerd door de frontend.
+  const { data, error } = await supabase.from('partners').select('*').order('name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
 }
@@ -26,7 +26,10 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
   const body = await request.json()
-  const insert: Record<string, unknown> = {
+  // Bouw insert dynamisch op zodat we kolommen die nog niet in DB staan
+  // (na migratie) automatisch overslaan. Eerst proberen we alle nieuwe velden;
+  // op schema-cache error fallen we terug op de basisset.
+  const fullInsert: Record<string, unknown> = {
     name: body.name,
     type: body.type || 'anders',
     region: body.region || null,
@@ -39,7 +42,22 @@ export async function POST(request: Request) {
     internal_notes: body.internal_notes || null,
     commission_arrangement: body.commission_arrangement || null,
   }
-  const { data, error } = await supabase.from('partners').insert(insert).select().single()
+  let { data, error } = await supabase.from('partners').insert(fullInsert).select().single()
+  if (error && /column .* does not exist|schema cache/i.test(error.message)) {
+    // Migratie nog niet gedraaid — probeer met de oude minimale set
+    const minimalInsert: Record<string, unknown> = {
+      name: body.name,
+      type: body.type || 'anders',
+      region: body.region || null,
+      contact_name: body.contact_name || null,
+      contact_phone: body.contact_phone || null,
+      contact_email: body.contact_email || null,
+      website: body.website || null,
+    }
+    const retry = await supabase.from('partners').insert(minimalInsert).select().single()
+    data = retry.data
+    error = retry.error
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
