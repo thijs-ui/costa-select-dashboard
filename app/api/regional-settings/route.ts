@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { createUserClient } from '../../../lib/supabase/user-client'
 import { requireAuth, requireAdmin } from '../../../lib/auth/permissions'
 
 export async function GET() {
-  // Lezen mag iedere ingelogde user. User-client + RLS doet de rest.
+  // Lezen mag iedere ingelogde user (incl. consultant) — calculator + dossier
+  // hebben de regio-tarieven nodig. RLS op regional_settings is admin-only,
+  // dus we lezen via service-client. Data is niet gevoelig (publieke
+  // belasting-percentages); auth-check stelt alleen 'ingelogd' verplicht.
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
-  const supabase = await createUserClient()
+  const supabase = createServiceClient()
   const { data, error } = await supabase
     .from('regional_settings')
     .select('*')
