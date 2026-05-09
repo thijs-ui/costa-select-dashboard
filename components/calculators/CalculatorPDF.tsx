@@ -106,13 +106,13 @@ function brandAsset(name: string): string | null {
   return loadAssetDataUri(path.join(process.cwd(), 'public', 'brand', name))
 }
 function coverPhotoFor(regionId: string): string | null {
-  // Per regio een hero-foto; valt terug op default villa als regio-specifiek
-  // niet bestaat. Plaats foto's onder /public/calculators-pdf/<regionId>.jpg
-  // om automatisch te worden gevonden.
+  // Per regio een hero-foto; valt terug op de calculator-default. Plaats
+  // foto's onder /public/calculators-pdf/<regionId>.jpg om regio-specifiek
+  // te overrulen.
   const candidates = [
     path.join(process.cwd(), 'public', 'calculators-pdf', `${regionId}.jpg`),
     path.join(process.cwd(), 'public', 'calculators-pdf', `${regionId}.png`),
-    path.join(process.cwd(), 'public', 'brand', 'hero-villa-default.jpg'),
+    path.join(process.cwd(), 'public', 'calculators-pdf', 'default.jpg'),
   ]
   for (const c of candidates) {
     const uri = loadAssetDataUri(c)
