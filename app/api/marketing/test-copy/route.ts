@@ -7,6 +7,7 @@ import { selectWeeklyCandidates } from '@/lib/marketing/bots-query'
 import { generateAdCopy } from '@/lib/marketing/copy-generator'
 import {
   generateFbHeadline,
+  generateCreativeLocation,
   generateCreativeProjectName,
   generateCreativePrice,
 } from '@/lib/marketing/copy-templates'
@@ -46,6 +47,7 @@ export async function GET() {
         fb_primary_text_simple: claude.primary_text_simple,
         fb_primary_text_variant: claude.primary_text_variant,
         creative_project_name: generateCreativeProjectName(listing.project_name),
+        creative_location: generateCreativeLocation(listing.city ?? ''),
         creative_price: generateCreativePrice(listing.price_from),
         creative_description: claude.creative_description,
       },

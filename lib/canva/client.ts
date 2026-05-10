@@ -250,3 +250,105 @@ export async function uploadCanvaAssetFromUrl(
     },
   )
 }
+
+// ─── Autofill + export ─────────────────────────────────────────────────
+
+export interface AutofillResult {
+  designId: string
+  designUrl: string
+}
+
+export type AutofillData = Record<
+  string,
+  { type: 'text'; text: string } | { type: 'image'; asset_id: string }
+>
+
+/**
+ * Vul een brand template via autofill. Async job — pollt tot success.
+ * Returns het Canva design-ID + de editor-URL voor handmatig openen.
+ */
+export async function autofillBrandTemplate(
+  brandTemplateId: string,
+  data: AutofillData,
+  designTitle: string,
+): Promise<AutofillResult> {
+  const token = await getCanvaAccessToken()
+
+  const startRes = await fetch('https://api.canva.com/rest/v1/autofills', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      brand_template_id: brandTemplateId,
+      data,
+      title: designTitle,
+    }),
+  })
+  if (!startRes.ok) {
+    throw new Error(`Autofill start faalde ${startRes.status}: ${await startRes.text()}`)
+  }
+  const startData = (await startRes.json()) as { job: { id: string } }
+  const jobId = startData.job.id
+
+  return pollCanvaJob<AutofillResult>(
+    `https://api.canva.com/rest/v1/autofills/${jobId}`,
+    (raw) => {
+      const job = raw.job as
+        | { status?: string; result?: { design?: { id: string; url: string } } }
+        | undefined
+      if (job?.status === 'success' && job.result?.design) {
+        return {
+          designId: job.result.design.id,
+          designUrl: job.result.design.url,
+        }
+      }
+      return null
+    },
+  )
+}
+
+export interface ExportResult {
+  pngUrl: string  // Canva-hosted, ~24u geldig — direct doorzetten naar eigen storage
+}
+
+/**
+ * Exporteer een design als PNG. Voor multi-page designs returnen we
+ * pagina 1 (onze ad-templates zijn single-page).
+ */
+export async function exportDesignAsPng(designId: string): Promise<ExportResult> {
+  const token = await getCanvaAccessToken()
+
+  const startRes = await fetch('https://api.canva.com/rest/v1/exports', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      design_id: designId,
+      format: { type: 'png' },
+    }),
+  })
+  if (!startRes.ok) {
+    throw new Error(`Export start faalde ${startRes.status}: ${await startRes.text()}`)
+  }
+  const startData = (await startRes.json()) as { job: { id: string } }
+  const jobId = startData.job.id
+
+  const pngUrl = await pollCanvaJob<string>(
+    `https://api.canva.com/rest/v1/exports/${jobId}`,
+    (raw) => {
+      const job = raw.job as
+        | { status?: string; urls?: string[] }
+        | undefined
+      if (job?.status === 'success') {
+        return job.urls?.[0] ?? null
+      }
+      return null
+    },
+  )
+
+  return { pngUrl }
+}

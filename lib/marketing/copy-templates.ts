@@ -31,6 +31,18 @@ export function generateCreativeProjectName(projectName: string): string {
   return projectName.toUpperCase()
 }
 
+/**
+ * Prijs-string voor de visual. Format vast:
+ *   "PRIJZEN VANAF €367.000"
+ * Hoofdletters omdat de template-typografie dat verwacht.
+ */
 export function generateCreativePrice(price: number): string {
-  return `vanaf €${formatPrice(price)}`
+  return `PRIJZEN VANAF €${formatPrice(price)}`
+}
+
+/**
+ * Stad/locatie voor de visual — altijd uppercase.
+ */
+export function generateCreativeLocation(city: string): string {
+  return city.toUpperCase()
 }
