@@ -10,11 +10,12 @@ import { createServiceClient } from '@/lib/supabase'
 // /oauth/token roundtrips als één request meerdere Canva-API-calls doet.
 let cached: { token: string; expiresAt: number } | null = null
 
-export async function getCanvaAccessToken(): Promise<string> {
-  if (cached && cached.expiresAt > Date.now() + 60_000) {
-    return cached.token
-  }
+// Single-flight: parallel callers wachten op dezelfde refresh-Promise.
+// CRUCIAAL omdat Canva refresh-tokens rouleert — twee gelijktijdige calls
+// met dezelfde refresh_token revoken ALLE tokens van deze flow.
+let inflightRefresh: Promise<string> | null = null
 
+async function refreshCanvaAccessToken(): Promise<string> {
   const supabase = createServiceClient()
   const { data, error } = await supabase
     .from('oauth_tokens')
@@ -85,6 +86,20 @@ export async function getCanvaAccessToken(): Promise<string> {
   }
 
   return tokens.access_token
+}
+
+export async function getCanvaAccessToken(): Promise<string> {
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    return cached.token
+  }
+  // Single-flight gate: als er al een refresh loopt, wacht daarop ipv
+  // zelf óók een call te doen met dezelfde refresh_token.
+  if (inflightRefresh) return inflightRefresh
+
+  inflightRefresh = refreshCanvaAccessToken().finally(() => {
+    inflightRefresh = null
+  })
+  return inflightRefresh
 }
 
 // ─── Job polling ───────────────────────────────────────────────────────

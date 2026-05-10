@@ -7,6 +7,10 @@
     {
       "path": "/api/news/weekly-run",
       "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/weekly-ads",
+      "schedule": "0 6 * * 6"
     }
   ]
 }
