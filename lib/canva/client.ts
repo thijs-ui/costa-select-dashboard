@@ -86,3 +86,167 @@ export async function getCanvaAccessToken(): Promise<string> {
 
   return tokens.access_token
 }
+
+// ─── Job polling ───────────────────────────────────────────────────────
+// Canva Connect API werkt async: start een job → krijg job-ID → poll tot
+// status='success'. Gebruikt door autofill, export, asset-upload.
+
+const POLL_INTERVAL_MS = 2000
+const POLL_MAX_ATTEMPTS = 60 // ≈ 2 minuten max
+
+/**
+ * Pol een Canva job tot success of failure.
+ * @param jobUrl Volledige URL incl. job-ID
+ * @param extractor Functie die uit de response het resultaat haalt, of
+ * `null` als nog niet klaar is. Krijgt de geparste JSON van de poll-call.
+ */
+export async function pollCanvaJob<T>(
+  jobUrl: string,
+  extractor: (data: Record<string, unknown>) => T | null,
+): Promise<T> {
+  for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS))
+
+    const token = await getCanvaAccessToken()
+    const res = await fetch(jobUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      throw new Error(`Polling faalde ${res.status}: ${await res.text()}`)
+    }
+
+    const data = (await res.json()) as Record<string, unknown>
+    // Status zit op verschillende plekken afhankelijk van het endpoint
+    // (job.status voor autofill/asset, export.status voor export-jobs).
+    const job = data.job as { status?: string } | undefined
+    const exp = data.export as { status?: string } | undefined
+    const status = job?.status ?? exp?.status
+
+    if (status === 'failed') {
+      throw new Error(`Canva job gefaald: ${JSON.stringify(data)}`)
+    }
+
+    const result = extractor(data)
+    if (result !== null) return result
+  }
+  throw new Error(
+    `Canva job timeout na ${POLL_MAX_ATTEMPTS} pogingen ` +
+    `(~${(POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s)`,
+  )
+}
+
+// ─── Brand template discovery ─────────────────────────────────────────
+
+export interface BrandTemplate {
+  id: string
+  title: string
+  view_url: string
+  create_url: string
+  thumbnail?: { url: string; width: number; height: number }
+  created_at: number
+  updated_at: number
+}
+
+export interface DataField {
+  type: 'text' | 'image' | 'chart'
+}
+
+export type BrandTemplateDataset = Record<string, DataField>
+
+/**
+ * Lijst alle brand templates van het gekoppelde Canva-account.
+ * Volgt continuation-tokens automatisch tot alles binnen is.
+ */
+export async function listBrandTemplates(): Promise<BrandTemplate[]> {
+  const token = await getCanvaAccessToken()
+  const all: BrandTemplate[] = []
+  let continuationToken: string | undefined
+
+  do {
+    const url = new URL('https://api.canva.com/rest/v1/brand-templates')
+    if (continuationToken) url.searchParams.set('continuation', continuationToken)
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      throw new Error(`Brand templates fetch faalde ${res.status}: ${await res.text()}`)
+    }
+
+    const data = (await res.json()) as {
+      items?: BrandTemplate[]
+      continuation?: string
+    }
+    all.push(...(data.items ?? []))
+    continuationToken = data.continuation
+  } while (continuationToken)
+
+  return all
+}
+
+/**
+ * Haal de data fields (autofill-velden) van een brand template op.
+ * Returns een map van field-naam → field-meta.
+ */
+export async function getBrandTemplateDataset(
+  brandTemplateId: string,
+): Promise<BrandTemplateDataset> {
+  const token = await getCanvaAccessToken()
+  const res = await fetch(
+    `https://api.canva.com/rest/v1/brand-templates/${brandTemplateId}/dataset`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) {
+    throw new Error(`Dataset fetch faalde ${res.status}: ${await res.text()}`)
+  }
+  const data = (await res.json()) as { dataset?: BrandTemplateDataset }
+  return data.dataset ?? {}
+}
+
+// ─── Asset upload (alvast — gebruikt in stap 4B) ──────────────────────
+
+/**
+ * Upload een afbeelding vanuit URL als asset naar Canva.
+ * Retourneert het `asset_id` dat je in een autofill-call kunt gebruiken.
+ */
+export async function uploadCanvaAssetFromUrl(
+  imageUrl: string,
+  name: string,
+): Promise<string> {
+  const token = await getCanvaAccessToken()
+
+  // 1. Download de image als binary buffer.
+  const imgRes = await fetch(imageUrl)
+  if (!imgRes.ok) {
+    throw new Error(`Image download faalde ${imgRes.status}: ${imageUrl}`)
+  }
+  const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
+
+  // 2. Upload naar Canva — initial POST geeft een job-ID.
+  const uploadRes = await fetch('https://api.canva.com/rest/v1/asset-uploads', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      'Asset-Upload-Metadata': JSON.stringify({
+        name_base64: Buffer.from(name).toString('base64'),
+      }),
+    },
+    body: new Uint8Array(imgBuffer),
+  })
+  if (!uploadRes.ok) {
+    throw new Error(`Asset upload faalde ${uploadRes.status}: ${await uploadRes.text()}`)
+  }
+
+  const uploadData = (await uploadRes.json()) as { job: { id: string } }
+
+  // 3. Pol tot het asset-upload job klaar is, return asset.id.
+  return pollCanvaJob<string>(
+    `https://api.canva.com/rest/v1/asset-uploads/${uploadData.job.id}`,
+    (data) => {
+      const job = data.job as { status?: string; asset?: { id: string } } | undefined
+      if (job?.status === 'success' && job.asset?.id) return job.asset.id
+      return null
+    },
+  )
+}
