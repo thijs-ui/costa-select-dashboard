@@ -262,7 +262,7 @@ export default function NieuwbouwkaartPage() {
         />
 
         <ShortlistPicker
-          item={shortlistTarget}
+          items={shortlistTarget ? [shortlistTarget] : null}
           onClose={() => setShortlistTarget(null)}
           onSuccess={(klant) => {
             setShortlistConfirm(`Toegevoegd aan ${klant}`)

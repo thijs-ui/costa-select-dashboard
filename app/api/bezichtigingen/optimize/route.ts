@@ -117,14 +117,16 @@ export async function POST(request: Request) {
   if (limited) return limited
 
   const body = await request.json()
-  const { trip_id, start_address, start_time, lunch_time, lunch_duration_minutes, stops } = body as {
+  const { trip_id, start_address, start_time, lunch_time, lunch_duration_minutes, lunch_enabled, stops } = body as {
     trip_id: string
     start_address: string
     start_time: string
     lunch_time: string
     lunch_duration_minutes: number
+    lunch_enabled?: boolean
     stops: StopInput[]
   }
+  const includeLunch = lunch_enabled !== false
 
   if (!stops || stops.length < 2) {
     return NextResponse.json({ error: 'Minimaal 2 stops nodig' }, { status: 400 })
@@ -200,8 +202,10 @@ export async function POST(request: Request) {
 
 VERTREKPUNT: ${start_address || 'Eerste stop'}${hasCoords && coords[0] ? ` (${coords[0].lat}, ${coords[0].lng})` : ''}
 STARTTIJD: ${start_time || '09:00'}
-GEWENSTE LUNCHTIJD: ${lunch_time || '13:00'}
-LUNCHPAUZE DUUR: ${lunch_duration_minutes || 60} minuten
+${includeLunch
+  ? `GEWENSTE LUNCHTIJD: ${lunch_time || '13:00'}
+LUNCHPAUZE DUUR: ${lunch_duration_minutes || 60} minuten`
+  : 'GEEN LUNCHPAUZE — plan stops achter elkaar zonder onderbreking.'}
 
 STOPS:
 ${stops.map((s, i) =>
@@ -222,18 +226,18 @@ Geef terug als JSON:
       "estimated_departure": "09:45",
       "travel_time_to_next_minutes": 20
     }
-  ],
+  ],${includeLunch ? `
   "lunch": {
     "after_stop_order": 3,
     "start_time": "13:00",
     "end_time": "14:00"
-  },
+  },` : ''}
   "total_driving_minutes": 87,
   "estimated_end_time": "15:37",
   "route_summary": "Korte uitleg van de route-logica in 1-2 zinnen"
 }
 
-Geef ALLEEN de JSON terug.`
+${includeLunch ? '' : 'Laat het "lunch" veld helemaal weg uit de JSON.\n\n'}Geef ALLEEN de JSON terug.`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -267,9 +271,17 @@ Geef ALLEEN de JSON terug.`
       (a, b) => a.sort_order - b.sort_order
     )
     const stopDurMap = new Map(stops.map(st => [st.id, st.viewing_duration_minutes]))
-    const lunch = routeData.lunch as
-      | { after_stop_order: number; start_time: string; end_time: string }
-      | undefined
+    // Lunch alleen meenemen in cursor-advance als toggle aan stond.
+    // Als Claude per ongeluk tóch een lunch-object teruggeeft terwijl
+    // includeLunch=false, negeren we het hier.
+    const lunch = includeLunch
+      ? (routeData.lunch as
+        | { after_stop_order: number; start_time: string; end_time: string }
+        | undefined)
+      : undefined
+    if (!includeLunch) {
+      delete routeData.lunch
+    }
 
     let cursor = start_time || '09:00'
     for (let i = 0; i < sorted.length; i++) {

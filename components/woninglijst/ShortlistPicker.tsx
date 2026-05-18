@@ -22,12 +22,16 @@ export interface ShortlistPickerItem {
 }
 
 interface Props {
-  item: ShortlistPickerItem | null
+  // Eén of meerdere items: null = modal dicht, array = open.
+  // Single-item callers (nieuwbouwkaart) wrappen in [item].
+  items: ShortlistPickerItem[] | null
   onClose: () => void
-  onSuccess?: (klantNaam: string) => void
+  onSuccess?: (klantNaam: string, count: number) => void
 }
 
-export function ShortlistPicker({ item, onClose, onSuccess }: Props) {
+export function ShortlistPicker({ items, onClose, onSuccess }: Props) {
+  const item = items?.[0] ?? null
+  const count = items?.length ?? 0
   const [shortlists, setShortlists] = useState<Shortlist[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
@@ -35,7 +39,7 @@ export function ShortlistPicker({ item, onClose, onSuccess }: Props) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!item) return
+    if (!items || items.length === 0) return
     setError('')
     setNewName('')
     setSaving(null)
@@ -45,25 +49,25 @@ export function ShortlistPicker({ item, onClose, onSuccess }: Props) {
       .then(data => setShortlists(Array.isArray(data) ? data : []))
       .catch(() => setShortlists([]))
       .finally(() => setLoading(false))
-  }, [item])
+  }, [items])
 
-  if (!item) return null
+  if (!items || items.length === 0) return null
 
   async function addTo(shortlistId: string, klantNaam: string) {
-    if (!item) return
+    if (!items || items.length === 0) return
     setError('')
     setSaving(shortlistId)
     try {
       const res = await fetch(`/api/woninglijst/${shortlistId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [item] }),
+        body: JSON.stringify({ items }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Toevoegen mislukt')
       }
-      onSuccess?.(klantNaam)
+      onSuccess?.(klantNaam, items.length)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Toevoegen mislukt')
@@ -138,7 +142,9 @@ export function ShortlistPicker({ item, onClose, onSuccess }: Props) {
               className="font-body truncate"
               style={{ fontSize: 12.5, color: '#5F7472', maxWidth: 420 }}
             >
-              {item.title || item.url}
+              {count === 1
+                ? (item?.title || item?.url || '')
+                : `${count} woningen meegestuurd`}
             </div>
           </div>
           <button

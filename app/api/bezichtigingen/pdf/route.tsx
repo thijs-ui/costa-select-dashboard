@@ -100,7 +100,9 @@ interface RouteData {
     estimated_departure: string
     travel_time_to_next_minutes: number
   }>
-  lunch: { after_stop_order: number; start_time: string; end_time: string }
+  // Optioneel: bij trip.lunch_enabled=false laat de optimizer dit veld weg
+  // zodat buildNodes geen lunch-node tussen de stops zet.
+  lunch?: { after_stop_order: number; start_time: string; end_time: string }
   total_driving_minutes: number
   estimated_end_time: string
   route_summary: string

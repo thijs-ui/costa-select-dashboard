@@ -19,6 +19,7 @@ import {
   GripVertical,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
   Play,
   Printer,
@@ -36,6 +37,8 @@ import {
   CountPill,
   EmptyCard,
 } from '@/components/bezichtigingen/atoms'
+import { EditStopModal, type EditableStop } from '@/components/bezichtigingen/EditStopModal'
+import { ShortlistPicker, type ShortlistPickerItem } from '@/components/woninglijst/ShortlistPicker'
 
 // ───────── Types ─────────
 interface Trip {
@@ -48,6 +51,7 @@ interface Trip {
   start_address: string | null
   lunch_time: string
   lunch_duration_minutes: number
+  lunch_enabled: boolean
   notes: string | null
   status: 'concept' | 'gepland' | 'afgerond'
   route_data: RouteData | null
@@ -77,7 +81,7 @@ interface RouteData {
     estimated_departure: string
     travel_time_to_next_minutes: number
   }>
-  lunch: { after_stop_order: number; start_time: string; end_time: string }
+  lunch?: { after_stop_order: number; start_time: string; end_time: string }
   total_driving_minutes: number
   estimated_end_time: string
   route_summary: string
@@ -148,6 +152,9 @@ export default function BezichtigingDetailPage({
   const [downloading, setDownloading] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [error, setError] = useState('')
+  const [editingStop, setEditingStop] = useState<EditableStop | null>(null)
+  const [shortlistItems, setShortlistItems] = useState<ShortlistPickerItem[] | null>(null)
+  const [shortlistConfirm, setShortlistConfirm] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ─── Load ─────────────────────────────────────
@@ -298,6 +305,30 @@ export default function BezichtigingDetailPage({
     }
   }
 
+  // Update een bestaande stop via PUT. Adres- of duur-wijzigingen invalideren
+  // de route (reistijden + tijden niet meer kloppend); andere velden mogen
+  // route_data behouden zodat consultant niet onnodig opnieuw moet optimaliseren.
+  async function updateStop(stopId: string, updates: Partial<EditableStop>) {
+    const res = await fetch('/api/bezichtigingen/stops', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: stopId, ...updates }),
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || 'Opslaan mislukt')
+    }
+    setStops(prev =>
+      prev.map(s => (s.id === stopId ? { ...s, ...updates } as Stop : s)),
+    )
+    const invalidates =
+      'address' in updates || 'viewing_duration_minutes' in updates
+    if (invalidates && trip?.route_data) {
+      setTrip({ ...trip, route_data: null })
+    }
+  }
+
   // Drag-and-drop reorder: verplaats stop fromIdx → toIdx en persisteer
   // ALLE veranderde sort_orders (een drag kan meerdere posities skippen).
   async function reorderStop(fromIdx: number, toIdx: number) {
@@ -398,6 +429,7 @@ export default function BezichtigingDetailPage({
           start_time: trip.start_time,
           lunch_time: trip.lunch_time,
           lunch_duration_minutes: trip.lunch_duration_minutes,
+          lunch_enabled: trip.lunch_enabled !== false,
           stops: stops.map(s => ({
             id: s.id,
             address: s.address,
@@ -575,6 +607,7 @@ export default function BezichtigingDetailPage({
                 onDelete={deleteStop}
                 onMove={moveStop}
                 onReorder={reorderStop}
+                onEdit={setEditingStop}
               />
             </div>
 
@@ -615,6 +648,27 @@ export default function BezichtigingDetailPage({
                       <Printer size={14} strokeWidth={2} /> Download PDF
                     </>
                   )}
+                </BzButton>
+                <BzButton
+                  variant="ghost"
+                  disabled={stops.length === 0}
+                  onClick={() => {
+                    const items: ShortlistPickerItem[] = stops.map(s => ({
+                      title: s.property_title || s.address,
+                      url: s.listing_url ?? '',
+                      price: s.price,
+                      location: s.address,
+                      bedrooms: null,
+                      bathrooms: null,
+                      size_m2: null,
+                      thumbnail: null,
+                      source: 'bezichtiging',
+                    }))
+                    setShortlistItems(items)
+                  }}
+                  className="flex-1"
+                >
+                  <ClipboardList size={14} strokeWidth={2} /> Naar shortlist
                 </BzButton>
               </div>
 
@@ -668,6 +722,32 @@ export default function BezichtigingDetailPage({
           </div>
         </div>
       </div>
+
+      <EditStopModal
+        stop={editingStop}
+        onClose={() => setEditingStop(null)}
+        onSave={updateStop}
+      />
+
+      <ShortlistPicker
+        items={shortlistItems}
+        onClose={() => setShortlistItems(null)}
+        onSuccess={(klant, n) => {
+          setShortlistConfirm(`${n} woning${n === 1 ? '' : 'en'} toegevoegd aan ${klant}`)
+          window.setTimeout(() => setShortlistConfirm(null), 3500)
+        }}
+      />
+
+      {shortlistConfirm && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#004B46', color: '#FFFAEF', padding: '10px 18px', borderRadius: 999,
+          fontSize: 13, fontWeight: 600, letterSpacing: '.01em', zIndex: 90,
+          boxShadow: '0 8px 24px rgba(7,42,36,0.28)',
+        }}>
+          {shortlistConfirm}
+        </div>
+      )}
     </div>
   )
 }
@@ -813,32 +893,50 @@ function TripForm({
             onChange={e => onChange({ start_address: e.target.value })}
           />
         </Field>
-        <Field label="Lunchpauze">
-          <BzSelect
-            value={formatTime(trip.lunch_time)}
-            onChange={e => onChange({ lunch_time: e.target.value })}
+        <Field label="Lunchpauze" colFull>
+          <label
+            className="inline-flex items-center cursor-pointer font-body"
+            style={{ gap: 8, fontSize: 12.5, color: '#004B46', userSelect: 'none' }}
           >
-            {!TIME_OPTIONS.includes(formatTime(trip.lunch_time)) && trip.lunch_time && (
-              <option value={formatTime(trip.lunch_time)}>{formatTime(trip.lunch_time)}</option>
-            )}
-            {TIME_OPTIONS.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </BzSelect>
+            <input
+              type="checkbox"
+              checked={trip.lunch_enabled !== false}
+              onChange={e => onChange({ lunch_enabled: e.target.checked })}
+              style={{ cursor: 'pointer' }}
+            />
+            Lunchpauze inplannen
+          </label>
         </Field>
-        <Field label="Lunchduur">
-          <BzSelect
-            value={String(trip.lunch_duration_minutes || 60)}
-            onChange={e =>
-              onChange({ lunch_duration_minutes: Number(e.target.value) })
-            }
-          >
-            <option value="30">30 min</option>
-            <option value="45">45 min</option>
-            <option value="60">60 min</option>
-            <option value="90">90 min</option>
-          </BzSelect>
-        </Field>
+        {trip.lunch_enabled !== false && (
+          <>
+            <Field label="Lunchtijd">
+              <BzSelect
+                value={formatTime(trip.lunch_time)}
+                onChange={e => onChange({ lunch_time: e.target.value })}
+              >
+                {!TIME_OPTIONS.includes(formatTime(trip.lunch_time)) && trip.lunch_time && (
+                  <option value={formatTime(trip.lunch_time)}>{formatTime(trip.lunch_time)}</option>
+                )}
+                {TIME_OPTIONS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </BzSelect>
+            </Field>
+            <Field label="Lunchduur">
+              <BzSelect
+                value={String(trip.lunch_duration_minutes || 60)}
+                onChange={e =>
+                  onChange({ lunch_duration_minutes: Number(e.target.value) })
+                }
+              >
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="60">60 min</option>
+                <option value="90">90 min</option>
+              </BzSelect>
+            </Field>
+          </>
+        )}
         <Field label="Interne notities" colFull>
           <BzTextarea
             value={trip.notes || ''}
@@ -881,6 +979,7 @@ function StopsCard({
   onDelete,
   onMove,
   onReorder,
+  onEdit,
 }: {
   stops: Stop[]
   customerName: string
@@ -888,6 +987,7 @@ function StopsCard({
   onDelete: (id: string) => void
   onMove: (id: string, dir: -1 | 1) => void
   onReorder: (fromIdx: number, toIdx: number) => void
+  onEdit: (stop: EditableStop) => void
 }) {
   const [draft, setDraft] = useState<StopDraft>(EMPTY_DRAFT)
   const [showExtra, setShowExtra] = useState(false)
@@ -953,6 +1053,7 @@ function StopsCard({
               onMove={onMove}
               onReorder={onReorder}
               onDelete={onDelete}
+              onEdit={onEdit}
             />
           ))}
         </div>
@@ -1060,6 +1161,7 @@ function StopRow({
   onMove,
   onReorder,
   onDelete,
+  onEdit,
 }: {
   stop: Stop
   index: number
@@ -1067,6 +1169,7 @@ function StopRow({
   onMove: (id: string, dir: -1 | 1) => void
   onReorder: (fromIdx: number, toIdx: number) => void
   onDelete: (id: string) => void
+  onEdit: (stop: EditableStop) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -1204,6 +1307,9 @@ function StopRow({
           onClick={() => onMove(stop.id, 1)}
         >
           <ChevronDown size={13} strokeWidth={1.8} />
+        </SmallIconButton>
+        <SmallIconButton title="Bewerken" onClick={() => onEdit(stop)}>
+          <Pencil size={13} strokeWidth={1.8} />
         </SmallIconButton>
         <SmallIconButton title="Verwijder" variant="delete" onClick={() => onDelete(stop.id)}>
           <Trash2 size={13} strokeWidth={1.8} />

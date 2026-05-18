@@ -20,6 +20,7 @@ import {
   MapPin,
   PenLine,
   Plus,
+  Route as RouteIcon,
   Ruler,
   Star,
   Trash2,
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
+import { TripPickerModal, type ShortlistItemForTrip } from '@/components/woninglijst/TripPickerModal'
 import { PageHeader } from '@/components/page-header'
 
 // ───────── Types ─────────
@@ -758,6 +760,7 @@ function DetailView({
   const [addUrl, setAddUrl] = useState('')
   const [addTitle, setAddTitle] = useState('')
   const [addLoading, setAddLoading] = useState(false)
+  const [tripItems, setTripItems] = useState<ShortlistItemForTrip[] | null>(null)
 
   const items = useMemo(() => detail?.shortlist_items ?? [], [detail?.shortlist_items])
   const favCount = items.filter(i => i.is_favorite).length
@@ -852,6 +855,25 @@ function DetailView({
             </button>
             <button
               type="button"
+              className="a-btn a-btn-ghost"
+              disabled={items.length === 0}
+              onClick={() => {
+                setTripItems(
+                  items.map(i => ({
+                    id: i.id,
+                    title: i.title,
+                    url: i.url,
+                    price: i.price,
+                    location: i.location,
+                    notities: i.notities,
+                  })),
+                )
+              }}
+            >
+              <RouteIcon size={14} strokeWidth={2} /> Plan bezichtigingsdag ({items.length})
+            </button>
+            <button
+              type="button"
               className="a-btn a-btn-primary"
               onClick={() => setShowAddUrl(!showAddUrl)}
             >
@@ -859,6 +881,11 @@ function DetailView({
             </button>
           </>
         }
+      />
+      <TripPickerModal
+        items={tripItems}
+        klantNaam={detail?.klant_naam || ''}
+        onClose={() => setTripItems(null)}
       />
     <div className="a-page" style={{ paddingTop: 16 }}>
       <button
