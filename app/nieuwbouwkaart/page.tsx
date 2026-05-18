@@ -21,6 +21,7 @@ import {
   type ListingFilters,
 } from '@/components/nieuwbouw-types'
 import { DossierModal, type DossierModalItem } from '@/components/woninglijst/DossierModal'
+import { ShortlistPicker, type ShortlistPickerItem } from '@/components/woninglijst/ShortlistPicker'
 
 // nearby_amenities gebruikt NL-keys in de DB. We mappen naar EN-kinds voor de icon-lookup
 // in amenityMeta() en zetten `name` op basis van NL-labels.
@@ -90,6 +91,8 @@ export default function NieuwbouwkaartPage() {
     | (DossierModalItem & { listing_id: string })
     | null
   >(null)
+  const [shortlistTarget, setShortlistTarget] = useState<ShortlistPickerItem | null>(null)
+  const [shortlistConfirm, setShortlistConfirm] = useState<string | null>(null)
 
   // Listings komen uit het Bots-Supabase project via /api/nieuwbouw.
   // nearby_amenities (JSONB) → amenities[] client-side. Cache-hit slaat
@@ -147,7 +150,7 @@ export default function NieuwbouwkaartPage() {
       const fold = (str: string) =>
         str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       const q = fold(filters.search)
-      const hay = fold(`${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''}`)
+      const hay = fold(`${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''} ${l.agency_name ?? ''}`)
       if (!hay.includes(q)) return false
     }
     if (filters.region && l.region !== filters.region) return false
@@ -164,6 +167,30 @@ export default function NieuwbouwkaartPage() {
       title: listing.title || 'Nieuwbouwproject',
       url: '',
       listing_id: listing.id,
+    })
+  }
+
+  // Naar shortlist-item. Pak minimum unit-prijs als die er is — listing.price
+  // is bij Idealista vaak al de "vanaf"-prijs maar voor zekerheid de echte min.
+  // Bedrooms/bathrooms/size_m2 zijn bij newDevelopments meestal null op listing-
+  // niveau (varieert per unit) dus stuur die alleen door als ze gezet zijn.
+  function openShortlistPicker(listing: Listing) {
+    const unitPrices = (listing.units ?? [])
+      .map(u => u.price)
+      .filter((p): p is number => typeof p === 'number')
+    const minUnitPrice = unitPrices.length ? Math.min(...unitPrices) : null
+    const price = minUnitPrice ?? listing.price ?? null
+
+    setShortlistTarget({
+      title: listing.title || listing.address || 'Nieuwbouwproject',
+      url: listing.url ?? '',
+      price,
+      location: [listing.municipality, listing.region].filter(Boolean).join(' · '),
+      bedrooms: listing.rooms,
+      bathrooms: listing.bathrooms,
+      size_m2: listing.size_m2,
+      thumbnail: listing.main_image_url,
+      source: 'idealista',
     })
   }
 
@@ -224,6 +251,7 @@ export default function NieuwbouwkaartPage() {
             listing={selected}
             onClose={() => setSelectedId(null)}
             onGenerateDossier={openPresentatieModal}
+            onAddToShortlist={openShortlistPicker}
           />
         )}
 
@@ -232,6 +260,26 @@ export default function NieuwbouwkaartPage() {
           onClose={() => setPresentatieTarget(null)}
           onGenerate={generateNewbuildPresentatie}
         />
+
+        <ShortlistPicker
+          item={shortlistTarget}
+          onClose={() => setShortlistTarget(null)}
+          onSuccess={(klant) => {
+            setShortlistConfirm(`Toegevoegd aan ${klant}`)
+            window.setTimeout(() => setShortlistConfirm(null), 3000)
+          }}
+        />
+
+        {shortlistConfirm && (
+          <div style={{
+            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+            background: '#004B46', color: '#FFFAEF', padding: '10px 18px', borderRadius: 999,
+            fontSize: 13, fontWeight: 600, letterSpacing: '.01em', zIndex: 5,
+            boxShadow: '0 8px 24px rgba(7,42,36,0.28)',
+          }}>
+            {shortlistConfirm}
+          </div>
+        )}
 
         {loading && (
           <div style={{

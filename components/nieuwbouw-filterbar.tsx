@@ -40,7 +40,7 @@ export default function NieuwbouwFilterbar({ filters, setFilters, regions, prope
         <input
           value={filters.search}
           onChange={(e) => upd('search', e.target.value)}
-          placeholder="Zoek op project, gemeente of regio"
+          placeholder="Zoek op project, gemeente, regio of ontwikkelaar"
           style={{
             border: 'none', outline: 'none', fontSize: 13, background: 'transparent',
             color: '#004B46', flex: 1, fontFamily: 'inherit',

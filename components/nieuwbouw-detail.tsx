@@ -12,7 +12,7 @@ import {
   X, MapPin, Sparkles, Waves, Car, Home, Bed, BedDouble, Layers2, Building,
   Phone, FileText, Compass, Flag, Sun, ShoppingCart, GraduationCap, Plane,
   Clock4, ExternalLink, FileDown, RefreshCw, Image as ImageIcon, ChevronDown,
-  Utensils, Wine, Stethoscope, Pill as PillIcon, Train,
+  Utensils, Wine, Stethoscope, Pill as PillIcon, Train, ClipboardList,
 } from 'lucide-react'
 import {
   humanizePropertyType,
@@ -26,9 +26,10 @@ interface Props {
   listing: Listing
   onClose: () => void
   onGenerateDossier: (listing: Listing) => void
+  onAddToShortlist: (listing: Listing) => void
 }
 
-export default function NieuwbouwDetail({ listing, onClose, onGenerateDossier }: Props) {
+export default function NieuwbouwDetail({ listing, onClose, onGenerateDossier, onAddToShortlist }: Props) {
   const images = (listing.images ?? []).map(i => i.url).filter(Boolean)
   const hero = images[0] ?? listing.main_image_url ?? ''
   const [activeImg, setActiveImg] = useState(hero)
@@ -81,7 +82,7 @@ export default function NieuwbouwDetail({ listing, onClose, onGenerateDossier }:
         <MetaRow listing={listing} />
       </div>
 
-      <Footer listing={listing} onGenerateDossier={onGenerateDossier} />
+      <Footer listing={listing} onGenerateDossier={onGenerateDossier} onAddToShortlist={onAddToShortlist} />
     </div>
   )
 }
@@ -453,34 +454,45 @@ function MetaRow({ listing }: { listing: Listing }) {
 
 // --- Footer -----------------------------------------------------------------
 function Footer({
-  listing, onGenerateDossier,
-}: { listing: Listing; onGenerateDossier: (l: Listing) => void }) {
+  listing, onGenerateDossier, onAddToShortlist,
+}: { listing: Listing; onGenerateDossier: (l: Listing) => void; onAddToShortlist: (l: Listing) => void }) {
   return (
     <div style={{
       padding: '12px 16px', borderTop: '1px solid rgba(0,75,70,.12)',
-      background: '#fff', display: 'flex', gap: 8, flexShrink: 0,
+      background: '#fff', display: 'flex', gap: 6, flexShrink: 0,
     }}>
       <a
         href={listing.url ?? '#'}
         target="_blank" rel="noreferrer"
+        title="Bekijk listing"
         style={{
-          flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+          flex: '0 0 auto', padding: '10px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           fontFamily: 'inherit', textDecoration: 'none',
           background: '#fff', border: '1px solid rgba(0,75,70,.18)', color: '#004B46',
         }}
       >
-        <ExternalLink size={14} />Bekijk listing
+        <ExternalLink size={14} />
       </a>
+      <button
+        onClick={() => onAddToShortlist(listing)}
+        style={{
+          flex: 1, padding: '10px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          gap: 6, fontFamily: 'inherit', background: '#fff', border: '1px solid rgba(0,75,70,.18)', color: '#004B46',
+        }}
+      >
+        <ClipboardList size={14} />Shortlist
+      </button>
       <button
         onClick={() => onGenerateDossier(listing)}
         style={{
-          flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+          flex: 1, padding: '10px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
           cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           gap: 6, fontFamily: 'inherit', border: 'none', background: '#004B46', color: '#fff',
         }}
       >
-        <FileDown size={14} />Genereer presentatie
+        <FileDown size={14} />Presentatie
       </button>
     </div>
   )
