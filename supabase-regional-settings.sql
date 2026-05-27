@@ -26,7 +26,7 @@ create policy "regional_settings_all" on public.regional_settings for all using 
 insert into public.regional_settings (region, itp_percentage, ajd_percentage, itp_progressive, average_rental_yield, community_fees_avg_monthly) values
   ('Costa Brava', 10.0, 1.5, null, 5.0, 150),
   ('Costa Dorada', 10.0, 1.5, null, 5.5, 130),
-  ('Valencia', 10.0, 1.5, '[{"threshold": 1000000, "rate": 10.0}, {"threshold": null, "rate": 11.0}]', 6.0, 120),
-  ('Costa Blanca Noord', 10.0, 1.5, '[{"threshold": 1000000, "rate": 10.0}, {"threshold": null, "rate": 11.0}]', 5.5, 140),
+  ('Valencia', 9.0, 1.5, '[{"threshold": 1000000, "rate": 9.0}, {"threshold": null, "rate": 11.0}]', 6.0, 120),
+  ('Costa Blanca Noord', 9.0, 1.5, '[{"threshold": 1000000, "rate": 9.0}, {"threshold": null, "rate": 11.0}]', 5.5, 140),
   ('Costa del Sol', 7.0, 1.2, null, 5.0, 180)
 on conflict (region) do nothing;

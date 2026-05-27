@@ -74,6 +74,32 @@ interface Props {
 const fmt = (n: number) => `€ ${Math.round(n).toLocaleString('nl-NL')}`
 const inp = 'w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-[#004B46] tabular-nums'
 
+// Comunidad Valenciana hanteert geen progressieve ladder maar een drempel-
+// tarief: < €1.000.000 = 9% op het hele bedrag, ≥ €1.000.000 = 11% op het
+// hele bedrag. Drempel is EXCLUSIEF. Spiegelt calcITP in /calculators.
+function calcItpAmount(price: number, region: RegionalSettings | null | undefined): number {
+  if (!region || !price) return 0
+  if (region.itp_progressive && region.itp_progressive.length) {
+    for (const b of region.itp_progressive) {
+      if (b.threshold == null || price < b.threshold) return price * (b.rate / 100)
+    }
+    const last = region.itp_progressive[region.itp_progressive.length - 1]
+    return price * (last.rate / 100)
+  }
+  return price * (region.itp_percentage / 100)
+}
+
+function applicableItpRate(price: number, region: RegionalSettings | null | undefined): number {
+  if (!region || !price) return region?.itp_percentage ?? 0
+  if (region.itp_progressive && region.itp_progressive.length) {
+    for (const b of region.itp_progressive) {
+      if (b.threshold == null || price < b.threshold) return b.rate
+    }
+    return region.itp_progressive[region.itp_progressive.length - 1].rate
+  }
+  return region.itp_percentage
+}
+
 export default function FinancialOverview({ price, regio, oppervlakte, type: propertyType, regions, renovationDefaults, initialData, onSave }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -113,7 +139,8 @@ export default function FinancialOverview({ price, regio, oppervlakte, type: pro
 
   // ─── Berekeningen ───────────────────────────────────────
   // Kosten koper
-  const itp = region && kkType === 'bestaand' ? price * (region.itp_percentage / 100) : 0
+  const itp = kkType === 'bestaand' ? calcItpAmount(price, region) : 0
+  const itpRate = applicableItpRate(price, region)
   const iva = region && kkType === 'nieuwbouw' ? price * (region.iva_percentage / 100) : 0
   const ajd = region && kkType === 'nieuwbouw' ? price * (region.ajd_percentage / 100) : 0
   const notaris = region ? Math.min(Math.max(price * (region.notary_percentage / 100), region.notary_min), region.notary_max) : 0
@@ -200,7 +227,7 @@ export default function FinancialOverview({ price, regio, oppervlakte, type: pro
               {!region && <p className="text-xs text-amber-600 mb-2">Selecteer een regio om kosten te berekenen</p>}
               <div className="space-y-1.5 text-sm">
                 {kkType === 'bestaand' ? (
-                  <CalcRow label={`ITP (${region?.itp_percentage ?? 10}%)`} value={itp} />
+                  <CalcRow label={`ITP (${itpRate}%)`} value={itp} />
                 ) : (
                   <>
                     <CalcRow label={`IVA (${region?.iva_percentage ?? 10}%)`} value={iva} />
