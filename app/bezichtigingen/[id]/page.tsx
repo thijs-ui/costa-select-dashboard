@@ -53,6 +53,7 @@ interface Trip {
   lunch_duration_minutes: number
   lunch_enabled: boolean
   notes: string | null
+  cover_photo_url: string | null
   status: 'concept' | 'gepland' | 'afgerond'
   route_data: RouteData | null
 }
@@ -231,6 +232,16 @@ export default function BezichtigingDetailPage({
       ...prev,
       stops: prev.stops.map(rs =>
         rs.stop_id === stopId ? { ...rs, estimated_departure: value } : rs
+      ),
+    }))
+  }
+  // Reistijd-naar-volgende handmatig aanpasbaar (zoals de bezichtigingstijden).
+  // Cascadet bewust niet naar latere aankomsttijden — consultant herijkt zelf.
+  function setStopTravel(stopId: string, minutes: number) {
+    updateRouteData(prev => ({
+      ...prev,
+      stops: prev.stops.map(rs =>
+        rs.stop_id === stopId ? { ...rs, travel_time_to_next_minutes: Math.max(0, minutes) } : rs
       ),
     }))
   }
@@ -711,6 +722,7 @@ export default function BezichtigingDetailPage({
                 route={route}
                 onSetStopArrival={setStopArrival}
                 onSetStopDeparture={setStopDeparture}
+                onSetStopTravel={setStopTravel}
                 onSetLunchStart={setLunchStart}
               />
             </div>
@@ -881,6 +893,25 @@ function TripForm({
             placeholder="Leeg laten = de dag begint bij de eerste bezichtiging"
             onChange={e => onChange({ start_address: e.target.value })}
           />
+        </Field>
+        <Field label="Coverfoto PDF (URL, pagina 1 rechts)" colFull>
+          <BzInput
+            value={trip.cover_photo_url || ''}
+            placeholder="https://… directe link naar een afbeelding"
+            onChange={e => onChange({ cover_photo_url: e.target.value })}
+          />
+          {trip.cover_photo_url && trip.cover_photo_url.trim() && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={trip.cover_photo_url}
+              alt="Coverfoto preview"
+              style={{
+                marginTop: 8, width: '100%', maxHeight: 130, objectFit: 'cover',
+                borderRadius: 10, border: '1px solid rgba(0,75,70,0.12)', display: 'block',
+              }}
+              onError={e => { e.currentTarget.style.display = 'none' }}
+            />
+          )}
         </Field>
         <Field label="Lunchpauze" colFull>
           <label
@@ -1380,7 +1411,7 @@ function SmallIconButton({
 // ═════════ TIMELINE ═════════
 type TimelineItem =
   | { kind: 'start'; time: string; title: string; subtitle: string }
-  | { kind: 'segment'; minutes: number; isLunchSegment: boolean }
+  | { kind: 'segment'; minutes: number; isLunchSegment: boolean; travelStopId?: string }
   | {
       kind: 'stop'
       sortOrder: number
@@ -1397,6 +1428,7 @@ function Timeline({
   route,
   onSetStopArrival,
   onSetStopDeparture,
+  onSetStopTravel,
   onSetLunchStart,
 }: {
   trip: Trip
@@ -1404,6 +1436,7 @@ function Timeline({
   route: RouteData | null
   onSetStopArrival: (stopId: string, value: string) => void
   onSetStopDeparture: (stopId: string, value: string) => void
+  onSetStopTravel: (stopId: string, minutes: number) => void
   onSetLunchStart: (value: string) => void
 }) {
   const items: TimelineItem[] = useMemo(() => {
@@ -1425,7 +1458,7 @@ function Timeline({
     rs.forEach((r, idx) => {
       const prevTravel = idx === 0 ? null : rs[idx - 1].travel_time_to_next_minutes
       if (prevTravel != null) {
-        list.push({ kind: 'segment', minutes: prevTravel, isLunchSegment: false })
+        list.push({ kind: 'segment', minutes: prevTravel, isLunchSegment: false, travelStopId: rs[idx - 1].stop_id })
       } else if (idx === 0 && hasStart) {
         list.push({
           kind: 'segment',
@@ -1555,6 +1588,7 @@ function Timeline({
                 key={`seg-${idx}`}
                 minutes={item.minutes}
                 isLunch={item.isLunchSegment}
+                onChange={item.travelStopId ? v => onSetStopTravel(item.travelStopId!, v) : undefined}
               />
             )
           }
@@ -1639,7 +1673,7 @@ function Timeline({
   )
 }
 
-function Segment({ minutes, isLunch }: { minutes: number; isLunch: boolean }) {
+function Segment({ minutes, isLunch, onChange }: { minutes: number; isLunch: boolean; onChange?: (v: number) => void }) {
   const color = isLunch ? '#10b981' : '#0A6B63'
   return (
     <div className="flex items-center" style={{ gap: 14 }}>
@@ -1663,8 +1697,28 @@ function Segment({ minutes, isLunch }: { minutes: number; isLunch: boolean }) {
         style={{ fontSize: 11.5, color: '#7A8C8B', gap: 7 }}
       >
         <Car size={12} strokeWidth={1.8} style={{ opacity: 0.65 }} />
-        <span>
-          <b style={{ fontWeight: 600, color: '#5F7472' }}>{minutes}m</b> rijden
+        <span className="inline-flex items-center" style={{ gap: 2 }}>
+          {onChange ? (
+            <input
+              type="number"
+              min={0}
+              value={minutes}
+              onChange={e => onChange(Math.max(0, Number(e.target.value) || 0))}
+              aria-label="Reistijd in minuten"
+              title="Reistijd aanpasbaar"
+              className="bz-time-inline"
+              style={{
+                width: 34, background: 'transparent', border: 'none', padding: '1px 2px',
+                fontWeight: 600, color: '#5F7472', fontSize: 'inherit', fontFamily: 'inherit',
+                textAlign: 'right', borderRadius: 4, cursor: 'pointer',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,75,70,0.06)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            />
+          ) : (
+            <b style={{ fontWeight: 600, color: '#5F7472' }}>{minutes}</b>
+          )}
+          <span>m rijden</span>
         </span>
       </div>
     </div>

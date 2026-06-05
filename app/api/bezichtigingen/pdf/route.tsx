@@ -560,9 +560,9 @@ const s = StyleSheet.create({
     height: 33,
     borderRadius: 999,
     backgroundColor: MARBLE,
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderStyle: 'solid',
-    borderColor: DEEPSEA,
+    borderColor: SUN,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -600,7 +600,7 @@ const s = StyleSheet.create({
   hnodeCard: {
     flex: 1,
     marginTop: 9,
-    padding: 9,
+    padding: 11,
     backgroundColor: MARBLE,
     borderWidth: 1,
     borderStyle: 'solid',
@@ -650,40 +650,68 @@ const s = StyleSheet.create({
   hnodeTitle: {
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 500,
-    fontSize: 10.5,
+    fontSize: 12.5,
     lineHeight: 1.15,
     letterSpacing: -0.15,
     color: DEEPSEA,
-    marginBottom: 5,
+    marginBottom: 6,
   },
   hnodeTitleStartEnd: { color: DEEPSEA_DEEP },
-  hnodeTitleDense: { fontSize: 9.5 },
+  hnodeTitleDense: { fontSize: 10 },
 
   hnodeAddr: {
     fontFamily: 'Raleway',
-    fontSize: 7.5,
+    fontSize: 8.5,
     fontWeight: 500,
     lineHeight: 1.35,
     color: INK_SOFT,
-    marginBottom: 5,
+    marginBottom: 6,
   },
-  hnodeAddrDense: { fontSize: 7 },
+  hnodeAddrDense: { fontSize: 7.5 },
 
   hnodePrice: {
-    paddingHorizontal: 5,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     backgroundColor: SUN_TINT,
-    borderLeftWidth: 1.5,
+    borderLeftWidth: 2,
     borderLeftStyle: 'solid',
     borderLeftColor: SUN,
     fontFamily: 'Bricolage Grotesque',
     fontWeight: 600,
-    fontSize: 10,
+    fontSize: 12,
     color: SUN_DARK,
     letterSpacing: -0.1,
-    marginBottom: 5,
+    marginBottom: 6,
   },
-  hnodePriceDense: { fontSize: 9 },
+  hnodePriceDense: { fontSize: 10 },
+
+  // Notitie-blok onder de prijs (consultant-notitie per bezichtiging).
+  hnodeNote: {
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: RULE,
+    borderRadius: 2,
+    marginBottom: 6,
+  },
+  hnodeNoteLabel: {
+    fontFamily: 'Raleway',
+    fontSize: 6,
+    fontWeight: 700,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: INK_MUTE,
+    marginBottom: 2,
+  },
+  hnodeNoteText: {
+    fontFamily: 'Raleway',
+    fontSize: 8.5,
+    fontWeight: 500,
+    lineHeight: 1.4,
+    color: INK,
+  },
 
   hnodeMeta: {
     marginTop: 'auto',
@@ -700,7 +728,7 @@ const s = StyleSheet.create({
   },
   hnodeMetaText: {
     fontFamily: 'Raleway',
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: 600,
     color: INK_SOFT,
   },
@@ -1347,20 +1375,25 @@ function StopNodeBody({
       {node.stop.price != null && (
         <Text style={priceStyles} wrap={false}>{fmtPrice(node.stop.price)}</Text>
       )}
+      {/* Consultant-notitie direct onder de prijs. */}
+      {node.stop.notes && node.stop.notes.trim() && (
+        <View style={s.hnodeNote}>
+          <Text style={s.hnodeNoteLabel}>Notitie</Text>
+          <Text style={[s.hnodeNoteText, { maxLines: isDense ? 4 : 9, textOverflow: 'ellipsis' }]}>
+            {node.stop.notes}
+          </Text>
+        </View>
+      )}
       <View style={s.hnodeMeta}>
         <View style={s.hnodeMetaRow}>
           <Text style={s.hnodeMetaText}>
             {node.stop.viewing_duration_minutes}m{!isDense ? ' bezichtiging' : ''}
           </Text>
         </View>
+        {/* Telefoonnummer verkopend makelaar bewust NIET in de PDF (privacy). */}
         {!isDense && node.stop.contact_name && (
           <View style={s.hnodeMetaRow}>
             <Text style={s.hnodeMetaText}>{node.stop.contact_name}</Text>
-          </View>
-        )}
-        {!isDense && node.stop.contact_phone && (
-          <View style={s.hnodeMetaRow}>
-            <Text style={s.hnodeMetaText}>{node.stop.contact_phone}</Text>
           </View>
         )}
       </View>
@@ -1668,7 +1701,11 @@ export async function POST(request: Request) {
       route={(route ?? null) as RouteData | null}
       beeldmerkSrc={beeldmerkSrc}
       wordmarkSrc={wordmarkSrc}
-      heroSrc={typeof hero_url === 'string' ? hero_url : undefined}
+      heroSrc={
+        (typeof hero_url === 'string' && hero_url.trim()) ? hero_url
+        : (typeof trip?.cover_photo_url === 'string' && trip.cover_photo_url.trim()) ? trip.cover_photo_url
+        : undefined
+      }
     />
   )
 
