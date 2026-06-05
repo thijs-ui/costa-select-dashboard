@@ -1619,17 +1619,15 @@ function splitItineraryPages(
   // weglaten — die staat al op pagina 1. De vervolg-tekst verwijst NOOIT
   // naar het hotel: pagina 2 begint waar pagina 1 ophield (laatste
   // ochtendstop), niet vanaf het startadres.
-  // Vervolg-startnode op pagina 2: een lunch is een natuurlijke break, dus
-  // dan tonen we 'm altijd. Zonder lunch alleen wanneer het origineel óók een
-  // vertrekpunt had — anders mist pagina 1 een startnode (begint bij stop 1)
-  // en zou pagina 2 er wél één tonen → asymmetrisch. Lege string = geen node.
-  const page2Continuation = route.lunch
-    ? 'Vervolg na lunchpauze'
-    : ((trip.start_address && trip.start_address.trim()) ? 'Vervolg na vorige bezichtigingen' : '')
+  // Pagina 2 krijgt ALLEEN een vertrekpunt-node bij een lunchpauze — die is
+  // een echte onderbreking in de dag ('Vervolg na lunchpauze'). Zónder lunch
+  // is de pagina-split puur lay-out (7+ stops passen niet op één rij); dan
+  // tonen we GEEN vertrekpunt-node en lopen de stops gewoon door. Lege string
+  // → buildNodes' hasStart = false → geen startnode en geen aanrij-segment.
   const page2Trip: Trip = {
     ...trip,
     start_time: route.lunch?.end_time ?? lastBeforeDeparture,
-    start_address: page2Continuation,
+    start_address: route.lunch ? 'Vervolg na lunchpauze' : '',
   }
   const page2Route: RouteData = {
     ...route,
