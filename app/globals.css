@@ -175,6 +175,14 @@ h1, h2, h3, h4 {
   .bz-print-card { border: none !important; box-shadow: none !important; }
 }
 
+/* Inline tijd-editor in de bezichtigingen-timeline: vrij invoerbaar op de
+   minuut (type=time), maar zonder de brede klok-/spinner-chrome zodat de
+   tijd-cel net zo smal blijft als de oude tekstweergave. */
+.bz-time-inline::-webkit-calendar-picker-indicator { display: none; -webkit-appearance: none; }
+.bz-time-inline::-webkit-inner-spin-button,
+.bz-time-inline::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.bz-time-inline { -moz-appearance: textfield; }
+
 
 /* ═══════════════════════════════════════════════════════════════
    Costa Kompas v2 — editorial redesign (scoped under .kompas-root)

@@ -78,9 +78,10 @@ Regels:
 Antwoord ALLEEN in JSON format.`
 
 // ─── Time helpers ─────────────────────────────────────────────────────
-// Bezichtigings-tijden moeten op het half-uur-grid liggen (geen 09:22 of
-// 14:54). Ronden gebeurt altijd naar boven — bij twijfel een half uur
-// later, dat geeft de consultant ademruimte i.p.v. krappe planning.
+// Claude levert soms tijden als 09:22 of 14:54. We ronden naar boven op
+// 5 minuten voor een nette draft-planning — fijn genoeg om exacte
+// afspraaktijden (bijv. 14:15) te respecteren. De consultant kan elke tijd
+// daarna nog vrij overschrijven in de timeline.
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -94,11 +95,11 @@ function addMinutes(time: string, mins: number): string {
   return `${pad2(nh)}:${pad2(nm)}`
 }
 
-function roundUpTo30(time: string): string {
-  const [h, m] = time.split(':').map(Number)
-  if (m === 0 || m === 30) return time
-  if (m < 30) return `${pad2(h)}:30`
-  return `${pad2((h + 1) % 24)}:00`
+function roundUpTo5(time: string): string {
+  const [, m] = time.split(':').map(Number)
+  const r = m % 5
+  if (r === 0) return time
+  return addMinutes(time, 5 - r)
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────
@@ -128,9 +129,12 @@ export async function POST(request: Request) {
   }
   const includeLunch = lunch_enabled !== false
 
-  if (!stops || stops.length < 2) {
-    return NextResponse.json({ error: 'Minimaal 2 stops nodig' }, { status: 400 })
+  if (!stops || stops.length < 1) {
+    return NextResponse.json({ error: 'Minimaal 1 stop nodig' }, { status: 400 })
   }
+  // Startadres is optioneel: zonder vertrekpunt begint de dag bij de eerste
+  // bezichtiging op de starttijd (consultant spreekt direct bij stop 1 af).
+  const hasStart = !!(start_address && start_address.trim())
 
   // Ownership check op de trip
   const ownershipClient = createServiceClient()
@@ -179,6 +183,12 @@ export async function POST(request: Request) {
         const lines: string[] = []
         for (let i = 0; i < matrix.length; i++) {
           for (let j = 0; j < matrix[i].length; j++) {
+            // Zonder vast vertrekpunt is allAddresses[0] een duplicaat van
+            // Stop 1; die 'Vertrekpunt'-regels weglaten zodat Claude geen
+            // fantoom-vertrekpunt ziet. De echte stop-onderlinge afstanden
+            // staan al volledig in de Stop→Stop regels (coords-offset blijft
+            // correct omdat allAddresses altijd één element vooraan houdt).
+            if (!hasStart && (i === 0 || j === 0)) continue
             if (i !== j && matrix[i][j].duration_minutes > 0) {
               lines.push(`${labels[i]} → ${labels[j]}: ${matrix[i][j].duration_minutes} min (${matrix[i][j].distance_km} km)`)
             }
@@ -200,7 +210,9 @@ export async function POST(request: Request) {
 
     const userPrompt = `Plan de optimale route voor deze bezichtigingsdag:
 
-VERTREKPUNT: ${start_address || 'Eerste stop'}${hasCoords && coords[0] ? ` (${coords[0].lat}, ${coords[0].lng})` : ''}
+${hasStart
+  ? `VERTREKPUNT: ${start_address}${hasCoords && coords[0] ? ` (${coords[0].lat}, ${coords[0].lng})` : ''}`
+  : 'GEEN VAST VERTREKPUNT — de dag begint bij de eerste bezichtiging in jouw geoptimaliseerde volgorde; laat die eerste stop exact op de starttijd beginnen (reistijd 0 ervoor).'}
 STARTTIJD: ${start_time || '09:00'}
 ${includeLunch
   ? `GEWENSTE LUNCHTIJD: ${lunch_time || '13:00'}
@@ -288,17 +300,18 @@ ${includeLunch ? '' : 'Laat het "lunch" veld helemaal weg uit de JSON.\n\n'}Geef
       const rs = sorted[i]
       const viewing = stopDurMap.get(rs.stop_id) ?? 30
 
-      // Aankomst: voor de eerste stop ronden we Claude's bekende aankomst
-      // (gebaseerd op reistijd vanaf vertrekpunt). Voor opvolgende stops
-      // herrekenen we vanaf de geronde vertrektijd + reistijd-naar-deze.
+      // Aankomst: bij een vertrekpunt ronden we Claude's eerste aankomst
+      // (reistijd vanaf het vertrekpunt). Zonder vertrekpunt begint de dag
+      // exact op de starttijd bij stop 1. Opvolgende stops herrekenen we
+      // vanaf de geronde vertrektijd + reistijd-naar-deze.
       let arrival: string
       if (i === 0) {
-        arrival = roundUpTo30(rs.estimated_arrival)
+        arrival = hasStart ? roundUpTo5(rs.estimated_arrival) : (start_time || '09:00')
       } else {
         const travelTo = sorted[i - 1].travel_time_to_next_minutes ?? 0
-        arrival = roundUpTo30(addMinutes(cursor, travelTo))
+        arrival = roundUpTo5(addMinutes(cursor, travelTo))
       }
-      const departure = roundUpTo30(addMinutes(arrival, viewing))
+      const departure = roundUpTo5(addMinutes(arrival, viewing))
 
       rs.estimated_arrival = arrival
       rs.estimated_departure = departure

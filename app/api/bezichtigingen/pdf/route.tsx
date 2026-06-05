@@ -1049,19 +1049,32 @@ function buildNodes(
   options?: { endAddressOverride?: string; omitEndNode?: boolean },
 ): Node[] {
   const list: Node[] = []
-  list.push({
-    kind: 'start',
-    time: formatTime(trip.start_time),
-    title: 'Vertrek',
-    subtitle: trip.start_address || '—',
-  })
+  // Startadres optioneel: zonder vertrekpunt geen 'Vertrek'-node en geen
+  // aanrij-segment — de dag begint bij de eerste bezichtiging. (Bij een
+  // gesplitste itinerary krijgt pagina 2 een synthetisch 'Vervolg'-adres,
+  // dus die houdt wél een startnode.)
+  const hasStart = !!(trip.start_address && trip.start_address.trim())
+  if (hasStart) {
+    list.push({
+      kind: 'start',
+      time: formatTime(trip.start_time),
+      title: 'Vertrek',
+      subtitle: trip.start_address || '—',
+    })
+  }
   const rs = route.stops || []
   rs.forEach((r, idx) => {
-    const prevTravel =
-      idx === 0
-        ? diffMinHM(formatTime(trip.start_time), r.estimated_arrival)
-        : rs[idx - 1].travel_time_to_next_minutes
-    list.push({ kind: 'segment', minutes: prevTravel, lunch: false })
+    if (idx === 0) {
+      if (hasStart) {
+        list.push({
+          kind: 'segment',
+          minutes: diffMinHM(formatTime(trip.start_time), r.estimated_arrival),
+          lunch: false,
+        })
+      }
+    } else {
+      list.push({ kind: 'segment', minutes: rs[idx - 1].travel_time_to_next_minutes, lunch: false })
+    }
     const stop = stops.find(st => st.id === r.stop_id)
     if (stop) {
       list.push({
@@ -1093,7 +1106,7 @@ function buildNodes(
       kind: 'end',
       time: route.estimated_end_time,
       title: 'Einde',
-      subtitle: endAddress ? `Terug bij ${endAddress.split(',')[0]}` : 'Afronding',
+      subtitle: endAddress ? `Terug bij ${endAddress.split(',')[0]}` : 'Laatste bezichtiging',
     })
   }
   return list
@@ -1596,7 +1609,9 @@ function splitItineraryPages(
     start_time: route.lunch?.end_time ?? lastBeforeDeparture,
     start_address: route.lunch
       ? 'Vervolg na lunchpauze'
-      : `Vervolg vanaf ${trip.start_address ?? 'startpunt'}`,
+      : (trip.start_address && trip.start_address.trim()
+          ? `Vervolg vanaf ${trip.start_address}`
+          : 'Vervolg na vorige bezichtigingen'),
   }
   const page2Route: RouteData = {
     ...route,
@@ -1612,7 +1627,10 @@ function splitItineraryPages(
       stops: stopsAfter,
       route: page2Route,
       // Eind-node toont het echte hotel-adres ipv de page-2 vertrek-tekst.
-      endAddressOverride: trip.start_address ?? undefined,
+      // Lege string (geen origineel startadres) = expliciet 'geen terugkeer-
+      // punt', zodat buildNodes NIET terugvalt op het synthetische
+      // 'Vervolg…'-adres van page2Trip ('' is niet nullish → geen ?? fallback).
+      endAddressOverride: (trip.start_address && trip.start_address.trim()) ? trip.start_address : '',
     },
   ]
 }

@@ -21,8 +21,6 @@ interface Props {
   onSave: (id: string, updates: Partial<EditableStop>) => Promise<void>
 }
 
-const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90]
-
 export function EditStopModal({ stop, onClose, onSave }: Props) {
   const [address, setAddress] = useState('')
   const [propertyTitle, setPropertyTitle] = useState('')
@@ -61,7 +59,7 @@ export function EditStopModal({ stop, onClose, onSave }: Props) {
         property_title: propertyTitle.trim() || null,
         listing_url: listingUrl.trim() || null,
         price: price ? Number(price) : null,
-        viewing_duration_minutes: duration,
+        viewing_duration_minutes: Math.max(5, Math.round(duration) || 0),
         contact_name: contactName.trim() || null,
         contact_phone: contactPhone.trim() || null,
         notes: notes.trim() || null,
@@ -141,12 +139,8 @@ export function EditStopModal({ stop, onClose, onSave }: Props) {
             <FormField label="Listing URL" colSpan={2}>
               <Input value={listingUrl} onChange={setListingUrl} placeholder="https://..." />
             </FormField>
-            <FormField label="Duur bezichtiging">
-              <Select value={String(duration)} onChange={v => setDuration(Number(v))}>
-                {DURATION_OPTIONS.map(d => (
-                  <option key={d} value={String(d)}>{d} min</option>
-                ))}
-              </Select>
+            <FormField label="Duur bezichtiging (min)">
+              <Input value={String(duration)} onChange={v => setDuration(Number(v) || 0)} type="number" min={5} step={5} />
             </FormField>
             <FormField label="Contactpersoon">
               <Input value={contactName} onChange={setContactName} placeholder="Verkoper / makelaar" />
@@ -233,14 +227,16 @@ function FormField({
 }
 
 function Input({
-  value, onChange, placeholder, type,
-}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  value, onChange, placeholder, type, min, step,
+}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; min?: number; step?: number }) {
   return (
     <input
       type={type ?? 'text'}
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      min={min}
+      step={step}
       style={{
         width: '100%', border: '1px solid rgba(0,75,70,0.18)', borderRadius: 9,
         padding: '8px 11px', fontSize: 13, color: '#004B46', background: '#fff',
@@ -265,20 +261,3 @@ function Textarea({ value, onChange }: { value: string; onChange: (v: string) =>
   )
 }
 
-function Select({
-  value, onChange, children,
-}: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        width: '100%', border: '1px solid rgba(0,75,70,0.18)', borderRadius: 9,
-        padding: '8px 11px', fontSize: 13, color: '#004B46', background: '#fff',
-        fontFamily: 'inherit', outline: 'none',
-      }}
-    >
-      {children}
-    </select>
-  )
-}

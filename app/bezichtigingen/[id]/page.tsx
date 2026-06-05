@@ -109,17 +109,11 @@ function formatTime(t: string | null | undefined): string {
   return t.substring(0, 5)
 }
 
-// Bezichtigings-tijden lopen op halve uren (06:00 t/m 22:00). Voorkomt dat
-// consultants per ongeluk 09:17 of 10:42 invoeren waar de klant later
-// over struikelt in de itinerary.
-const TIME_OPTIONS: string[] = (() => {
-  const out: string[] = []
-  for (let h = 6; h <= 22; h++) {
-    out.push(`${String(h).padStart(2, '0')}:00`)
-    if (h < 22) out.push(`${String(h).padStart(2, '0')}:30`)
-  }
-  return out
-})()
+// Google Maps-link naar een adres — geeft de consultant onderweg directe
+// locatie/navigatie vanuit de stoplijst én de timeline.
+function mapsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+}
 
 function diffMinutes(a: string, b: string): number {
   if (!a || !b) return 0
@@ -408,10 +402,11 @@ export default function BezichtigingDetailPage({
   }
 
   // ─── Route optimize ───────────────────────────
+  // Startadres is optioneel: zonder vertrekpunt begint de dag bij de eerste
+  // bezichtiging (consultant spreekt vaak direct bij stop 1 met de klant af).
   const canOptimize =
     !!trip &&
     stops.length >= 1 &&
-    !!trip.start_address &&
     !!trip.start_time &&
     !!trip.trip_date
 
@@ -687,7 +682,7 @@ export default function BezichtigingDetailPage({
                   }}
                 >
                   <AlertCircle size={14} strokeWidth={2} className="shrink-0" />
-                  Vul klantnaam, datum, starttijd, startadres en minstens 1 stop in om te optimaliseren.
+                  Vul datum, starttijd en minstens 1 stop in om te optimaliseren. Een startadres is optioneel.
                 </div>
               )}
 
@@ -874,22 +869,16 @@ function TripForm({
           />
         </Field>
         <Field label="Starttijd">
-          <BzSelect
+          <BzInput
+            type="time"
             value={formatTime(trip.start_time)}
             onChange={e => onChange({ start_time: e.target.value })}
-          >
-            {!TIME_OPTIONS.includes(formatTime(trip.start_time)) && trip.start_time && (
-              <option value={formatTime(trip.start_time)}>{formatTime(trip.start_time)}</option>
-            )}
-            {TIME_OPTIONS.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </BzSelect>
+          />
         </Field>
-        <Field label="Startadres / hotel" colFull>
+        <Field label="Startadres / hotel (optioneel)" colFull>
           <BzInput
             value={trip.start_address || ''}
-            placeholder="Adres of hotel waar de klant verblijft"
+            placeholder="Leeg laten = de dag begint bij de eerste bezichtiging"
             onChange={e => onChange({ start_address: e.target.value })}
           />
         </Field>
@@ -910,17 +899,11 @@ function TripForm({
         {trip.lunch_enabled !== false && (
           <>
             <Field label="Lunchtijd">
-              <BzSelect
+              <BzInput
+                type="time"
                 value={formatTime(trip.lunch_time)}
                 onChange={e => onChange({ lunch_time: e.target.value })}
-              >
-                {!TIME_OPTIONS.includes(formatTime(trip.lunch_time)) && trip.lunch_time && (
-                  <option value={formatTime(trip.lunch_time)}>{formatTime(trip.lunch_time)}</option>
-                )}
-                {TIME_OPTIONS.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </BzSelect>
+              />
             </Field>
             <Field label="Lunchduur">
               <BzSelect
@@ -1096,18 +1079,16 @@ function StopsCard({
                 onChange={e => setDraft({ ...draft, listing_url: e.target.value })}
               />
             </Field>
-            <Field label="Duur bezichtiging">
-              <BzSelect
+            <Field label="Duur bezichtiging (min)">
+              <BzInput
+                type="number"
+                min={5}
+                step={5}
                 value={String(draft.viewing_duration_minutes)}
                 onChange={e =>
                   setDraft({ ...draft, viewing_duration_minutes: Number(e.target.value) })
                 }
-              >
-                <option value="20">20 min</option>
-                <option value="30">30 min</option>
-                <option value="45">45 min</option>
-                <option value="60">60 min</option>
-              </BzSelect>
+              />
             </Field>
             <Field label="Contactpersoon">
               <BzInput
@@ -1284,14 +1265,44 @@ function StopRow({
               rel="noopener noreferrer"
               title="Open listing"
               className="inline-flex items-center transition-colors"
-              style={{ color: '#5F7472' }}
+              style={{ color: '#5F7472', gap: 4, textDecoration: 'none' }}
               onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
               onMouseLeave={e => (e.currentTarget.style.color = '#5F7472')}
             >
-              <ExternalLink size={11} strokeWidth={1.8} />
+              <ExternalLink size={11} strokeWidth={1.8} /> Listing
             </a>
           )}
+          <a
+            href={mapsUrl(stop.address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open in Google Maps"
+            className="inline-flex items-center transition-colors"
+            style={{ color: '#5F7472', gap: 4, textDecoration: 'none' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#5F7472')}
+          >
+            <MapPin size={11} strokeWidth={1.8} /> Maps
+          </a>
         </div>
+        {stop.notes && (
+          <div
+            className="font-body"
+            style={{
+              fontSize: 11.5,
+              color: '#5F7472',
+              marginTop: 6,
+              padding: '6px 9px',
+              background: '#FFFAEF',
+              border: '1px solid rgba(0,75,70,0.10)',
+              borderRadius: 8,
+              lineHeight: 1.4,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {stop.notes}
+          </div>
+        )}
       </div>
       <div className="flex items-start shrink-0" style={{ gap: 4 }}>
         <SmallIconButton
@@ -1398,19 +1409,24 @@ function Timeline({
   const items: TimelineItem[] = useMemo(() => {
     if (!route) return []
     const list: TimelineItem[] = []
-    list.push({
-      kind: 'start',
-      time: formatTime(trip.start_time),
-      title: 'Vertrek',
-      subtitle: trip.start_address || '—',
-    })
+    // Startadres optioneel: zonder vertrekpunt geen 'Vertrek'-node en geen
+    // aanrij-segment — de dag begint direct bij de eerste bezichtiging.
+    const hasStart = !!(trip.start_address && trip.start_address.trim())
+    if (hasStart) {
+      list.push({
+        kind: 'start',
+        time: formatTime(trip.start_time),
+        title: 'Vertrek',
+        subtitle: trip.start_address || '—',
+      })
+    }
     const rs = route.stops || []
     const lunchAfter = route.lunch?.after_stop_order
     rs.forEach((r, idx) => {
       const prevTravel = idx === 0 ? null : rs[idx - 1].travel_time_to_next_minutes
       if (prevTravel != null) {
         list.push({ kind: 'segment', minutes: prevTravel, isLunchSegment: false })
-      } else if (idx === 0) {
+      } else if (idx === 0 && hasStart) {
         list.push({
           kind: 'segment',
           minutes: diffMinutes(formatTime(trip.start_time), r.estimated_arrival),
@@ -1445,9 +1461,9 @@ function Timeline({
       kind: 'end',
       time: route.estimated_end_time,
       title: 'Einde bezichtigingsdag',
-      subtitle: trip.start_address
-        ? `Terug bij ${trip.start_address.split(',')[0]}`
-        : 'Afronding',
+      subtitle: hasStart
+        ? `Terug bij ${trip.start_address!.split(',')[0]}`
+        : 'Laatste bezichtiging',
     })
     return list
   }, [trip, stops, route])
@@ -1648,10 +1664,11 @@ function Segment({ minutes, isLunch }: { minutes: number; isLunch: boolean }) {
   )
 }
 
-// Inline tijd-dropdown voor de timeline-edit. Half-uur grid (TIME_OPTIONS),
-// neemt ook een eventueel niet-on-grid value uit de DB op zodat user zonder
-// data-loss kan vervangen.
-function TimeSelect({
+// Inline tijd-editor voor de timeline. Vrij invoerbaar op de minuut
+// (type=time) zodat consultants exacte afspraaktijden zoals 14:15 kunnen
+// zetten — niet langer beperkt tot het half-uur-grid. De .bz-time-inline
+// CSS verbergt de klok-/spinner-chrome zodat de cel smal blijft.
+function TimeInput({
   value,
   onChange,
   ariaLabel,
@@ -1660,37 +1677,29 @@ function TimeSelect({
   onChange: (v: string) => void
   ariaLabel?: string
 }) {
-  const v = formatTime(value)
-  const known = TIME_OPTIONS.includes(v)
   return (
-    <select
+    <input
+      type="time"
       aria-label={ariaLabel}
-      value={v}
+      value={formatTime(value)}
       onChange={e => onChange(e.target.value)}
-      className="font-heading font-bold text-deepsea cursor-pointer"
+      className="bz-time-inline font-heading font-bold text-deepsea cursor-pointer"
       style={{
-        appearance: 'none',
-        WebkitAppearance: 'none',
-        MozAppearance: 'none',
         background: 'transparent',
         border: 'none',
-        padding: '2px 4px',
+        padding: '2px 0',
         margin: 0,
         fontSize: 'inherit',
         letterSpacing: 'inherit',
         color: 'inherit',
+        fontFamily: 'inherit',
         textAlign: 'right',
         width: '100%',
         cursor: 'pointer',
       }}
       onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,75,70,0.06)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-    >
-      {!known && v && <option value={v}>{v}</option>}
-      {TIME_OPTIONS.map(t => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+    />
   )
 }
 
@@ -1727,7 +1736,7 @@ function Node({
         style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
       >
         {editable ? (
-          <TimeSelect value={time} onChange={onTimeChange!} ariaLabel="Lunchtijd" />
+          <TimeInput value={time} onChange={onTimeChange!} ariaLabel="Lunchtijd" />
         ) : (
           time
         )}
@@ -1814,7 +1823,7 @@ function StopNode({
         style={{ width: 58, paddingTop: 10, fontSize: 14, letterSpacing: '-0.01em' }}
       >
         {onArrivalChange ? (
-          <TimeSelect value={time} onChange={onArrivalChange} ariaLabel="Aankomsttijd" />
+          <TimeInput value={time} onChange={onArrivalChange} ariaLabel="Aankomsttijd" />
         ) : (
           time
         )}
@@ -1830,7 +1839,7 @@ function StopNode({
             }}
           >
             {onDepartureChange ? (
-              <TimeSelect value={endTime} onChange={onDepartureChange} ariaLabel="Vertrektijd" />
+              <TimeInput value={endTime} onChange={onDepartureChange} ariaLabel="Vertrektijd" />
             ) : (
               <>→ {endTime}</>
             )}
@@ -1911,6 +1920,17 @@ function StopNode({
               <ExternalLink size={12} strokeWidth={1.8} /> listing
             </a>
           )}
+          <a
+            href={mapsUrl(stop.address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center transition-colors"
+            style={{ color: '#5F7472', gap: 4, textDecoration: 'none' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#004B46')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#5F7472')}
+          >
+            <MapPin size={12} strokeWidth={1.8} /> maps
+          </a>
         </div>
         {stop.notes && (
           <div
