@@ -1457,13 +1457,20 @@ function Timeline({
         })
       }
     })
+    // De dag eindigt bij de laatste bezichtiging — er wordt geen terugreis
+    // naar het startadres gepland of getimed (eindtijd = vertrek laatste
+    // stop). Tonen die locatie i.p.v. "terug bij hotel", wat ten onrechte
+    // suggereert dat de klant om die tijd al terug is op het startadres.
+    const lastRouteStop = rs[rs.length - 1]
+    const lastStop = lastRouteStop ? stops.find(s => s.id === lastRouteStop.stop_id) : null
+    const lastName = lastStop
+      ? (lastStop.property_title?.trim() || lastStop.address.split(',').slice(-1)[0].trim())
+      : ''
     list.push({
       kind: 'end',
       time: route.estimated_end_time,
       title: 'Einde bezichtigingsdag',
-      subtitle: hasStart
-        ? `Terug bij ${trip.start_address!.split(',')[0]}`
-        : 'Laatste bezichtiging',
+      subtitle: lastName ? `Laatste bezichtiging · ${lastName}` : 'Einde van de dag',
     })
     return list
   }, [trip, stops, route])

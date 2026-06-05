@@ -286,13 +286,30 @@ ${includeLunch ? '' : 'Laat het "lunch" veld helemaal weg uit de JSON.\n\n'}Geef
     // Lunch alleen meenemen in cursor-advance als toggle aan stond.
     // Als Claude per ongeluk tóch een lunch-object teruggeeft terwijl
     // includeLunch=false, negeren we het hier.
-    const lunch = includeLunch
+    let lunch = includeLunch
       ? (routeData.lunch as
         | { after_stop_order: number; start_time: string; end_time: string }
         | undefined)
       : undefined
     if (!includeLunch) {
       delete routeData.lunch
+    }
+
+    // Clamp de lunch-positie binnen [eerste stop, één na laatste] zodat er
+    // altijd minstens één bezichtiging ná de lunch overblijft. Zonder deze
+    // guard kan Claude de lunch ná de laatste stop plaatsen — dat geeft een
+    // lunch-node na de laatste bezichtiging in de timeline én een lege
+    // pagina 2 in de gesplitste PDF. Bij te weinig stops laten we de lunch
+    // vallen.
+    if (lunch) {
+      const firstOrder = sorted[0]?.sort_order ?? 1
+      const lastOrder = sorted[sorted.length - 1]?.sort_order ?? firstOrder
+      if (lunch.after_stop_order < firstOrder) lunch.after_stop_order = firstOrder
+      if (lunch.after_stop_order > lastOrder - 1) lunch.after_stop_order = lastOrder - 1
+      if (lunch.after_stop_order < firstOrder || lunch.after_stop_order >= lastOrder) {
+        lunch = undefined
+        delete routeData.lunch
+      }
     }
 
     let cursor = start_time || '09:00'
