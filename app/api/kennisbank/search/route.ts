@@ -96,7 +96,7 @@ Antwoord-regels:
     ],
   })
 
-  const answer = message.content[0].type === 'text' ? message.content[0].text : ''
+  const answer = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
 
   return NextResponse.json({ answer, sources })
 }

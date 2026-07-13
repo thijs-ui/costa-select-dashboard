@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 4000,
       system: `Je bent de marketingcopywriter van Costa Select. Behoud de tone of voice: helder, direct, eerlijk, geen overdrijving. Behoud dezelfde praatpunten en insteek — alleen de vorm aanpassen aan het doelplatform.`,
       messages: [{
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       }],
     })
 
-    const newContent = message.content[0].type === 'text' ? message.content[0].text : ''
+    const newContent = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
     return NextResponse.json({ content: newContent })
   } catch (err) {
     console.error('Rewrite failed:', err)

@@ -112,7 +112,7 @@ ORIGINELE TEKST:
 ${raw.substring(0, 1500)}`,
       }],
     })
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    const text = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
     return text.trim() || raw
   } catch (err) {
     console.error('Description rewrite failed:', err)
@@ -279,7 +279,7 @@ export async function POST(request: Request) {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 4000,
       system: PITCH_SYSTEM_PROMPT,
       messages: [{
@@ -325,7 +325,7 @@ Geef ALLEEN de JSON terug, geen andere tekst.`
       }],
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    const text = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0])

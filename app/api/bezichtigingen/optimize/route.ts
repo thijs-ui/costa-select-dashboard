@@ -252,13 +252,13 @@ Geef terug als JSON:
 ${includeLunch ? '' : 'Laat het "lunch" veld helemaal weg uit de JSON.\n\n'}Geef ALLEEN de JSON terug.`
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 2000,
       system: hasRealDistances ? SYSTEM_PROMPT : FALLBACK_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    const text = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return NextResponse.json({ error: 'Kon geen route genereren' }, { status: 500 })

@@ -126,13 +126,13 @@ export async function POST(request: Request) {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 4000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const content = message.content[0].type === 'text' ? message.content[0].text : ''
+    const content = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
 
     // Genereer een korte titel (max 60 tekens) op basis van de content
     let title = ''
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
           content: `Geef een korte, beschrijvende titel (max 60 tekens, in het Nederlands) voor deze marketing content. Gebruik de naam/onderwerp dat erin voorkomt. Geen inleiding, alleen de titel zelf, zonder aanhalingstekens.\n\nContent:\n${content.substring(0, 1000)}`,
         }],
       })
-      title = (titleMsg.content[0].type === 'text' ? titleMsg.content[0].text : '').trim().replace(/^["']|["']$/g, '').substring(0, 80)
+      title = (titleMsg.content.map(b => (b.type === 'text' ? b.text : '')).join('')).trim().replace(/^["']|["']$/g, '').substring(0, 80)
     } catch { /* fallback: lege titel */ }
 
     return NextResponse.json({ content, title })

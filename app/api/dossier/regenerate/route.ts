@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       }],
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    const text = message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
 
     // Parse: kan een array of string zijn
     const jsonMatch = text.match(/(\[[\s\S]*\]|"[\s\S]*")/)
