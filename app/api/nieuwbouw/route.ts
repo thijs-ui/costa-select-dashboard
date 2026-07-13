@@ -54,17 +54,34 @@ export async function GET(request: Request) {
   }
 
   // Kaart-fetch: alleen kolommen die de UI gebruikt, geen raw_data/details_data.
-  const { data, error } = await supabase
-    .from('listings')
-    .select(`${LISTING_COLS}, units(${UNIT_COLS})`)
-    .eq('is_active', true)
-    .not('latitude', 'is', null)
-    .not('longitude', 'is', null)
-    .order('title')
+  // PostgREST kapt elke query af op db-max-rows (hier 1000) — een hogere
+  // .range() wordt server-side genegeerd. Met > 1000 actieve projecten (juli
+  // 2026: ~1637) verdween zo stilletjes de rest van de kaart. We pagineren
+  // daarom in blokken van 1000 tot alles binnen is. Order op title + id zodat
+  // de paginering deterministisch is (alleen title kan bij gelijke titels
+  // rijen tussen pagina's laten verschuiven).
+  const PAGE = 1000
+  const MAX_PAGES = 25 // veiligheidsplafond tegen een oneindige lus
+  const all: unknown[] = []
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE
+    const { data, error } = await supabase
+      .from('listings')
+      .select(`${LISTING_COLS}, units(${UNIT_COLS})`)
+      .eq('is_active', true)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .order('title')
+      .order('id')
+      .range(from, from + PAGE - 1)
 
-  if (error) {
-    console.error('[api/nieuwbouw] listings query failed:', error)
-    return NextResponse.json({ error: `Bots Supabase: ${error.message} (code=${error.code ?? 'n/a'})` }, { status: 500 })
+    if (error) {
+      console.error('[api/nieuwbouw] listings query failed:', error)
+      return NextResponse.json({ error: `Bots Supabase: ${error.message} (code=${error.code ?? 'n/a'})` }, { status: 500 })
+    }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE) break
   }
-  return NextResponse.json(data ?? [])
+  return NextResponse.json(all)
 }
