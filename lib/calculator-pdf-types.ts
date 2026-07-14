@@ -100,7 +100,6 @@ export interface PaymentView {
   koopcontract: number
   akte: number
   total: number
-  depositPct: number
 }
 
 export interface CalculatorViewModel {

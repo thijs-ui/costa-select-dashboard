@@ -114,15 +114,13 @@ interface CalcState {
   showProjection: boolean
   rentIndex: number
 
-  // kosten koper — per-item aan/uit (checkbox → PDF) + handmatige bedragen
+  // kosten koper — per-item aan/uit (checkbox → PDF) + handmatige €-overrides
   kkEnabled: Record<string, boolean>
-  kkAdminCost: number
-  kkAgentFee: number
-  kkInventory: number
+  kkOverrides: Record<string, number>
 
-  // betaalschema — reservering (€) + totale aanbetaling bij koopcontract (%)
+  // betaalschema — reservering (€) + aanbetaling bij koopcontract (€; null = auto)
   reservering: number
-  depositPct: number
+  kkKoopcontract: number | null
 }
 
 type PartialState = Partial<CalcState>
@@ -153,11 +151,9 @@ const DEFAULT_STATE: CalcState = {
   showProjection: false,
   rentIndex: 2.5,
   kkEnabled: {},
-  kkAdminCost: 0,
-  kkAgentFee: 0,
-  kkInventory: 0,
+  kkOverrides: {},
   reservering: 10000,
-  depositPct: 10,
+  kkKoopcontract: null,
 }
 
 // Example scenarios per mode
@@ -267,7 +263,7 @@ interface BuyerCostRow {
   sub: string
   value: number
   enabled: boolean       // aangevinkt → telt mee in totaal + komt in de PDF
-  editable?: boolean     // handmatig bedrag (administratie / makelaar / inventaris)
+  editable?: boolean     // handmatig €-bedrag (alle kosten behalve belasting/ITP)
 }
 
 interface BuyerCosts {
@@ -283,9 +279,7 @@ const KK_MANUAL_KEYS = ['admin', 'agent_fee', 'inventory'] as const
 
 interface KkInput {
   enabled: Record<string, boolean>
-  adminCost: number
-  agentFee: number
-  inventory: number
+  overrides: Record<string, number> // handmatige €-overrides per item-key
 }
 
 function calcBuyerCosts(
@@ -301,36 +295,43 @@ function calcBuyerCosts(
   // (handmatige items uit, berekende items aan).
   const isOn = (key: string): boolean =>
     key in kk.enabled ? kk.enabled[key] : !(KK_MANUAL_KEYS as readonly string[]).includes(key)
+  // Bedrag: handmatige override wint, anders de berekende richtlijn.
+  const amount = (key: string, computed: number): number =>
+    key in kk.overrides ? kk.overrides[key] : computed
 
   const rows: BuyerCostRow[] = []
-  const add = (key: string, label: string, sub: string, value: number, editable = false) =>
-    rows.push({ key, label, sub, value, enabled: isOn(key), editable })
+  // Belasting (ITP/IVA/AJD): berekend, NIET handmatig aanpasbaar.
+  const addTax = (key: string, label: string, sub: string, value: number) =>
+    rows.push({ key, label, sub, value, enabled: isOn(key), editable: false })
+  // Overige kosten: berekende richtlijn als default, maar handmatig overschrijfbaar (typend).
+  const addCost = (key: string, label: string, sub: string, computed: number) =>
+    rows.push({ key, label, sub, value: amount(key, computed), enabled: isOn(key), editable: true })
 
   if (propType === 'new') {
-    add('iva', 'IVA', `${fmtPct(region.iva_percentage)} op aankoopprijs`, price * (region.iva_percentage / 100))
-    add('ajd', 'AJD', `${fmtPct(region.ajd_percentage)} zegelrecht`, price * (region.ajd_percentage / 100))
+    addTax('iva', 'IVA', `${fmtPct(region.iva_percentage)} op aankoopprijs`, price * (region.iva_percentage / 100))
+    addTax('ajd', 'AJD', `${fmtPct(region.ajd_percentage)} zegelrecht`, price * (region.ajd_percentage / 100))
   } else {
     const rate = applicableItpRate(price, region)
-    add('itp', 'Overdrachtsbelasting (ITP)', `${fmtPct(rate)} op aankoopprijs`, calcITP(price, region))
+    addTax('itp', 'Overdrachtsbelasting (ITP)', `${fmtPct(rate)} op aankoopprijs`, calcITP(price, region))
   }
 
   const notary = clamp(price * (region.notary_percentage / 100), region.notary_min, region.notary_max)
-  add('notary', 'Notariskosten', `${fmtPct(region.notary_percentage)} (min ${fmtEUR(region.notary_min)} / max ${fmtEUR(region.notary_max)})`, notary)
+  addCost('notary', 'Notariskosten', `richtlijn ${fmtPct(region.notary_percentage)} (min ${fmtEUR(region.notary_min)} / max ${fmtEUR(region.notary_max)})`, notary)
 
   const registro = clamp(price * (region.registro_percentage / 100), region.registro_min, region.registro_max)
-  add('registro', 'Kadaster / Registro', `${fmtPct(region.registro_percentage)} (min ${fmtEUR(region.registro_min)} / max ${fmtEUR(region.registro_max)})`, registro)
+  addCost('registro', 'Kadaster / Registro', `richtlijn ${fmtPct(region.registro_percentage)} (min ${fmtEUR(region.registro_min)} / max ${fmtEUR(region.registro_max)})`, registro)
 
   const lawyer = Math.max(price * (region.lawyer_percentage / 100), region.lawyer_minimum)
-  add('lawyer', 'Advocaatkosten aankoop', `${fmtPct(region.lawyer_percentage)} · minimum ${fmtEUR(region.lawyer_minimum)}`, lawyer)
+  addCost('lawyer', 'Advocaatkosten aankoop', `richtlijn ${fmtPct(region.lawyer_percentage)} · minimum ${fmtEUR(region.lawyer_minimum)}`, lawyer)
 
   if (hasMortgage) {
-    add('bank', 'Bankkosten + taxatie', 'Forfaitair, bij hypotheek < 100%', 1200)
+    addCost('bank', 'Bankkosten + taxatie', 'Forfaitair, bij hypotheek < 100%', 1200)
   }
 
   // Handmatige, deal-specifieke items (standaard uit; consultant vult bedrag in)
-  add('admin', 'Administratiekosten', 'Gestoría / administratie — handmatig bedrag', kk.adminCost, true)
-  add('agent_fee', 'Makelaarsfee', 'Aankoopmakelaar-fee — handmatig bedrag', kk.agentFee, true)
-  add('inventory', 'Overname inventaris', 'Meubels / inboedel — handmatig bedrag', kk.inventory, true)
+  addCost('admin', 'Administratiekosten', 'Gestoría / administratie', 0)
+  addCost('agent_fee', 'Makelaarsfee', 'Aankoopmakelaar-fee', 0)
+  addCost('inventory', 'Overname inventaris', 'Meubels / inboedel', 0)
 
   const total = rows.filter(r => r.enabled).reduce((sum, r) => sum + r.value, 0)
   return { rows, total, pct: price > 0 ? (total / price) * 100 : 0 }
@@ -338,26 +339,26 @@ function calcBuyerCosts(
 
 // ── Betaalschema ──────────────────────────────────────────────────────
 // Spaanse aankoop wordt in stappen betaald: reservering (vast bedrag) →
-// aanvulling tot de totale aanbetaling bij het voorlopig koopcontract →
-// restant bij de notariële akte. Alles telt op tot de aankoopprijs.
+// aanbetaling bij het voorlopig koopcontract (handmatig €-bedrag) → restant
+// bij de notariële akte. Alles telt op tot de aankoopprijs.
 interface PaymentSchedule {
   reservering: number
   koopcontract: number
   akte: number
   total: number
-  depositPct: number
-  depositTotal: number
 }
 
-function calcPaymentSchedule(price: number, reservering: number, depositPct: number): PaymentSchedule {
+// koopcontract: number | null — handmatig €-bedrag; null = auto-suggestie
+// (10% aanbetaling minus reservering). De akte is altijd het restant.
+function calcPaymentSchedule(price: number, reservering: number, koopcontract: number | null): PaymentSchedule {
   if (!price || price <= 0) {
-    return { reservering: 0, koopcontract: 0, akte: 0, total: 0, depositPct, depositTotal: 0 }
+    return { reservering: 0, koopcontract: 0, akte: 0, total: 0 }
   }
   const res = clamp(reservering, 0, price)
-  const depositTotal = price * (depositPct / 100)
-  const koopcontract = Math.max(0, depositTotal - res)
-  const akte = Math.max(0, price - res - koopcontract)
-  return { reservering: res, koopcontract, akte, total: res + koopcontract + akte, depositPct, depositTotal }
+  const autoKoop = Math.max(0, Math.round(price * 0.10) - res)
+  const koop = koopcontract == null ? autoKoop : Math.max(0, koopcontract)
+  const akte = Math.max(0, price - res - koop)
+  return { reservering: res, koopcontract: koop, akte, total: res + koop + akte }
 }
 
 function monthlyAnnuity(loan: number, annualRatePct: number, years: number): number {
@@ -534,15 +535,13 @@ export default function CalculatorPage() {
   const buyer = useMemo(
     () => calcBuyerCosts(state.price, region, state.propType, hasMortgage, {
       enabled: state.kkEnabled,
-      adminCost: state.kkAdminCost,
-      agentFee: state.kkAgentFee,
-      inventory: state.kkInventory,
+      overrides: state.kkOverrides,
     }),
-    [state.price, region, state.propType, hasMortgage, state.kkEnabled, state.kkAdminCost, state.kkAgentFee, state.kkInventory]
+    [state.price, region, state.propType, hasMortgage, state.kkEnabled, state.kkOverrides]
   )
   const payment = useMemo(
-    () => calcPaymentSchedule(state.price, state.reservering, state.depositPct),
-    [state.price, state.reservering, state.depositPct]
+    () => calcPaymentSchedule(state.price, state.reservering, state.kkKoopcontract),
+    [state.price, state.reservering, state.kkKoopcontract]
   )
   const rental = useMemo(() => calcRental(state, buyer), [state, buyer])
   const sl = useMemo(() => calcSL(state, rental), [state, rental])
@@ -674,16 +673,7 @@ export default function CalculatorPage() {
                 <BuyerCostsTable
                   buyer={buyer}
                   onToggle={(key, on) => patch({ kkEnabled: { ...state.kkEnabled, [key]: on } })}
-                  amounts={{ admin: state.kkAdminCost, agent_fee: state.kkAgentFee, inventory: state.kkInventory }}
-                  onAmount={(key, v) =>
-                    patch(
-                      key === 'admin'
-                        ? { kkAdminCost: v }
-                        : key === 'agent_fee'
-                          ? { kkAgentFee: v }
-                          : { kkInventory: v }
-                    )
-                  }
+                  onAmount={(key, v) => patch({ kkOverrides: { ...state.kkOverrides, [key]: v } })}
                 />
               </Section>
 
@@ -696,13 +686,10 @@ export default function CalculatorPage() {
                       onChange={v => patch({ reservering: v })}
                     />
                   </Field>
-                  <Field label="Aanbetaling bij koopcontract (%)">
-                    <CalcInput
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={state.depositPct}
-                      onChange={e => patch({ depositPct: clamp(Number(e.target.value) || 0, 0, 100) })}
+                  <Field label="Aanbetaling bij koopcontract (€)">
+                    <MoneyInput
+                      value={payment.koopcontract}
+                      onChange={v => patch({ kkKoopcontract: v })}
                     />
                   </Field>
                 </Grid>
@@ -2279,12 +2266,10 @@ function EmptyRegionNote({ children }: { children: React.ReactNode }) {
 function BuyerCostsTable({
   buyer,
   onToggle,
-  amounts,
   onAmount,
 }: {
   buyer: BuyerCosts
   onToggle: (key: string, enabled: boolean) => void
-  amounts: Record<string, number>
   onAmount: (key: string, value: number) => void
 }) {
   if (buyer.rows.length === 0) {
@@ -2332,7 +2317,7 @@ function BuyerCostsTable({
                   <input
                     type="number"
                     min={0}
-                    value={amounts[r.key] || 0}
+                    value={r.value}
                     onChange={e => onAmount(r.key, Math.max(0, Number(e.target.value) || 0))}
                     className="font-body tabular-nums"
                     style={{
@@ -2394,7 +2379,7 @@ function PaymentScheduleTable({ payment, price }: { payment: PaymentSchedule; pr
   const pct = (v: number) => (price > 0 ? (v / price) * 100 : 0)
   const rows = [
     { label: 'Reservering', sub: 'Aanbetaling bij reservering', value: payment.reservering },
-    { label: 'Voorlopig koopcontract', sub: `Aanvulling tot ${fmtPct(payment.depositPct)} aanbetaling`, value: payment.koopcontract },
+    { label: 'Voorlopig koopcontract', sub: 'Aanbetaling bij het koopcontract', value: payment.koopcontract },
     { label: 'Passeren akte notaris', sub: 'Restant bij levering', value: payment.akte },
   ]
   return (
@@ -3113,7 +3098,7 @@ function buildPdfViewModel(args: {
       pct: state.price > 0 ? (r.value / state.price) * 100 : null,
     }))
 
-  const paySchedule = calcPaymentSchedule(state.price, state.reservering, state.depositPct)
+  const paySchedule = calcPaymentSchedule(state.price, state.reservering, state.kkKoopcontract)
 
   const modeMeta = CALC_MODES.find(m => m.id === state.mode)
   const modeLabel = modeMeta?.label ?? 'Calculator'
@@ -3142,7 +3127,6 @@ function buildPdfViewModel(args: {
       koopcontract: paySchedule.koopcontract,
       akte: paySchedule.akte,
       total: paySchedule.total,
-      depositPct: paySchedule.depositPct,
     } : undefined,
     ltv: fin.ltv,
     ltvMax,

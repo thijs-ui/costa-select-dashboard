@@ -616,7 +616,7 @@ function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boo
   const p = vm.payment
   const rows: RowDef[] = [
     { t: 'Reservering', sub: 'Bij reservering', val: fmtEUR(p.reservering) },
-    { t: 'Voorlopig koopcontract', sub: `Aanvulling tot ${fmtPct(p.depositPct, 0)} aanbetaling`, val: fmtEUR(p.koopcontract) },
+    { t: 'Voorlopig koopcontract', sub: 'Aanbetaling bij het koopcontract', val: fmtEUR(p.koopcontract) },
     { t: 'Passeren akte notaris', sub: 'Restant bij levering', val: fmtEUR(p.akte) },
     { kind: 'total', t: 'Totaal aankoopprijs', val: fmtEUR(p.total) },
   ]
