@@ -95,6 +95,14 @@ export interface RenoView {
   roiPerYear: number
 }
 
+export interface PaymentView {
+  reservering: number
+  koopcontract: number
+  akte: number
+  total: number
+  depositPct: number
+}
+
 export interface CalculatorViewModel {
   mode: CalcMode
   modeLabel: string
@@ -113,6 +121,8 @@ export interface CalculatorViewModel {
   kkRows: KkRow[]
   kkTotal: number
   kkPct: number
+  // betaalschema (optioneel)
+  payment?: PaymentView
   // financiering
   ltv: number
   ltvMax: number

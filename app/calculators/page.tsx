@@ -119,6 +119,10 @@ interface CalcState {
   kkAdminCost: number
   kkAgentFee: number
   kkInventory: number
+
+  // betaalschema — reservering (€) + totale aanbetaling bij koopcontract (%)
+  reservering: number
+  depositPct: number
 }
 
 type PartialState = Partial<CalcState>
@@ -152,6 +156,8 @@ const DEFAULT_STATE: CalcState = {
   kkAdminCost: 0,
   kkAgentFee: 0,
   kkInventory: 0,
+  reservering: 10000,
+  depositPct: 10,
 }
 
 // Example scenarios per mode
@@ -328,6 +334,30 @@ function calcBuyerCosts(
 
   const total = rows.filter(r => r.enabled).reduce((sum, r) => sum + r.value, 0)
   return { rows, total, pct: price > 0 ? (total / price) * 100 : 0 }
+}
+
+// ── Betaalschema ──────────────────────────────────────────────────────
+// Spaanse aankoop wordt in stappen betaald: reservering (vast bedrag) →
+// aanvulling tot de totale aanbetaling bij het voorlopig koopcontract →
+// restant bij de notariële akte. Alles telt op tot de aankoopprijs.
+interface PaymentSchedule {
+  reservering: number
+  koopcontract: number
+  akte: number
+  total: number
+  depositPct: number
+  depositTotal: number
+}
+
+function calcPaymentSchedule(price: number, reservering: number, depositPct: number): PaymentSchedule {
+  if (!price || price <= 0) {
+    return { reservering: 0, koopcontract: 0, akte: 0, total: 0, depositPct, depositTotal: 0 }
+  }
+  const res = clamp(reservering, 0, price)
+  const depositTotal = price * (depositPct / 100)
+  const koopcontract = Math.max(0, depositTotal - res)
+  const akte = Math.max(0, price - res - koopcontract)
+  return { reservering: res, koopcontract, akte, total: res + koopcontract + akte, depositPct, depositTotal }
 }
 
 function monthlyAnnuity(loan: number, annualRatePct: number, years: number): number {
@@ -510,6 +540,10 @@ export default function CalculatorPage() {
     }),
     [state.price, region, state.propType, hasMortgage, state.kkEnabled, state.kkAdminCost, state.kkAgentFee, state.kkInventory]
   )
+  const payment = useMemo(
+    () => calcPaymentSchedule(state.price, state.reservering, state.depositPct),
+    [state.price, state.reservering, state.depositPct]
+  )
   const rental = useMemo(() => calcRental(state, buyer), [state, buyer])
   const sl = useMemo(() => calcSL(state, rental), [state, rental])
   const flip = useMemo(() => calcFlip(state, buyer), [state, buyer])
@@ -651,6 +685,28 @@ export default function CalculatorPage() {
                     )
                   }
                 />
+              </Section>
+
+              {/* Betaalschema — apart blokje */}
+              <Section title="Betaalschema" eyebrow="Aankoop-betaling in stappen">
+                <Grid cols={2}>
+                  <Field label="Reservering (€)">
+                    <MoneyInput
+                      value={state.reservering}
+                      onChange={v => patch({ reservering: v })}
+                    />
+                  </Field>
+                  <Field label="Aanbetaling bij koopcontract (%)">
+                    <CalcInput
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={state.depositPct}
+                      onChange={e => patch({ depositPct: clamp(Number(e.target.value) || 0, 0, 100) })}
+                    />
+                  </Field>
+                </Grid>
+                <PaymentScheduleTable payment={payment} price={state.price} />
               </Section>
 
               {/* 3 — Financiering */}
@@ -1441,7 +1497,7 @@ function Section({
   compact,
   children,
 }: {
-  num: number
+  num?: number
   title: string
   eyebrow?: string
   compact?: boolean
@@ -1465,18 +1521,20 @@ function Section({
           borderBottom: compact ? 'none' : '1px solid rgba(0,75,70,0.08)',
         }}
       >
-        <span
-          className="inline-flex items-center justify-center shrink-0 font-heading font-bold text-sun-dark"
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 7,
-            background: '#FEF6E4',
-            fontSize: 11,
-          }}
-        >
-          {String(num).padStart(2, '0')}
-        </span>
+        {num != null && (
+          <span
+            className="inline-flex items-center justify-center shrink-0 font-heading font-bold text-sun-dark"
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 7,
+              background: '#FEF6E4',
+              fontSize: 11,
+            }}
+          >
+            {String(num).padStart(2, '0')}
+          </span>
+        )}
         <h3
           className="flex-1 font-heading font-bold text-deepsea"
           style={{ fontSize: 15, letterSpacing: '-0.005em', margin: 0 }}
@@ -2328,6 +2386,51 @@ function BuyerCostsTable({
   )
 }
 
+// ════════════════════ PAYMENT SCHEDULE TABLE ════════════════════
+function PaymentScheduleTable({ payment, price }: { payment: PaymentSchedule; price: number }) {
+  if (!price || price <= 0) {
+    return <EmptyRegionNote>Vul een aankoopprijs in om het betaalschema te zien.</EmptyRegionNote>
+  }
+  const pct = (v: number) => (price > 0 ? (v / price) * 100 : 0)
+  const rows = [
+    { label: 'Reservering', sub: 'Aanbetaling bij reservering', value: payment.reservering },
+    { label: 'Voorlopig koopcontract', sub: `Aanvulling tot ${fmtPct(payment.depositPct)} aanbetaling`, value: payment.koopcontract },
+    { label: 'Passeren akte notaris', sub: 'Restant bij levering', value: payment.akte },
+  ]
+  return (
+    <Table>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i} style={{ borderBottom: '1px solid rgba(0,75,70,0.06)' }}>
+            <td style={{ padding: '10px 0' }}>
+              <div className="font-body" style={{ fontSize: 13, color: '#004B46' }}>{r.label}</div>
+              <div className="font-body" style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}>{r.sub}</div>
+            </td>
+            <td style={{ padding: '10px 0', textAlign: 'right' }}>
+              <div className="font-body tabular-nums" style={{ fontSize: 13, color: '#004B46' }}>{fmtEUR(r.value)}</div>
+              <div className="font-body" style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}>{fmtPct(pct(r.value))}</div>
+            </td>
+          </tr>
+        ))}
+        <tr style={{ borderTop: '2px solid rgba(0,75,70,0.2)' }}>
+          <td
+            className="font-heading font-bold"
+            style={{ padding: '14px 0', fontSize: 15, color: '#004B46', letterSpacing: '-0.005em' }}
+          >
+            Totaal aankoopprijs
+          </td>
+          <td
+            className="font-heading font-bold tabular-nums"
+            style={{ padding: '14px 0', textAlign: 'right', fontSize: 16, color: '#004B46', letterSpacing: '-0.01em' }}
+          >
+            {fmtEUR(payment.total)}
+          </td>
+        </tr>
+      </tbody>
+    </Table>
+  )
+}
+
 // ════════════════════ COMPARE ════════════════════
 function PrivevsSLCompare({
   rental,
@@ -3010,6 +3113,8 @@ function buildPdfViewModel(args: {
       pct: state.price > 0 ? (r.value / state.price) * 100 : null,
     }))
 
+  const paySchedule = calcPaymentSchedule(state.price, state.reservering, state.depositPct)
+
   const modeMeta = CALC_MODES.find(m => m.id === state.mode)
   const modeLabel = modeMeta?.label ?? 'Calculator'
   const regionName = region?.region ?? 'Regio onbekend'
@@ -3032,6 +3137,13 @@ function buildPdfViewModel(args: {
     kkRows,
     kkTotal: totalKK,
     kkPct: buyer.pct,
+    payment: state.price > 0 ? {
+      reservering: paySchedule.reservering,
+      koopcontract: paySchedule.koopcontract,
+      akte: paySchedule.akte,
+      total: paySchedule.total,
+      depositPct: paySchedule.depositPct,
+    } : undefined,
     ltv: fin.ltv,
     ltvMax,
     rate: state.rate,

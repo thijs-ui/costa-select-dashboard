@@ -457,12 +457,12 @@ function Footer() {
 }
 
 function SectionTitle({ num, eyebrow, title, blurb, compact }: {
-  num: number; eyebrow: string; title: string; blurb?: string; compact?: boolean
+  num?: number; eyebrow: string; title: string; blurb?: string; compact?: boolean
 }) {
   return (
     <View style={s.stitle}>
       <View style={s.stitleEyebrowRow}>
-        <Text style={s.stitleNum}>{num2(num)}</Text>
+        {num != null && <Text style={s.stitleNum}>{num2(num)}</Text>}
         <Text style={s.stitleEyebrow}>{eyebrow}</Text>
       </View>
       <View style={s.stitleSunTick} />
@@ -606,6 +606,23 @@ function S02KostenKoper({ vm, compact }: { vm: CalculatorViewModel; compact?: bo
           { l: 'Hoofdpost', v: fmtEUR(vm.kkRows[0]?.val ?? 0), sub: `${fmtPct(vm.kkRows[0]?.pct ?? 0, 1)} ${vm.kkRows[0]?.t.split(' — ')[0] ?? ''}` },
         ]} />
       )}
+      <Rows rows={rows} />
+    </View>
+  )
+}
+
+function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+  if (!vm.payment) return null
+  const p = vm.payment
+  const rows: RowDef[] = [
+    { t: 'Reservering', sub: 'Bij reservering', val: fmtEUR(p.reservering) },
+    { t: 'Voorlopig koopcontract', sub: `Aanvulling tot ${fmtPct(p.depositPct, 0)} aanbetaling`, val: fmtEUR(p.koopcontract) },
+    { t: 'Passeren akte notaris', sub: 'Restant bij levering', val: fmtEUR(p.akte) },
+    { kind: 'total', t: 'Totaal aankoopprijs', val: fmtEUR(p.total) },
+  ]
+  return (
+    <View style={s.sectionTight}>
+      <SectionTitle eyebrow="Betaalschema" title="Aankoop-betaling in stappen" compact={compact} />
       <Rows rows={rows} />
     </View>
   )
@@ -958,6 +975,7 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
         <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
           <S01Basis vm={vm} compact />
           <S02KostenKoper vm={vm} />
+          <SBetaalschema vm={vm} compact />
         </InteriorPage>
         <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
           <S03Financiering vm={vm} compact />
@@ -977,6 +995,7 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
         <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
           <S01Basis vm={vm} compact />
           <S02KostenKoper vm={vm} />
+          <SBetaalschema vm={vm} compact />
         </InteriorPage>
         <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
           <S03Financiering vm={vm} compact />
@@ -1001,6 +1020,7 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
         <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
           <S01Basis vm={vm} compact />
           <S02KostenKoper vm={vm} />
+          <SBetaalschema vm={vm} compact />
         </InteriorPage>
         <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
           <S03Financiering vm={vm} compact />
