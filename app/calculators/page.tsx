@@ -113,6 +113,12 @@ interface CalcState {
 
   showProjection: boolean
   rentIndex: number
+
+  // kosten koper — per-item aan/uit (checkbox → PDF) + handmatige bedragen
+  kkEnabled: Record<string, boolean>
+  kkAdminCost: number
+  kkAgentFee: number
+  kkInventory: number
 }
 
 type PartialState = Partial<CalcState>
@@ -142,6 +148,10 @@ const DEFAULT_STATE: CalcState = {
   agentPct: 4,
   showProjection: false,
   rentIndex: 2.5,
+  kkEnabled: {},
+  kkAdminCost: 0,
+  kkAgentFee: 0,
+  kkInventory: 0,
 }
 
 // Example scenarios per mode
@@ -250,6 +260,8 @@ interface BuyerCostRow {
   label: string
   sub: string
   value: number
+  enabled: boolean       // aangevinkt → telt mee in totaal + komt in de PDF
+  editable?: boolean     // handmatig bedrag (administratie / makelaar / inventaris)
 }
 
 interface BuyerCosts {
@@ -258,61 +270,63 @@ interface BuyerCosts {
   pct: number
 }
 
+// Handmatige (deal-specifieke) kosten-items staan standaard UIT — de
+// consultant vinkt ze aan wanneer van toepassing. De berekende items (belasting,
+// notaris, registro, advocaat, bank) staan standaard AAN.
+const KK_MANUAL_KEYS = ['admin', 'agent_fee', 'inventory'] as const
+
+interface KkInput {
+  enabled: Record<string, boolean>
+  adminCost: number
+  agentFee: number
+  inventory: number
+}
+
 function calcBuyerCosts(
   price: number,
   region: RegionalSettings | null,
   propType: 'existing' | 'new',
-  hasMortgage: boolean
+  hasMortgage: boolean,
+  kk: KkInput
 ): BuyerCosts {
   if (!region || !price) return { rows: [], total: 0, pct: 0 }
 
+  // Aan/uit-status per item: expliciete keuze wint, anders de default
+  // (handmatige items uit, berekende items aan).
+  const isOn = (key: string): boolean =>
+    key in kk.enabled ? kk.enabled[key] : !(KK_MANUAL_KEYS as readonly string[]).includes(key)
+
   const rows: BuyerCostRow[] = []
+  const add = (key: string, label: string, sub: string, value: number, editable = false) =>
+    rows.push({ key, label, sub, value, enabled: isOn(key), editable })
+
   if (propType === 'new') {
-    const iva = price * (region.iva_percentage / 100)
-    rows.push({ key: 'iva', label: 'IVA', sub: `${fmtPct(region.iva_percentage)} op aankoopprijs`, value: iva })
-    const ajd = price * (region.ajd_percentage / 100)
-    rows.push({ key: 'ajd', label: 'AJD', sub: `${fmtPct(region.ajd_percentage)} zegelrecht`, value: ajd })
+    add('iva', 'IVA', `${fmtPct(region.iva_percentage)} op aankoopprijs`, price * (region.iva_percentage / 100))
+    add('ajd', 'AJD', `${fmtPct(region.ajd_percentage)} zegelrecht`, price * (region.ajd_percentage / 100))
   } else {
-    const itp = calcITP(price, region)
     const rate = applicableItpRate(price, region)
-    const sub = `${fmtPct(rate)} op aankoopprijs`
-    rows.push({ key: 'itp', label: 'ITP', sub, value: itp })
+    add('itp', 'Overdrachtsbelasting (ITP)', `${fmtPct(rate)} op aankoopprijs`, calcITP(price, region))
   }
 
   const notary = clamp(price * (region.notary_percentage / 100), region.notary_min, region.notary_max)
-  rows.push({
-    key: 'notary',
-    label: 'Notariskosten',
-    sub: `${fmtPct(region.notary_percentage)} (min ${fmtEUR(region.notary_min)} / max ${fmtEUR(region.notary_max)})`,
-    value: notary,
-  })
+  add('notary', 'Notariskosten', `${fmtPct(region.notary_percentage)} (min ${fmtEUR(region.notary_min)} / max ${fmtEUR(region.notary_max)})`, notary)
 
   const registro = clamp(price * (region.registro_percentage / 100), region.registro_min, region.registro_max)
-  rows.push({
-    key: 'registro',
-    label: 'Kadaster / Registro',
-    sub: `${fmtPct(region.registro_percentage)} (min ${fmtEUR(region.registro_min)} / max ${fmtEUR(region.registro_max)})`,
-    value: registro,
-  })
+  add('registro', 'Kadaster / Registro', `${fmtPct(region.registro_percentage)} (min ${fmtEUR(region.registro_min)} / max ${fmtEUR(region.registro_max)})`, registro)
 
   const lawyer = Math.max(price * (region.lawyer_percentage / 100), region.lawyer_minimum)
-  rows.push({
-    key: 'lawyer',
-    label: 'Juridisch (advocaat)',
-    sub: `${fmtPct(region.lawyer_percentage)} · minimum ${fmtEUR(region.lawyer_minimum)}`,
-    value: lawyer,
-  })
+  add('lawyer', 'Advocaatkosten aankoop', `${fmtPct(region.lawyer_percentage)} · minimum ${fmtEUR(region.lawyer_minimum)}`, lawyer)
 
   if (hasMortgage) {
-    rows.push({
-      key: 'bank',
-      label: 'Bankkosten + taxatie',
-      sub: 'Forfaitair, bij hypotheek < 100%',
-      value: 1200,
-    })
+    add('bank', 'Bankkosten + taxatie', 'Forfaitair, bij hypotheek < 100%', 1200)
   }
 
-  const total = rows.reduce((sum, r) => sum + r.value, 0)
+  // Handmatige, deal-specifieke items (standaard uit; consultant vult bedrag in)
+  add('admin', 'Administratiekosten', 'Gestoría / administratie — handmatig bedrag', kk.adminCost, true)
+  add('agent_fee', 'Makelaarsfee', 'Aankoopmakelaar-fee — handmatig bedrag', kk.agentFee, true)
+  add('inventory', 'Overname inventaris', 'Meubels / inboedel — handmatig bedrag', kk.inventory, true)
+
+  const total = rows.filter(r => r.enabled).reduce((sum, r) => sum + r.value, 0)
   return { rows, total, pct: price > 0 ? (total / price) * 100 : 0 }
 }
 
@@ -488,8 +502,13 @@ export default function CalculatorPage() {
   const fin = { downPayment, mortgage, hasMortgage, maxLTV, ltv, ltvWarn, monthlyPayment, monthlyTotal }
 
   const buyer = useMemo(
-    () => calcBuyerCosts(state.price, region, state.propType, hasMortgage),
-    [state.price, region, state.propType, hasMortgage]
+    () => calcBuyerCosts(state.price, region, state.propType, hasMortgage, {
+      enabled: state.kkEnabled,
+      adminCost: state.kkAdminCost,
+      agentFee: state.kkAgentFee,
+      inventory: state.kkInventory,
+    }),
+    [state.price, region, state.propType, hasMortgage, state.kkEnabled, state.kkAdminCost, state.kkAgentFee, state.kkInventory]
   )
   const rental = useMemo(() => calcRental(state, buyer), [state, buyer])
   const sl = useMemo(() => calcSL(state, rental), [state, rental])
@@ -618,7 +637,20 @@ export default function CalculatorPage() {
                 title="Kosten koper"
                 eyebrow={state.propType === 'new' ? 'Nieuwbouw (IVA + AJD)' : 'Bestaande bouw (ITP)'}
               >
-                <BuyerCostsTable buyer={buyer} />
+                <BuyerCostsTable
+                  buyer={buyer}
+                  onToggle={(key, on) => patch({ kkEnabled: { ...state.kkEnabled, [key]: on } })}
+                  amounts={{ admin: state.kkAdminCost, agent_fee: state.kkAgentFee, inventory: state.kkInventory }}
+                  onAmount={(key, v) =>
+                    patch(
+                      key === 'admin'
+                        ? { kkAdminCost: v }
+                        : key === 'agent_fee'
+                          ? { kkAgentFee: v }
+                          : { kkInventory: v }
+                    )
+                  }
+                />
               </Section>
 
               {/* 3 — Financiering */}
@@ -2186,60 +2218,113 @@ function EmptyRegionNote({ children }: { children: React.ReactNode }) {
 }
 
 // ════════════════════ BUYER COSTS TABLE ════════════════════
-function BuyerCostsTable({ buyer }: { buyer: BuyerCosts }) {
+function BuyerCostsTable({
+  buyer,
+  onToggle,
+  amounts,
+  onAmount,
+}: {
+  buyer: BuyerCosts
+  onToggle: (key: string, enabled: boolean) => void
+  amounts: Record<string, number>
+  onAmount: (key: string, value: number) => void
+}) {
   if (buyer.rows.length === 0) {
     return (
       <EmptyRegionNote>Kies regio + aankoopprijs om kosten koper te zien.</EmptyRegionNote>
     )
   }
   return (
-    <Table>
-      <tbody>
-        {buyer.rows.map(r => (
-          <tr key={r.key} style={{ borderBottom: '1px solid rgba(0,75,70,0.06)' }}>
-            <td style={{ padding: '10px 0' }}>
-              <div className="font-body" style={{ fontSize: 13, color: '#004B46' }}>
-                {r.label}
+    <>
+      <div
+        className="font-body"
+        style={{ fontSize: 11.5, color: '#7A8C8B', marginBottom: 8 }}
+      >
+        Vink aan wat je in de PDF wilt. Alleen aangevinkte posten tellen mee in het totaal.
+      </div>
+      <Table>
+        <tbody>
+          {buyer.rows.map(r => (
+            <tr
+              key={r.key}
+              style={{ borderBottom: '1px solid rgba(0,75,70,0.06)', opacity: r.enabled ? 1 : 0.45 }}
+            >
+              <td style={{ padding: '10px 0', width: 26, verticalAlign: 'top' }}>
+                <input
+                  type="checkbox"
+                  checked={r.enabled}
+                  onChange={e => onToggle(r.key, e.target.checked)}
+                  aria-label={`${r.label} meenemen in PDF`}
+                  style={{ width: 16, height: 16, accentColor: '#004B46', cursor: 'pointer', marginTop: 1 }}
+                />
+              </td>
+              <td style={{ padding: '10px 0' }}>
+                <div className="font-body" style={{ fontSize: 13, color: '#004B46' }}>
+                  {r.label}
+                </div>
+                <div
+                  className="font-body"
+                  style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}
+                >
+                  {r.sub}
+                </div>
+              </td>
+              <td style={{ padding: '10px 0', textAlign: 'right', width: 128 }}>
+                {r.editable ? (
+                  <input
+                    type="number"
+                    min={0}
+                    value={amounts[r.key] || 0}
+                    onChange={e => onAmount(r.key, Math.max(0, Number(e.target.value) || 0))}
+                    className="font-body tabular-nums"
+                    style={{
+                      width: 108,
+                      textAlign: 'right',
+                      fontSize: 13,
+                      color: '#004B46',
+                      border: '1px solid rgba(0,75,70,0.2)',
+                      borderRadius: 6,
+                      padding: '5px 8px',
+                      background: '#fff',
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="font-body tabular-nums"
+                    style={{ fontSize: 13, color: '#004B46' }}
+                  >
+                    {fmtEUR(r.value)}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+          <tr style={{ borderTop: '2px solid rgba(0,75,70,0.2)' }}>
+            <td />
+            <td
+              className="font-heading font-bold"
+              style={{ padding: '14px 0', fontSize: 15, color: '#004B46', letterSpacing: '-0.005em' }}
+            >
+              Totaal kosten koper
+            </td>
+            <td style={{ padding: '14px 0', textAlign: 'right' }}>
+              <div
+                className="font-heading font-bold tabular-nums"
+                style={{ fontSize: 16, color: '#004B46', letterSpacing: '-0.01em' }}
+              >
+                {fmtEUR(buyer.total)}
               </div>
               <div
                 className="font-body"
                 style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}
               >
-                {r.sub}
+                {fmtPct(buyer.pct)} van prijs
               </div>
             </td>
-            <td
-              className="font-body tabular-nums"
-              style={{ padding: '10px 0', textAlign: 'right', fontSize: 13, color: '#004B46' }}
-            >
-              {fmtEUR(r.value)}
-            </td>
           </tr>
-        ))}
-        <tr style={{ borderTop: '2px solid rgba(0,75,70,0.2)' }}>
-          <td
-            className="font-heading font-bold"
-            style={{ padding: '14px 0', fontSize: 15, color: '#004B46', letterSpacing: '-0.005em' }}
-          >
-            Totaal kosten koper
-          </td>
-          <td style={{ padding: '14px 0', textAlign: 'right' }}>
-            <div
-              className="font-heading font-bold tabular-nums"
-              style={{ fontSize: 16, color: '#004B46', letterSpacing: '-0.01em' }}
-            >
-              {fmtEUR(buyer.total)}
-            </div>
-            <div
-              className="font-body"
-              style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}
-            >
-              {fmtPct(buyer.pct)} van prijs
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </Table>
+        </tbody>
+      </Table>
+    </>
   )
 }
 
@@ -2914,12 +2999,16 @@ function buildPdfViewModel(args: {
   const monthlyMortgage = fin.mortgage > 0 ? monthlyAnnuity(fin.mortgage, state.rate, state.years) : 0
   const monthlyTotal = monthlyMortgage + state.ibiMonthly + state.vveMonthly + state.insuranceMonthly
 
-  const kkRows: KkRow[] = buyer.rows.map(r => ({
-    t: r.label,
-    s: r.sub,
-    val: r.value,
-    pct: state.price > 0 ? (r.value / state.price) * 100 : null,
-  }))
+  // Alleen aangevinkte posten in de PDF; het totaal (buyer.total) telt sowieso
+  // alleen aangevinkte posten.
+  const kkRows: KkRow[] = buyer.rows
+    .filter(r => r.enabled)
+    .map(r => ({
+      t: r.label,
+      s: r.sub,
+      val: r.value,
+      pct: state.price > 0 ? (r.value / state.price) * 100 : null,
+    }))
 
   const modeMeta = CALC_MODES.find(m => m.id === state.mode)
   const modeLabel = modeMeta?.label ?? 'Calculator'
