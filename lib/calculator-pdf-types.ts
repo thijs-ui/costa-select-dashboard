@@ -122,6 +122,9 @@ export interface CalculatorViewModel {
   kkPct: number
   // betaalschema (optioneel)
   payment?: PaymentView
+  // PDF-secties aan/uit (default aan)
+  showFinanciering?: boolean
+  showMaandlasten?: boolean
   // financiering
   ltv: number
   ltvMax: number

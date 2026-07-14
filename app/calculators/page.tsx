@@ -3077,8 +3077,10 @@ function buildPdfViewModel(args: {
   projection: ProjectionRow[]
   klantnaam: string
   consultant: string
+  showFinanciering?: boolean
+  showMaandlasten?: boolean
 }): CalculatorViewModel {
-  const { state, region, buyer, fin, rental, sl, flip, projection, klantnaam, consultant } = args
+  const { state, region, buyer, fin, rental, sl, flip, projection, klantnaam, consultant, showFinanciering, showMaandlasten } = args
   const ltvMax = state.isResident ? MAX_LTV_RESIDENT : MAX_LTV_NON_RESIDENT
   const totalKK = buyer.total
   const totalAankoop = state.price
@@ -3128,6 +3130,8 @@ function buildPdfViewModel(args: {
       akte: paySchedule.akte,
       total: paySchedule.total,
     } : undefined,
+    showFinanciering: showFinanciering !== false,
+    showMaandlasten: showMaandlasten !== false,
     ltv: fin.ltv,
     ltvMax,
     rate: state.rate,
@@ -3268,6 +3272,8 @@ function PdfDownloadModal({
   const [klantnaam, setKlantnaam] = useState('')
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showFin, setShowFin] = useState(true)
+  const [showMaand, setShowMaand] = useState(true)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -3291,6 +3297,8 @@ function PdfDownloadModal({
         state, region, buyer, fin, rental, sl, flip, projection,
         klantnaam: klantnaam.trim(),
         consultant,
+        showFinanciering: showFin,
+        showMaandlasten: showMaand,
       })
       const res = await fetch('/api/calculators/pdf', {
         method: 'POST',
@@ -3386,6 +3394,32 @@ function PdfDownloadModal({
               }}
             />
           </label>
+
+          {state.mode !== 'flip' && (
+            <div style={{ marginBottom: 16 }}>
+              <span style={{ display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#5F7472', marginBottom: 8 }}>
+                Secties in de PDF
+              </span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showFin}
+                  onChange={e => setShowFin(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: '#004B46', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, color: '#004B46' }}>Financiering</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showMaand}
+                  onChange={e => setShowMaand(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: '#004B46', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, color: '#004B46' }}>Maandlasten</span>
+              </label>
+            </div>
+          )}
 
           {error && (
             <div style={{

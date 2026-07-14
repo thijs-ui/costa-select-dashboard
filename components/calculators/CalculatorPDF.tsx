@@ -474,19 +474,6 @@ function SectionTitle({ num, eyebrow, title, blurb, compact }: {
   )
 }
 
-function MetaStrip({ cells }: { cells: { l: string; v: string }[] }) {
-  return (
-    <View style={s.metaStrip}>
-      {cells.map((c, i) => (
-        <View key={i} style={[s.metaCell, i === cells.length - 1 ? s.metaCellLast : {}]}>
-          <Text style={s.metaLbl}>{c.l}</Text>
-          <Text style={s.metaVal}>{c.v}</Text>
-        </View>
-      ))}
-    </View>
-  )
-}
-
 interface RowDef {
   t: string
   sub?: string
@@ -570,25 +557,7 @@ function Hero({ stats, tone = 'marble' }: { stats: HeroStat[]; tone?: 'marble' |
 }
 
 // ─── Section blocks ───────────────────────────────────────────────────────
-function S01Basis({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
-  return (
-    <View style={s.sectionTight}>
-      <SectionTitle
-        num={1} eyebrow="Basisgegevens" title="Woning & regio"
-        blurb="Vertrekpunt voor alle berekeningen — regio bepaalt ITP, AJD en notaris-tarieven."
-        compact={compact}
-      />
-      <MetaStrip cells={[
-        { l: 'Regio', v: vm.regionShort.split(' · ')[0] || vm.regionShort },
-        { l: 'Type', v: vm.propType.split(' ')[0] },
-        { l: 'Aankoopprijs', v: fmtEUR(vm.price) },
-        { l: 'Status', v: vm.isResident ? 'Resident' : 'Niet-resident' },
-      ]} />
-    </View>
-  )
-}
-
-function S02KostenKoper({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+function S02KostenKoper({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
   const rows: RowDef[] = vm.kkRows.map((r: KkRow) => ({
     t: r.t, sub: r.s, val: fmtEUR(r.val), pct: r.pct,
   }))
@@ -596,7 +565,7 @@ function S02KostenKoper({ vm, compact }: { vm: CalculatorViewModel; compact?: bo
   return (
     <View style={s.section}>
       <SectionTitle
-        num={2} eyebrow="Kosten koper" title="Belastingen, notaris & advocaat"
+        num={num} eyebrow="Kosten koper" title="Belastingen, notaris & advocaat"
         blurb="Eenmalige bijkomende kosten bij aankoop, bovenop de vraagprijs."
         compact={compact}
       />
@@ -628,7 +597,7 @@ function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boo
   )
 }
 
-function S03Financiering({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+function S03Financiering({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
   const rows: RowDef[] = [
     { t: 'Eigen geld (downpayment)', sub: `${(100 - vm.ltv).toFixed(1)}% van aankoopprijs`, val: fmtEUR(vm.downPayment) },
     { t: 'Hypotheek', sub: `LTV ${fmtPct(vm.ltv, 1)} · max ${fmtPct(vm.ltvMax, 0)} ${vm.isResident ? 'resident' : 'niet-resident'}`, val: fmtEUR(vm.mortgage) },
@@ -636,16 +605,16 @@ function S03Financiering({ vm, compact }: { vm: CalculatorViewModel; compact?: b
   ]
   return (
     <View style={s.sectionTight}>
-      <SectionTitle num={3} eyebrow="Financiering" title="Hypotheek & eigen geld" compact={compact} />
+      <SectionTitle num={num} eyebrow="Financiering" title="Hypotheek & eigen geld" compact={compact} />
       <Rows rows={rows} />
     </View>
   )
 }
 
-function S04TotaleInvestering({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+function S04TotaleInvestering({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
   return (
     <View style={s.sectionTight}>
-      <SectionTitle num={4} eyebrow="Totale investering" title="Out of pocket" compact={compact} />
+      <SectionTitle num={num} eyebrow="Totale investering" title="Out of pocket" compact={compact} />
       <Rows rows={[
         { t: 'Aankoopprijs woning', val: fmtEUR(vm.totalAankoop) },
         { t: 'Kosten koper', sub: `${fmtPct(vm.kkPct, 1)} bovenop`, val: fmtEUR(vm.totalKK) },
@@ -656,7 +625,7 @@ function S04TotaleInvestering({ vm, compact }: { vm: CalculatorViewModel; compac
   )
 }
 
-function S05Maandlasten({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+function S05Maandlasten({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
   const m = vm.monthly
   const rows: RowDef[] = [
     { t: 'Hypotheek (annuïtair)', sub: `${vm.years} jaar · ${fmtPct(vm.rate, 1)}`, val: fmtEUR(m.mortgage), lg: !compact },
@@ -668,7 +637,7 @@ function S05Maandlasten({ vm, compact }: { vm: CalculatorViewModel; compact?: bo
   return (
     <View style={s.section}>
       <SectionTitle
-        num={5} eyebrow="Maandlasten" title="Vaste lasten per maand"
+        num={num} eyebrow="Maandlasten" title="Vaste lasten per maand"
         blurb="Hypotheek + lokale lasten + verzekering."
         compact={compact}
       />
@@ -684,7 +653,7 @@ function S05Maandlasten({ vm, compact }: { vm: CalculatorViewModel; compact?: bo
   )
 }
 
-function S06Verhuur({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+function S06Verhuur({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
   const r = vm.rental
   if (!r) return null
   const rows: RowDef[] = [
@@ -704,7 +673,7 @@ function S06Verhuur({ vm, compact }: { vm: CalculatorViewModel; compact?: boolea
   return (
     <View style={s.section}>
       <SectionTitle
-        num={6} eyebrow="Verhuur" title="Inkomsten & rendement"
+        num={num} eyebrow="Verhuur" title="Inkomsten & rendement"
         blurb="Bruto huur, beheer + onderhoud, IRNR-belasting (19% niet-resident), netto rendement."
         compact={compact}
       />
@@ -718,13 +687,13 @@ function S06Verhuur({ vm, compact }: { vm: CalculatorViewModel; compact?: boolea
   )
 }
 
-function S07SL({ vm }: { vm: CalculatorViewModel }) {
+function S07SL({ vm, num }: { vm: CalculatorViewModel; num?: number }) {
   const sl = vm.sl
   if (!sl) return null
   return (
     <View style={s.section}>
       <SectionTitle
-        num={7} eyebrow="Sociedad Limitada" title="Fiscaal voordeel via SL"
+        num={num} eyebrow="Sociedad Limitada" title="Fiscaal voordeel via SL"
         blurb="Afschrijving op gebouwwaarde + 100% aftrekbare hypotheekrente verlagen de belastbare winst."
       />
       <Hero tone="sea" stats={[
@@ -744,13 +713,13 @@ function S07SL({ vm }: { vm: CalculatorViewModel }) {
   )
 }
 
-function S08Compare({ vm }: { vm: CalculatorViewModel }) {
+function S08Compare({ vm, num }: { vm: CalculatorViewModel; num?: number }) {
   const c = vm.compare
   if (!c) return null
   const colWidths = [{ flex: 2 }, { flex: 1.2 }, { flex: 1.2 }, { flex: 1 }]
   return (
     <View style={s.sectionTight}>
-      <SectionTitle num={8} eyebrow="Privé vs SL" title="Vergelijking netto rendement" />
+      <SectionTitle num={num} eyebrow="Privé vs SL" title="Vergelijking netto rendement" />
       <View style={s.compare}>
         <View style={s.compareHead}>
           <View style={[s.compareHeadCell, colWidths[0]]}><Text>Post</Text></View>
@@ -826,7 +795,7 @@ function ProjectionTableC({ rows }: { rows: ProjectionRow[] }) {
   )
 }
 
-function S09Projection({ vm }: { vm: CalculatorViewModel }) {
+function S09Projection({ vm, num }: { vm: CalculatorViewModel; num?: number }) {
   const proj = vm.projection
   if (!proj || proj.length === 0) return null
   const cum10 = proj[proj.length - 1].cum
@@ -834,7 +803,7 @@ function S09Projection({ vm }: { vm: CalculatorViewModel }) {
   return (
     <View style={s.section}>
       <SectionTitle
-        num={9} eyebrow="Meerjarenprojectie" title="10-jaar cashflow & restschuld"
+        num={num} eyebrow="Meerjarenprojectie" title="10-jaar cashflow & restschuld"
         blurb="Aanname: huurindexering en kostenstijging volgens consultant-instellingen."
       />
       <Hero tone={cum10 >= 0 ? 'sea' : 'marble'} stats={[
@@ -846,13 +815,13 @@ function S09Projection({ vm }: { vm: CalculatorViewModel }) {
   )
 }
 
-function S03Reno({ vm }: { vm: CalculatorViewModel }) {
+function S03Reno({ vm, num }: { vm: CalculatorViewModel; num?: number }) {
   const r = vm.reno
   if (!r) return null
   return (
     <View style={s.section}>
       <SectionTitle
-        num={3} eyebrow="Renovatie & flip" title="Investering, doorlooptijd & ROI"
+        num={num} eyebrow="Renovatie & flip" title="Investering, doorlooptijd & ROI"
         blurb={`Looptijd ${r.durationMonths} maanden (${r.renoMonths} reno + ${r.saleMonths} verkoop). Kosten incl. supervisie ${r.supervisionPct}% en ${r.contingencyPct}% onvoorzien.`}
       />
       <View style={s.roiGrid}>
@@ -968,99 +937,43 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
   const wordmark = brandAsset('wordmark-deepsea-v2.svg') ?? brandAsset('costa-select-wordmark-deepsea.svg')
   const photo = coverPhotoFor(vm.regionId)
 
-  if (vm.mode === 'eigen') {
-    return (
-      <Document>
-        <CoverPage vm={vm} photo={photo} />
-        <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
-          <S01Basis vm={vm} compact />
-          <S02KostenKoper vm={vm} />
-          <SBetaalschema vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
-          <S03Financiering vm={vm} compact />
-          <S04TotaleInvestering vm={vm} compact />
-          <S05Maandlasten vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Maandlasten" wordmark={wordmark}>
-          <S05Maandlasten vm={vm} />
-        </InteriorPage>
-      </Document>
-    )
-  }
-  if (vm.mode === 'verhuur') {
-    return (
-      <Document>
-        <CoverPage vm={vm} photo={photo} />
-        <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
-          <S01Basis vm={vm} compact />
-          <S02KostenKoper vm={vm} />
-          <SBetaalschema vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
-          <S03Financiering vm={vm} compact />
-          <S04TotaleInvestering vm={vm} compact />
-          <S05Maandlasten vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Verhuur" wordmark={wordmark}>
-          <S06Verhuur vm={vm} />
-        </InteriorPage>
-        {vm.projection && vm.projection.length > 0 && (
-          <InteriorPage vm={vm} label="Projectie" wordmark={wordmark}>
-            <S09Projection vm={vm} />
-          </InteriorPage>
-        )}
-      </Document>
-    )
-  }
-  if (vm.mode === 'sl') {
-    return (
-      <Document>
-        <CoverPage vm={vm} photo={photo} />
-        <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
-          <S01Basis vm={vm} compact />
-          <S02KostenKoper vm={vm} />
-          <SBetaalschema vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Financiering" wordmark={wordmark}>
-          <S03Financiering vm={vm} compact />
-          <S04TotaleInvestering vm={vm} compact />
-          <S05Maandlasten vm={vm} compact />
-        </InteriorPage>
-        <InteriorPage vm={vm} label="Verhuur" wordmark={wordmark}>
-          <S06Verhuur vm={vm} />
-        </InteriorPage>
-        {vm.sl && (
-          <InteriorPage vm={vm} label="Fiscaal voordeel SL" wordmark={wordmark}>
-            <S07SL vm={vm} />
-          </InteriorPage>
-        )}
-        {vm.compare && (
-          <InteriorPage vm={vm} label="Privé vs SL" wordmark={wordmark}>
-            <S08Compare vm={vm} />
-          </InteriorPage>
-        )}
-        {vm.projection && vm.projection.length > 0 && (
-          <InteriorPage vm={vm} label="Projectie" wordmark={wordmark}>
-            <S09Projection vm={vm} />
-          </InteriorPage>
-        )}
-      </Document>
-    )
-  }
-  // flip
+  // Elke sectie op een eigen pagina, doorlopend genummerd. Basisgegevens (01)
+  // valt weg — die info staat al op de cover. Financiering en Maandlasten zijn
+  // optioneel (toggle in de download-modal); de nummering wordt dynamisch
+  // toegekend zodat er geen gaten ontstaan bij het uitzetten van een sectie.
+  const isFlip = vm.mode === 'flip'
+  const showFin = vm.showFinanciering !== false && !isFlip
+  const showMaand = vm.showMaandlasten !== false && !isFlip
+
+  const secs: { label: string; body: (num: number) => React.ReactNode }[] = []
+
+  // 01 — Kosten koper + betaalschema (samen op één pagina)
+  secs.push({
+    label: 'Kosten koper',
+    body: (num) => (
+      <>
+        <S02KostenKoper vm={vm} num={num} />
+        <SBetaalschema vm={vm} />
+      </>
+    ),
+  })
+  if (showFin) secs.push({ label: 'Financiering', body: (num) => <S03Financiering vm={vm} num={num} /> })
+  if (!isFlip) secs.push({ label: 'Totale investering', body: (num) => <S04TotaleInvestering vm={vm} num={num} /> })
+  if (showMaand) secs.push({ label: 'Maandlasten', body: (num) => <S05Maandlasten vm={vm} num={num} /> })
+  if (vm.mode === 'verhuur' || vm.mode === 'sl') secs.push({ label: 'Verhuur', body: (num) => <S06Verhuur vm={vm} num={num} /> })
+  if (vm.mode === 'sl' && vm.sl) secs.push({ label: 'Fiscaal voordeel SL', body: (num) => <S07SL vm={vm} num={num} /> })
+  if (vm.mode === 'sl' && vm.compare) secs.push({ label: 'Privé vs SL', body: (num) => <S08Compare vm={vm} num={num} /> })
+  if (isFlip && vm.reno) secs.push({ label: 'Renovatie & flip', body: (num) => <S03Reno vm={vm} num={num} /> })
+  if (vm.projection && vm.projection.length > 0) secs.push({ label: 'Projectie', body: (num) => <S09Projection vm={vm} num={num} /> })
+
   return (
     <Document>
       <CoverPage vm={vm} photo={photo} />
-      <InteriorPage vm={vm} label="Aankoop" wordmark={wordmark}>
-        <S01Basis vm={vm} compact />
-        <S02KostenKoper vm={vm} />
-      </InteriorPage>
-      {vm.reno && (
-        <InteriorPage vm={vm} label="Renovatie & flip" wordmark={wordmark}>
-          <S03Reno vm={vm} />
+      {secs.map((sec, i) => (
+        <InteriorPage key={i} vm={vm} label={sec.label} wordmark={wordmark}>
+          {sec.body(i + 1)}
         </InteriorPage>
-      )}
+      ))}
     </Document>
   )
 }
