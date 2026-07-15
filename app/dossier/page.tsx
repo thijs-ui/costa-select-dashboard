@@ -186,6 +186,12 @@ function DossierPageInner() {
   const [aiBusyKey, setAiBusyKey] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [internalNotes, setInternalNotes] = useState('')
+  // Auto-save: id van het geopende dossier + opslag-status. skipSaveRef slaat de
+  // eerste effect-run over (het vullen van de edit-state bij genereren/openen),
+  // zodat we niet meteen terugschrijven wat net geladen is.
+  const [dossierId, setDossierId] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const skipSaveRef = useRef(true)
 
   // History
   const [history, setHistory] = useState<HistoryItem[]>([])
@@ -274,7 +280,10 @@ function DossierPageInner() {
       if (!res.ok) {
         setError(data.error || 'Er ging iets mis bij het genereren.')
       } else {
+        skipSaveRef.current = true
         setDossier(data)
+        setDossierId(data.id ?? null)
+        setSaveState('idle')
         if (data.property) setEditProperty({ ...data.property })
         if (data.analyse) setEditAnalyse({ ...data.analyse })
         if (data.pitch_content) setEditPitch({ ...data.pitch_content })
@@ -345,10 +354,14 @@ function DossierPageInner() {
       if (!data.dossier_data) return
       const units = data.units_data ?? []
       const full = { ...data.dossier_data, units_data: units }
+      skipSaveRef.current = true
       setDossier(full)
-      if (data.dossier_data.property) setEditProperty({ ...data.dossier_data.property })
-      if (data.dossier_data.analyse) setEditAnalyse({ ...data.dossier_data.analyse })
-      if (data.dossier_data.pitch_content) setEditPitch({ ...data.dossier_data.pitch_content })
+      setDossierId(id)
+      setSaveState('idle')
+      setEditProperty(data.dossier_data.property ? { ...data.dossier_data.property } : null)
+      setEditAnalyse(data.dossier_data.analyse ? { ...data.dossier_data.analyse } : null)
+      setEditPitch(data.dossier_data.pitch_content ? { ...data.dossier_data.pitch_content } : null)
+      setInternalNotes(typeof data.internal_notes === 'string' ? data.internal_notes : '')
       setTab('new')
     } catch { /* ignore */ }
   }
@@ -398,6 +411,45 @@ function DossierPageInner() {
     setRenamingId(null)
   }
 
+  // Auto-save: debounce edits terug naar dossier_history zodra er een dossier
+  // open is. De eerste run (net na genereren/openen) wordt overgeslagen via
+  // skipSaveRef, zodat we niet meteen terugschrijven wat net geladen is. Titel =
+  // property.adres → ook de adres-kolom mee-updaten zodat de history-lijst klopt.
+  useEffect(() => {
+    if (!dossierId || !dossier) return
+    if (skipSaveRef.current) { skipSaveRef.current = false; return }
+    const timer = setTimeout(async () => {
+      setSaveState('saving')
+      try {
+        const merged = {
+          ...dossier,
+          ...(editProperty ? { property: editProperty } : {}),
+          ...(editAnalyse ? { analyse: editAnalyse } : {}),
+          ...(editPitch ? { pitch_content: editPitch } : {}),
+        }
+        // id + units_data horen niet in dossier_data (aparte kolom / transient).
+        const dossierData = { ...merged } as Record<string, unknown>
+        delete dossierData.id
+        delete dossierData.units_data
+        const res = await fetch(`/api/dossier/history/${dossierId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            dossier_data: dossierData,
+            units_data: dossier.units_data ?? [],
+            internal_notes: internalNotes,
+            ...(editProperty?.adres ? { adres: editProperty.adres } : {}),
+          }),
+        })
+        setSaveState(res.ok ? 'saved' : 'error')
+      } catch {
+        setSaveState('error')
+      }
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [dossierId, dossier, editProperty, editAnalyse, editPitch, internalNotes])
+
   // ─── Render ───────────────────────────────────────────────
   return (
     <div
@@ -445,7 +497,10 @@ function DossierPageInner() {
                   onRegenerate={regenerateSection}
                   aiBusyKey={aiBusyKey}
                   onReset={() => {
+                    skipSaveRef.current = true
                     setDossier(null)
+                    setDossierId(null)
+                    setSaveState('idle')
                     setUrlValue('')
                     setEditAnalyse(null)
                     setEditPitch(null)
@@ -481,6 +536,34 @@ function DossierPageInner() {
           )}
         </div>
       </div>
+
+      {tab === 'new' && dossierId && saveState !== 'idle' && (
+        <div
+          className="font-body ds-anim-fade-in"
+          style={{
+            position: 'fixed', bottom: 20, right: 24, zIndex: 60,
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px', borderRadius: 999,
+            fontSize: 12, fontWeight: 600, letterSpacing: '0.01em',
+            boxShadow: '0 8px 24px rgba(7,42,36,0.18)',
+            background: saveState === 'error' ? '#FFEBE8' : '#004B46',
+            color: saveState === 'error' ? '#7A1D13' : '#FFFAEF',
+            border: saveState === 'error' ? '1px solid #C84B36' : 'none',
+          }}
+        >
+          {saveState === 'saving' && (
+            <span
+              className="inline-block"
+              style={{
+                width: 12, height: 12, borderRadius: 999,
+                border: '2px solid rgba(255,250,239,0.35)', borderTopColor: '#FFFAEF',
+                animation: 'ds-spin 0.7s linear infinite',
+              }}
+            />
+          )}
+          {saveState === 'saving' ? 'Opslaan…' : saveState === 'saved' ? 'Opgeslagen ✓' : 'Opslaan mislukt'}
+        </div>
+      )}
     </div>
   )
 }

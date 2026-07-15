@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, CheckCircle2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export interface DossierModalItem {
@@ -19,12 +19,25 @@ interface DossierModalProps {
    * aanroept en {id} teruggeeft.
    */
   onGenerate?: () => Promise<{ id: string | null }>
+  /**
+   * Default true: na genereren direct doorlinken naar de presentatie. Zet op
+   * false om op de huidige pagina te blijven (bv. de nieuwbouwkaart) — de modal
+   * toont dan een succes-state met de keuze om de presentatie zelf te openen.
+   */
+  redirectOnSuccess?: boolean
 }
 
-export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
+export function DossierModal({ item, onClose, onGenerate, redirectOnSuccess = true }: DossierModalProps) {
   const router = useRouter()
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+  const [doneId, setDoneId] = useState<string | null>(null)
+
+  // Reset de succes-/foutstate telkens als er een nieuw item opent.
+  useEffect(() => {
+    if (item) { setDone(false); setDoneId(null); setError(''); setGenerating(false) }
+  }, [item])
 
   if (!item) return null
 
@@ -49,17 +62,31 @@ export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
         const data = await res.json()
         id = data.id ?? null
       }
-      // Direct doorlinken naar de presentatie-pagina; modal hoeft geen
-      // success-state te tonen.
-      onClose()
-      const target = id
-        ? `/dossier?tab=history&id=${encodeURIComponent(id)}`
-        : '/dossier?tab=history'
-      router.push(target)
+      if (redirectOnSuccess) {
+        // Direct doorlinken naar de presentatie-pagina.
+        onClose()
+        const target = id
+          ? `/dossier?tab=history&id=${encodeURIComponent(id)}`
+          : '/dossier?tab=history'
+        router.push(target)
+      } else {
+        // Op de pagina blijven; succes-state tonen met keuze om zelf te openen.
+        setDoneId(id)
+        setDone(true)
+        setGenerating(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Genereren mislukt')
       setGenerating(false)
     }
+  }
+
+  function openPresentatie() {
+    onClose()
+    const target = doneId
+      ? `/dossier?tab=history&id=${encodeURIComponent(doneId)}`
+      : '/dossier?tab=history'
+    router.push(target)
   }
 
   const subjText = item.title || item.url
@@ -130,18 +157,31 @@ export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
         </div>
 
         <div style={{ padding: '22px 24px' }}>
-          <p
-            className="font-body"
-            style={{
-              fontSize: 13.5,
-              color: '#5F7472',
-              lineHeight: 1.5,
-              margin: 0,
-            }}
-          >
-            Costa Select genereert een woningpresentatie met kenmerken,
-            prijs, ligging en foto&apos;s. Klaar om te delen met je klant.
-          </p>
+          {done ? (
+            <div className="flex items-start" style={{ gap: 12 }}>
+              <CheckCircle2 size={22} strokeWidth={2} color="#0EAE96" style={{ flexShrink: 0, marginTop: 1 }} />
+              <p
+                className="font-body"
+                style={{ fontSize: 13.5, color: '#5F7472', lineHeight: 1.5, margin: 0 }}
+              >
+                Presentatie aangemaakt en opgeslagen. Je kunt hier blijven en ’m later openen
+                via <b style={{ color: '#004B46' }}>Presentatie → Geschiedenis</b>, of ’m nu direct openen.
+              </p>
+            </div>
+          ) : (
+            <p
+              className="font-body"
+              style={{
+                fontSize: 13.5,
+                color: '#5F7472',
+                lineHeight: 1.5,
+                margin: 0,
+              }}
+            >
+              Costa Select genereert een woningpresentatie met kenmerken,
+              prijs, ligging en foto&apos;s. Klaar om te delen met je klant.
+            </p>
+          )}
           {error && (
             <div
               className="font-body"
@@ -168,6 +208,17 @@ export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
             borderTop: '1px solid rgba(0,75,70,0.08)',
           }}
         >
+          {done ? (
+            <>
+              <WlButton variant="subtle" onClick={onClose}>
+                Sluiten
+              </WlButton>
+              <WlButton variant="primary" onClick={openPresentatie}>
+                Open presentatie
+              </WlButton>
+            </>
+          ) : (
+          <>
           {generating && (
             <span
               className="inline-flex items-center font-body"
@@ -192,6 +243,8 @@ export function DossierModal({ item, onClose, onGenerate }: DossierModalProps) {
           <WlButton variant="primary" disabled={generating} onClick={generate}>
             Genereer
           </WlButton>
+          </>
+          )}
         </div>
       </div>
     </div>

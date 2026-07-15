@@ -7,17 +7,27 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth()
+  if (auth instanceof NextResponse) return auth
+
   const { id } = await params
   const supabase = createServiceClient()
 
   const { data, error } = await supabase
     .from('dossier_history')
-    .select('dossier_data, financial_data, internal_notes, units_data, source')
+    .select('dossier_data, financial_data, internal_notes, units_data, source, created_by')
     .eq('id', id)
     .single()
 
   if (error || !data) {
     return NextResponse.json({ error: 'Dossier niet gevonden' }, { status: 404 })
+  }
+
+  // Ownership: financial_data + internal_notes zijn vertrouwelijk. De
+  // service-client omzeilt RLS, dus we checken hier of de user eigenaar is.
+  const role = await getUserRole(auth.id)
+  if (data.created_by !== auth.id && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   return NextResponse.json(data)
@@ -47,6 +57,8 @@ export async function PATCH(
 
   const updates: Record<string, unknown> = {}
   if (body.adres && typeof body.adres === 'string') updates.adres = body.adres
+  if (body.dossier_data !== undefined) updates.dossier_data = body.dossier_data
+  if (body.units_data !== undefined) updates.units_data = body.units_data
   if (body.financial_data !== undefined) updates.financial_data = body.financial_data
   if (body.internal_notes !== undefined) updates.internal_notes = body.internal_notes
 

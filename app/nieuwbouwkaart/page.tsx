@@ -259,6 +259,7 @@ export default function NieuwbouwkaartPage() {
           item={presentatieTarget}
           onClose={() => setPresentatieTarget(null)}
           onGenerate={generateNewbuildPresentatie}
+          redirectOnSuccess={false}
         />
 
         <ShortlistPicker
