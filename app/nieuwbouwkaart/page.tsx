@@ -150,7 +150,7 @@ export default function NieuwbouwkaartPage() {
       const fold = (str: string) =>
         str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       const q = fold(filters.search)
-      const hay = fold(`${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''} ${l.agency_name ?? ''}`)
+      const hay = fold(`${l.title ?? ''} ${l.municipality ?? ''} ${l.region ?? ''} ${l.province ?? ''} ${l.address ?? ''} ${l.agency_name ?? ''} ${l.property_code ?? ''}`)
       if (!hay.includes(q)) return false
     }
     if (filters.region && l.region !== filters.region) return false
@@ -244,6 +244,7 @@ export default function NieuwbouwkaartPage() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? ''}
+          searchActive={filters.search.trim().length > 0}
         />
 
         {selected && (

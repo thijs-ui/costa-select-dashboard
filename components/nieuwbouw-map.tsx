@@ -6,7 +6,7 @@
 // ============================================================================
 'use client'
 
-import { useMemo, useRef, useCallback } from 'react'
+import { useMemo, useRef, useCallback, useEffect } from 'react'
 import { GoogleMap, useLoadScript, OverlayView } from '@react-google-maps/api'
 import { Loader2 } from 'lucide-react'
 import type { Listing } from '@/components/nieuwbouw-types'
@@ -35,6 +35,9 @@ interface Props {
   selectedId: string | null
   onSelect: (id: string | null) => void
   apiKey: string
+  // true zodra er een zoekterm actief is → kaart zoomt naar de resultaten
+  // (bv. zoeken op property_code toont het project direct op de kaart).
+  searchActive?: boolean
 }
 
 // Detail-panel breedte (zie nieuwbouw-detail.tsx). Bij selectie pannen we de
@@ -43,7 +46,7 @@ interface Props {
 const PANEL_WIDTH = 420
 const PAN_OFFSET_PX = PANEL_WIDTH / 2
 
-export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }: Props) {
+export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey, searchActive }: Props) {
   const { isLoaded } = useLoadScript({ googleMapsApiKey: apiKey })
   const mapRef = useRef<google.maps.Map | null>(null)
 
@@ -53,6 +56,26 @@ export default function NieuwbouwMap({ listings, selectedId, onSelect, apiKey }:
     () => listings.filter(l => l.latitude != null && l.longitude != null),
     [listings]
   )
+
+  // Zoom naar de resultaten zodra er gezocht wordt. Eén treffer → centreren +
+  // inzoomen; meerdere → bounds fitten (met een cap zodat we niet te ver
+  // inzoomen). Zonder actieve zoekterm laten we de kaart met rust.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isLoaded || !searchActive || pins.length === 0) return
+    if (pins.length === 1) {
+      const p = pins[0]
+      map.panTo({ lat: p.latitude!, lng: p.longitude! })
+      map.setZoom(14)
+      return
+    }
+    const bounds = new google.maps.LatLngBounds()
+    for (const p of pins) bounds.extend({ lat: p.latitude!, lng: p.longitude! })
+    map.fitBounds(bounds, 80)
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+      if ((map.getZoom() ?? 0) > 15) map.setZoom(15)
+    })
+  }, [pins, searchActive, isLoaded])
 
   // Klik op pin → centreer pin én shift naar links zodat 't panel niet bedekt.
   const selectAndPan = useCallback((listing: Listing) => {

@@ -12,6 +12,7 @@ const TEST_PROJECTS = 6
 
 interface AlertProject {
   id: string
+  property_code: string | null
   title: string | null
   municipality: string | null
   region: string | null
@@ -67,6 +68,7 @@ function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolea
           <div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#004B46;letter-spacing:-0.01em;">${esc(p.title) || 'Nieuwbouwproject'}</div>
           <div style="font-size:12px;color:#7A8C8B;margin-top:3px;">${loc}${p.property_type ? ' · ' + esc(p.property_type) : ''}</div>
           <div style="font-size:14px;color:#C58118;font-weight:700;margin-top:6px;">${fmtEUR(p.price)}</div>
+          ${p.property_code ? `<div style="font-size:11px;color:#8A9794;margin-top:5px;">Code: <span style="font-family:'Courier New',monospace;color:#4A5A57;">${esc(p.property_code)}</span></div>` : ''}
           <div style="font-size:12px;margin-top:6px;">${cta}</div>
         </td>
       </tr>`
@@ -121,7 +123,7 @@ export async function runNieuwbouwAlert({ test }: { test: boolean }): Promise<Al
 
   let query = supabase
     .from('listings')
-    .select('id, title, municipality, region, province, price, property_type, url, main_image_url, first_seen_at')
+    .select('id, property_code, title, municipality, region, province, price, property_type, url, main_image_url, first_seen_at')
     .eq('is_active', true)
     .ilike('region', ALERT_REGION)
   if (!test) query = query.gte('first_seen_at', cutoff)
