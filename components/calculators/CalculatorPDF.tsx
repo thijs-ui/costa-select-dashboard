@@ -62,7 +62,6 @@ const RULE = '#E5E0D2'
 const RULE_STRONG = '#CCC4B1'
 // op deepsea bg — deze wel rgba (werkt op text/border)
 const ON_DARK_18 = 'rgba(255,250,239,0.18)'
-const ON_DARK_20 = 'rgba(255,250,239,0.20)'
 const ON_DARK_55 = 'rgba(255,250,239,0.55)'
 
 // pt = px × 0.75
@@ -83,6 +82,13 @@ function fmtPct(n: number | null | undefined, dp = 1): string {
 function fmtDate(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+// Korte datum voor het betaalschema; leeg/ongeldig → ''.
+function fmtDateShort(iso: string | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 function num2(n: number) { return String(n).padStart(2, '0') }
 
@@ -155,8 +161,7 @@ const s = StyleSheet.create({
   coverTick: { width: 36, height: 1.5, backgroundColor: SUN, marginTop: 16, marginBottom: 16 },
   coverMeta: {
     flexDirection: 'row', flexWrap: 'wrap',
-    borderTopWidth: 0.75, borderTopColor: ON_DARK_20,
-    paddingTop: 14,
+    paddingTop: 4,
   },
   coverMetaItem: { width: '50%', marginBottom: 13, paddingRight: 10 },
   coverMetaLbl: {
@@ -583,16 +588,33 @@ function S02KostenKoper({ vm, compact, num }: { vm: CalculatorViewModel; compact
 function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
   if (!vm.payment) return null
   const p = vm.payment
+  // Datum (indien ingevuld) achter de omschrijving plakken.
+  const withDate = (base: string, iso: string | undefined) => {
+    const d = fmtDateShort(iso)
+    return d ? `${base} · ${d}` : base
+  }
   const rows: RowDef[] = [
-    { t: 'Reservering', sub: 'Bij reservering', val: fmtEUR(p.reservering) },
-    { t: 'Voorlopig koopcontract', sub: 'Aanbetaling bij het koopcontract', val: fmtEUR(p.koopcontract) },
-    { t: 'Passeren akte notaris', sub: 'Restant bij levering', val: fmtEUR(p.akte) },
+    { t: 'Reservering', sub: withDate('Bij reservering', p.dateReservering), val: fmtEUR(p.reservering) },
+    { t: 'Voorlopig koopcontract', sub: withDate('Aanbetaling bij het koopcontract', p.dateKoopcontract), val: fmtEUR(p.koopcontract) },
+    { t: 'Passeren akte notaris', sub: withDate('Restant bij levering', p.dateAkte), val: fmtEUR(p.akte) },
     { kind: 'total', t: 'Totaal aankoopprijs', val: fmtEUR(p.total) },
   ]
   return (
     <View style={s.sectionTight}>
       <SectionTitle eyebrow="Betaalschema" title="Aankoop-betaling in stappen" compact={compact} />
       <Rows rows={rows} />
+    </View>
+  )
+}
+
+function SInventaris({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
+  if (!vm.inventory) return null
+  return (
+    <View style={s.sectionTight}>
+      <SectionTitle eyebrow="Inventaris" title="Meubels & inboedel" compact={compact} />
+      <Rows rows={[
+        { t: 'Overname inventaris', sub: 'Meubels / inboedel — los van de kosten koper', val: fmtEUR(vm.inventory) },
+      ]} />
     </View>
   )
 }
@@ -612,15 +634,23 @@ function S03Financiering({ vm, compact, num }: { vm: CalculatorViewModel; compac
 }
 
 function S04TotaleInvestering({ vm, compact, num }: { vm: CalculatorViewModel; compact?: boolean; num?: number }) {
+  const rows: RowDef[] = [
+    { t: 'Aankoopprijs woning', val: fmtEUR(vm.totalAankoop) },
+    { t: 'Kosten koper', sub: `${fmtPct(vm.kkPct, 1)} bovenop`, val: fmtEUR(vm.totalKK) },
+  ]
+  if (vm.inventory) {
+    rows.push({ t: 'Inventaris (meubels/inboedel)', sub: 'Overname inboedel', val: fmtEUR(vm.inventory) })
+  }
+  rows.push({ kind: 'subtotal', t: 'Bruto investering', val: fmtEUR(vm.totalSom) })
+  rows.push({
+    kind: 'total', t: 'Eigen inleg',
+    sub: vm.inventory ? 'Aankoopprijs − hypotheek + KK + inventaris' : 'Aankoopprijs − hypotheek + KK',
+    val: fmtEUR(vm.totalInleg),
+  })
   return (
     <View style={s.sectionTight}>
       <SectionTitle num={num} eyebrow="Totale investering" title="Out of pocket" compact={compact} />
-      <Rows rows={[
-        { t: 'Aankoopprijs woning', val: fmtEUR(vm.totalAankoop) },
-        { t: 'Kosten koper', sub: `${fmtPct(vm.kkPct, 1)} bovenop`, val: fmtEUR(vm.totalKK) },
-        { kind: 'subtotal', t: 'Bruto investering', val: fmtEUR(vm.totalSom) },
-        { kind: 'total', t: 'Eigen inleg', sub: 'Aankoopprijs − hypotheek + KK', val: fmtEUR(vm.totalInleg) },
-      ]} />
+      <Rows rows={rows} />
     </View>
   )
 }
@@ -947,12 +977,13 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
 
   const secs: { label: string; body: (num: number) => React.ReactNode }[] = []
 
-  // 01 — Kosten koper + betaalschema (samen op één pagina)
+  // 01 — Kosten koper + inventaris + betaalschema (samen op één pagina)
   secs.push({
     label: 'Kosten koper',
     body: (num) => (
       <>
         <S02KostenKoper vm={vm} num={num} />
+        <SInventaris vm={vm} />
         <SBetaalschema vm={vm} />
       </>
     ),

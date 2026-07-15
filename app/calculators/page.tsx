@@ -36,6 +36,10 @@ const DEFAULT_RATE_NON_RESIDENT = 4.0
 const MAX_LTV_RESIDENT = 80
 const MAX_LTV_NON_RESIDENT = 75
 
+// Advocaatkosten: standaard 1% van de aankoopprijs + 21% BTW (handmatig te overschrijven).
+const LAWYER_PCT = 1
+const IVA_RATE = 21
+
 const RENO_SETTINGS = {
   supervision_pct: 5,
   contingency_pct: 10,
@@ -118,9 +122,17 @@ interface CalcState {
   kkEnabled: Record<string, boolean>
   kkOverrides: Record<string, number>
 
+  // inventaris (meubels/inboedel) — apart van kosten koper, optioneel
+  inventoryOn: boolean
+  inventory: number
+
   // betaalschema — reservering (€) + aanbetaling bij koopcontract (€; null = auto)
   reservering: number
   kkKoopcontract: number | null
+  // optionele datums per betaalstap ('' = geen datum)
+  dateReservering: string
+  dateKoopcontract: string
+  dateAkte: string
 }
 
 type PartialState = Partial<CalcState>
@@ -152,8 +164,13 @@ const DEFAULT_STATE: CalcState = {
   rentIndex: 2.5,
   kkEnabled: {},
   kkOverrides: {},
+  inventoryOn: false,
+  inventory: 0,
   reservering: 10000,
   kkKoopcontract: null,
+  dateReservering: '',
+  dateKoopcontract: '',
+  dateAkte: '',
 }
 
 // Example scenarios per mode
@@ -275,7 +292,7 @@ interface BuyerCosts {
 // Handmatige (deal-specifieke) kosten-items staan standaard UIT — de
 // consultant vinkt ze aan wanneer van toepassing. De berekende items (belasting,
 // notaris, registro, advocaat, bank) staan standaard AAN.
-const KK_MANUAL_KEYS = ['admin', 'agent_fee', 'inventory'] as const
+const KK_MANUAL_KEYS = ['admin', 'agent_fee'] as const
 
 interface KkInput {
   enabled: Record<string, boolean>
@@ -321,8 +338,9 @@ function calcBuyerCosts(
   const registro = clamp(price * (region.registro_percentage / 100), region.registro_min, region.registro_max)
   addCost('registro', 'Kadaster / Registro', `richtlijn ${fmtPct(region.registro_percentage)} (min ${fmtEUR(region.registro_min)} / max ${fmtEUR(region.registro_max)})`, registro)
 
-  const lawyer = Math.max(price * (region.lawyer_percentage / 100), region.lawyer_minimum)
-  addCost('lawyer', 'Advocaatkosten aankoop', `richtlijn ${fmtPct(region.lawyer_percentage)} · minimum ${fmtEUR(region.lawyer_minimum)}`, lawyer)
+  // Advocaat: standaard 1% van de aankoopprijs + 21% BTW; handmatig overschrijfbaar.
+  const lawyer = price * (LAWYER_PCT / 100) * (1 + IVA_RATE / 100)
+  addCost('lawyer', 'Advocaatkosten aankoop', `richtlijn ${fmtPct(LAWYER_PCT, 0)} + ${fmtPct(IVA_RATE, 0)} BTW`, lawyer)
 
   if (hasMortgage) {
     addCost('bank', 'Bankkosten + taxatie', 'Forfaitair, bij hypotheek < 100%', 1200)
@@ -331,7 +349,6 @@ function calcBuyerCosts(
   // Handmatige, deal-specifieke items (standaard uit; consultant vult bedrag in)
   addCost('admin', 'Administratiekosten', 'Gestoría / administratie', 0)
   addCost('agent_fee', 'Makelaarsfee', 'Aankoopmakelaar-fee', 0)
-  addCost('inventory', 'Overname inventaris', 'Meubels / inboedel', 0)
 
   const total = rows.filter(r => r.enabled).reduce((sum, r) => sum + r.value, 0)
   return { rows, total, pct: price > 0 ? (total / price) * 100 : 0 }
@@ -543,6 +560,8 @@ export default function CalculatorPage() {
     () => calcPaymentSchedule(state.price, state.reservering, state.kkKoopcontract),
     [state.price, state.reservering, state.kkKoopcontract]
   )
+  // Inventaris telt alleen mee wanneer aangevinkt én ingevuld.
+  const invAmt = state.inventoryOn && state.inventory > 0 ? state.inventory : 0
   const rental = useMemo(() => calcRental(state, buyer), [state, buyer])
   const sl = useMemo(() => calcSL(state, rental), [state, rental])
   const flip = useMemo(() => calcFlip(state, buyer), [state, buyer])
@@ -677,6 +696,31 @@ export default function CalculatorPage() {
                 />
               </Section>
 
+              {/* Inventaris — apart van kosten koper */}
+              <Section title="Inventaris" eyebrow="Meubels / inboedel" compact>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={state.inventoryOn}
+                    onChange={e => patch({ inventoryOn: e.target.checked })}
+                    style={{ width: 16, height: 16, accentColor: '#004B46', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#004B46' }}>Overname meubels / inboedel meenemen</span>
+                </label>
+                {state.inventoryOn && (
+                  <div style={{ marginTop: 12 }}>
+                    <Grid cols={2}>
+                      <Field label="Bedrag inventaris (€)">
+                        <MoneyInput value={state.inventory} onChange={v => patch({ inventory: v })} />
+                      </Field>
+                    </Grid>
+                  </div>
+                )}
+                <div className="font-body" style={{ fontSize: 11.5, color: '#7A8C8B', marginTop: 8 }}>
+                  Apart van de kosten koper — telt (indien aangevinkt) mee in de totale investering en verschijnt als los blok in de PDF.
+                </div>
+              </Section>
+
               {/* Betaalschema — apart blokje */}
               <Section title="Betaalschema" eyebrow="Aankoop-betaling in stappen">
                 <Grid cols={2}>
@@ -693,7 +737,25 @@ export default function CalculatorPage() {
                     />
                   </Field>
                 </Grid>
-                <PaymentScheduleTable payment={payment} price={state.price} />
+                <div className="font-body" style={{ fontSize: 11.5, color: '#7A8C8B', margin: '12px 0 4px' }}>
+                  Datums zijn optioneel — laat leeg om weg te laten uit de PDF.
+                </div>
+                <PaymentScheduleTable
+                  payment={payment}
+                  price={state.price}
+                  dates={{
+                    reservering: state.dateReservering,
+                    koopcontract: state.dateKoopcontract,
+                    akte: state.dateAkte,
+                  }}
+                  onDateChange={(key, value) =>
+                    patch(
+                      key === 'reservering' ? { dateReservering: value }
+                      : key === 'koopcontract' ? { dateKoopcontract: value }
+                      : { dateAkte: value }
+                    )
+                  }
+                />
               </Section>
 
               {/* 3 — Financiering */}
@@ -775,11 +837,14 @@ export default function CalculatorPage() {
                     <tbody>
                       <SimpleRow label="Aankoopprijs" value={fmtEUR(state.price)} />
                       <SimpleRow label="Kosten koper" value={fmtEUR(buyer.total)} />
-                      <TotalRow label="Totale investering" value={fmtEUR(state.price + buyer.total)} />
+                      {invAmt > 0 && (
+                        <SimpleRow label="Inventaris (meubels/inboedel)" value={fmtEUR(invAmt)} />
+                      )}
+                      <TotalRow label="Totale investering" value={fmtEUR(state.price + buyer.total + invAmt)} />
                       <SimpleRow
                         label="Eigen geld nodig"
-                        sub="Eigen geld + kosten koper"
-                        value={fmtEUR(fin.downPayment + buyer.total)}
+                        sub={invAmt > 0 ? 'Eigen geld + kosten koper + inventaris' : 'Eigen geld + kosten koper'}
+                        value={fmtEUR(fin.downPayment + buyer.total + invAmt)}
                       />
                     </tbody>
                   </Table>
@@ -2372,24 +2437,52 @@ function BuyerCostsTable({
 }
 
 // ════════════════════ PAYMENT SCHEDULE TABLE ════════════════════
-function PaymentScheduleTable({ payment, price }: { payment: PaymentSchedule; price: number }) {
+type PaymentKey = 'reservering' | 'koopcontract' | 'akte'
+function PaymentScheduleTable({
+  payment,
+  price,
+  dates,
+  onDateChange,
+}: {
+  payment: PaymentSchedule
+  price: number
+  dates: Record<PaymentKey, string>
+  onDateChange: (key: PaymentKey, value: string) => void
+}) {
   if (!price || price <= 0) {
     return <EmptyRegionNote>Vul een aankoopprijs in om het betaalschema te zien.</EmptyRegionNote>
   }
   const pct = (v: number) => (price > 0 ? (v / price) * 100 : 0)
-  const rows = [
-    { label: 'Reservering', sub: 'Aanbetaling bij reservering', value: payment.reservering },
-    { label: 'Voorlopig koopcontract', sub: 'Aanbetaling bij het koopcontract', value: payment.koopcontract },
-    { label: 'Passeren akte notaris', sub: 'Restant bij levering', value: payment.akte },
+  const rows: { key: PaymentKey; label: string; sub: string; value: number }[] = [
+    { key: 'reservering', label: 'Reservering', sub: 'Aanbetaling bij reservering', value: payment.reservering },
+    { key: 'koopcontract', label: 'Voorlopig koopcontract', sub: 'Aanbetaling bij het koopcontract', value: payment.koopcontract },
+    { key: 'akte', label: 'Passeren akte notaris', sub: 'Restant bij levering', value: payment.akte },
   ]
   return (
     <Table>
       <tbody>
-        {rows.map((r, i) => (
-          <tr key={i} style={{ borderBottom: '1px solid rgba(0,75,70,0.06)' }}>
+        {rows.map(r => (
+          <tr key={r.key} style={{ borderBottom: '1px solid rgba(0,75,70,0.06)' }}>
             <td style={{ padding: '10px 0' }}>
               <div className="font-body" style={{ fontSize: 13, color: '#004B46' }}>{r.label}</div>
               <div className="font-body" style={{ fontSize: 11, color: '#7A8C8B', marginTop: 2 }}>{r.sub}</div>
+            </td>
+            <td style={{ padding: '10px 0', textAlign: 'center', width: 150 }}>
+              <input
+                type="date"
+                value={dates[r.key]}
+                onChange={e => onDateChange(r.key, e.target.value)}
+                aria-label={`Datum ${r.label}`}
+                className="font-body tabular-nums"
+                style={{
+                  fontSize: 12,
+                  color: dates[r.key] ? '#004B46' : '#7A8C8B',
+                  border: '1px solid rgba(0,75,70,0.2)',
+                  borderRadius: 6,
+                  padding: '5px 8px',
+                  background: '#fff',
+                }}
+              />
             </td>
             <td style={{ padding: '10px 0', textAlign: 'right' }}>
               <div className="font-body tabular-nums" style={{ fontSize: 13, color: '#004B46' }}>{fmtEUR(r.value)}</div>
@@ -2404,6 +2497,7 @@ function PaymentScheduleTable({ payment, price }: { payment: PaymentSchedule; pr
           >
             Totaal aankoopprijs
           </td>
+          <td />
           <td
             className="font-heading font-bold tabular-nums"
             style={{ padding: '14px 0', textAlign: 'right', fontSize: 16, color: '#004B46', letterSpacing: '-0.01em' }}
@@ -3084,8 +3178,10 @@ function buildPdfViewModel(args: {
   const ltvMax = state.isResident ? MAX_LTV_RESIDENT : MAX_LTV_NON_RESIDENT
   const totalKK = buyer.total
   const totalAankoop = state.price
-  const totalSom = totalAankoop + totalKK
-  const totalInleg = fin.downPayment + totalKK
+  // Inventaris (meubels/inboedel): apart van KK, maar telt mee in de investering.
+  const inventory = state.inventoryOn && state.inventory > 0 ? state.inventory : 0
+  const totalSom = totalAankoop + totalKK + inventory
+  const totalInleg = fin.downPayment + totalKK + inventory
   const monthlyMortgage = fin.mortgage > 0 ? monthlyAnnuity(fin.mortgage, state.rate, state.years) : 0
   const monthlyTotal = monthlyMortgage + state.ibiMonthly + state.vveMonthly + state.insuranceMonthly
 
@@ -3124,11 +3220,15 @@ function buildPdfViewModel(args: {
     kkRows,
     kkTotal: totalKK,
     kkPct: buyer.pct,
+    inventory: inventory > 0 ? inventory : undefined,
     payment: state.price > 0 ? {
       reservering: paySchedule.reservering,
       koopcontract: paySchedule.koopcontract,
       akte: paySchedule.akte,
       total: paySchedule.total,
+      dateReservering: state.dateReservering || undefined,
+      dateKoopcontract: state.dateKoopcontract || undefined,
+      dateAkte: state.dateAkte || undefined,
     } : undefined,
     showFinanciering: showFinanciering !== false,
     showMaandlasten: showMaandlasten !== false,

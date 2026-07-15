@@ -100,6 +100,10 @@ export interface PaymentView {
   koopcontract: number
   akte: number
   total: number
+  // optionele betaaldatums (ISO 'YYYY-MM-DD'); afwezig = geen datum tonen
+  dateReservering?: string
+  dateKoopcontract?: string
+  dateAkte?: string
 }
 
 export interface CalculatorViewModel {
@@ -120,6 +124,8 @@ export interface CalculatorViewModel {
   kkRows: KkRow[]
   kkTotal: number
   kkPct: number
+  // inventaris (meubels/inboedel) — apart van KK, optioneel
+  inventory?: number
   // betaalschema (optioneel)
   payment?: PaymentView
   // PDF-secties aan/uit (default aan)
