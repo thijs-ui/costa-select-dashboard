@@ -568,7 +568,7 @@ function S02KostenKoper({ vm, compact, num }: { vm: CalculatorViewModel; compact
   }))
   rows.push({ kind: 'total', t: 'Totaal kosten koper', sub: `${fmtPct(vm.kkPct, 1)} van aankoopprijs`, val: fmtEUR(vm.kkTotal) })
   return (
-    <View style={s.section}>
+    <View style={s.section} wrap={false}>
       <SectionTitle
         num={num} eyebrow="Kosten koper" title="Belastingen, notaris & advocaat"
         blurb="Eenmalige bijkomende kosten bij aankoop, bovenop de vraagprijs."
@@ -600,7 +600,7 @@ function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boo
     { kind: 'total', t: 'Totaal aankoopprijs', val: fmtEUR(p.total) },
   ]
   return (
-    <View style={s.sectionTight}>
+    <View style={s.sectionTight} wrap={false}>
       <SectionTitle eyebrow="Betaalschema" title="Aankoop-betaling in stappen" compact={compact} />
       <Rows rows={rows} />
     </View>
@@ -610,7 +610,7 @@ function SBetaalschema({ vm, compact }: { vm: CalculatorViewModel; compact?: boo
 function SInventaris({ vm, compact }: { vm: CalculatorViewModel; compact?: boolean }) {
   if (!vm.inventory) return null
   return (
-    <View style={s.sectionTight}>
+    <View style={s.sectionTight} wrap={false}>
       <SectionTitle eyebrow="Inventaris" title="Meubels & inboedel" compact={compact} />
       <Rows rows={[
         { t: 'Overname inventaris', sub: 'Meubels / inboedel — los van de kosten koper', val: fmtEUR(vm.inventory) },
@@ -967,44 +967,57 @@ export function CalculatorPDF({ vm }: { vm: CalculatorViewModel }) {
   const wordmark = brandAsset('wordmark-deepsea-v2.svg') ?? brandAsset('costa-select-wordmark-deepsea.svg')
   const photo = coverPhotoFor(vm.regionId)
 
-  // Elke sectie op een eigen pagina, doorlopend genummerd. Basisgegevens (01)
-  // valt weg — die info staat al op de cover. Financiering en Maandlasten zijn
-  // optioneel (toggle in de download-modal); de nummering wordt dynamisch
-  // toegekend zodat er geen gaten ontstaan bij het uitzetten van een sectie.
+  // Deterministische pagina-indeling: elk pagina-blok is één <Page> met eigen
+  // header/footer, en bevat alleen blokken die samen op één A4 passen. Zo breekt
+  // een categorie nooit middenin (geen weesregels) en klopt de header/footer op
+  // elke pagina. Basisgegevens (01) valt weg — staat al op de cover. Alleen
+  // genummerde secties hogen de teller op; het betaalschema hoort bij 01 en
+  // blijft ongenummerd. Financiering/Maandlasten zijn optioneel (download-modal).
   const isFlip = vm.mode === 'flip'
   const showFin = vm.showFinanciering !== false && !isFlip
   const showMaand = vm.showMaandlasten !== false && !isFlip
+  const hasInv = !!vm.inventory
 
-  const secs: { label: string; body: (num: number) => React.ReactNode }[] = []
+  // numbered: krijgt een sectienummer (01, 02, …); het betaalschema hoort bij 01
+  // en blijft ongenummerd. render(num) negeert num voor ongenummerde blokken.
+  type PageSpec = { label: string; numbered: boolean; render: (num: number) => React.ReactNode }
+  const specs: PageSpec[] = []
 
-  // 01 — Kosten koper + inventaris + betaalschema (samen op één pagina)
-  secs.push({
-    label: 'Kosten koper',
-    body: (num) => (
+  // 01 — Kosten koper draagt de inventaris (beide 'kosten'); het betaalschema
+  // rijdt mee als er geen inventaris is, en krijgt anders een eigen pagina.
+  specs.push({
+    label: 'Kosten koper', numbered: true,
+    render: (n) => (
       <>
-        <S02KostenKoper vm={vm} num={num} />
-        <SInventaris vm={vm} />
-        <SBetaalschema vm={vm} />
+        <S02KostenKoper vm={vm} num={n} />
+        {hasInv && <SInventaris vm={vm} />}
+        {!hasInv && <SBetaalschema vm={vm} />}
       </>
     ),
   })
-  if (showFin) secs.push({ label: 'Financiering', body: (num) => <S03Financiering vm={vm} num={num} /> })
-  if (!isFlip) secs.push({ label: 'Totale investering', body: (num) => <S04TotaleInvestering vm={vm} num={num} /> })
-  if (showMaand) secs.push({ label: 'Maandlasten', body: (num) => <S05Maandlasten vm={vm} num={num} /> })
-  if (vm.mode === 'verhuur' || vm.mode === 'sl') secs.push({ label: 'Verhuur', body: (num) => <S06Verhuur vm={vm} num={num} /> })
-  if (vm.mode === 'sl' && vm.sl) secs.push({ label: 'Fiscaal voordeel SL', body: (num) => <S07SL vm={vm} num={num} /> })
-  if (vm.mode === 'sl' && vm.compare) secs.push({ label: 'Privé vs SL', body: (num) => <S08Compare vm={vm} num={num} /> })
-  if (isFlip && vm.reno) secs.push({ label: 'Renovatie & flip', body: (num) => <S03Reno vm={vm} num={num} /> })
-  if (vm.projection && vm.projection.length > 0) secs.push({ label: 'Projectie', body: (num) => <S09Projection vm={vm} num={num} /> })
+  if (hasInv) specs.push({ label: 'Betaalschema', numbered: false, render: () => <SBetaalschema vm={vm} /> })
+
+  if (showFin) specs.push({ label: 'Financiering', numbered: true, render: (n) => <S03Financiering vm={vm} num={n} /> })
+  if (!isFlip) specs.push({ label: 'Totale investering', numbered: true, render: (n) => <S04TotaleInvestering vm={vm} num={n} /> })
+  if (showMaand) specs.push({ label: 'Maandlasten', numbered: true, render: (n) => <S05Maandlasten vm={vm} num={n} /> })
+  if (vm.mode === 'verhuur' || vm.mode === 'sl') specs.push({ label: 'Verhuur', numbered: true, render: (n) => <S06Verhuur vm={vm} num={n} /> })
+  if (vm.mode === 'sl' && vm.sl) specs.push({ label: 'Fiscaal voordeel SL', numbered: true, render: (n) => <S07SL vm={vm} num={n} /> })
+  if (vm.mode === 'sl' && vm.compare) specs.push({ label: 'Privé vs SL', numbered: true, render: (n) => <S08Compare vm={vm} num={n} /> })
+  if (isFlip && vm.reno) specs.push({ label: 'Renovatie & flip', numbered: true, render: (n) => <S03Reno vm={vm} num={n} /> })
+  if (vm.projection && vm.projection.length > 0) specs.push({ label: 'Projectie', numbered: true, render: (n) => <S09Projection vm={vm} num={n} /> })
 
   return (
     <Document>
       <CoverPage vm={vm} photo={photo} />
-      {secs.map((sec, i) => (
-        <InteriorPage key={i} vm={vm} label={sec.label} wordmark={wordmark}>
-          {sec.body(i + 1)}
-        </InteriorPage>
-      ))}
+      {specs.map((spec, i) => {
+        // Sectienummer = aantal genummerde blokken t/m dit blok (immutabel).
+        const num = specs.slice(0, i + 1).filter(sp => sp.numbered).length
+        return (
+          <InteriorPage key={i} vm={vm} label={spec.label} wordmark={wordmark}>
+            {spec.render(num)}
+          </InteriorPage>
+        )
+      })}
     </Document>
   )
 }
