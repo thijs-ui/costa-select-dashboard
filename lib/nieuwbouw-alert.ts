@@ -4,11 +4,28 @@ import { sendEmail } from '@/lib/email/resend'
 // Gedeelde logica voor de nieuwbouw-melding, gebruikt door zowel de dagelijkse
 // cron (/api/cron/nieuwbouw-alert) als de sessie-geauthenticeerde test-trigger
 // (/api/nieuwbouw/alert-test). Bewust ontkoppeld van de ingestion — kijkt alleen
-// naar de listings-tabel.
-export const ALERT_REGION = 'Costa del Sol'
+// naar de listings-tabel. Per regio één digest naar de eigen ontvangers.
 const LOOKBACK_HOURS = 24
 const MAX_PROJECTS = 200
 const TEST_PROJECTS = 6
+const SELECT_COLS = 'id, property_code, title, municipality, region, province, price, property_type, url, main_image_url, first_seen_at'
+
+// Regio → ontvangers. `region` moet exact matchen met listings.region (zie de
+// dashboard REGION_ORDER). Per regio te overrulen met env
+// NIEUWBOUW_ALERT_RECIPIENTS_<SLUG> (bv. NIEUWBOUW_ALERT_RECIPIENTS_VALENCIA),
+// anders geldt de default hieronder.
+export interface RegionAlert {
+  region: string
+  recipients: string[]
+}
+
+export const REGION_ALERTS: RegionAlert[] = [
+  { region: 'Costa del Sol',      recipients: ['thijs@costaselect.com', 'ed.bouterse@costaselect.com'] },
+  { region: 'Costa Blanca Noord', recipients: ['denise@costaselect.com', 'thijs@costaselect.com', 'danielle@costaselect.com'] },
+  { region: 'Valencia',           recipients: ['thijs@costaselect.com'] },
+]
+
+type BotsClient = ReturnType<typeof createBotsClient>
 
 interface AlertProject {
   id: string
@@ -24,14 +41,20 @@ interface AlertProject {
   first_seen_at: string | null
 }
 
-export interface AlertResult {
+export interface RegionResult {
+  region: string
   ok: boolean
   count: number
-  test: boolean
   recipients?: number
   emailId?: string
   message?: string
   error?: string
+}
+
+export interface AlertRunResult {
+  ok: boolean
+  test: boolean
+  regions: RegionResult[]
 }
 
 function fmtEUR(n: number | null): string {
@@ -45,12 +68,19 @@ function esc(s: string | null | undefined): string {
   ))
 }
 
-function recipients(): string[] {
-  return (process.env.NIEUWBOUW_ALERT_RECIPIENTS || 'thijs@costaselect.com,ed.bouterse@costaselect.com')
-    .split(',').map(s => s.trim()).filter(Boolean)
+// Env-key per regio: uppercase, accenten weg, niet-alfanumeriek → underscore.
+function envSlug(region: string): string {
+  return region.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
 }
 
-function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolean): string {
+function resolveRecipients(cfg: RegionAlert): string[] {
+  const envVal = process.env[`NIEUWBOUW_ALERT_RECIPIENTS_${envSlug(cfg.region)}`]
+  const raw = envVal && envVal.trim() ? envVal : cfg.recipients.join(',')
+  return raw.split(',').map(s => s.trim()).filter(Boolean)
+}
+
+function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolean, region: string): string {
   const rows = projects.map(p => {
     const loc = [p.municipality, p.region].filter(Boolean).map(esc).join(' · ')
     const cta = p.url
@@ -85,8 +115,8 @@ function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolea
     : ''
 
   const headline = test
-    ? `Test — nieuwbouwmelding ${esc(ALERT_REGION)}`
-    : `${projects.length} nieuw${projects.length === 1 ? '' : 'e'} project${projects.length === 1 ? '' : 'en'} in ${esc(ALERT_REGION)}`
+    ? `Test — nieuwbouwmelding ${esc(region)}`
+    : `${projects.length} nieuw${projects.length === 1 ? '' : 'e'} project${projects.length === 1 ? '' : 'en'} in ${esc(region)}`
 
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#F4EDDD;">
@@ -102,7 +132,7 @@ function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolea
         </td></tr>
         ${mapBtn ? `<tr><td style="padding:8px 16px 20px;">${mapBtn}</td></tr>` : ''}
         <tr><td style="padding:14px 24px 20px;border-top:1px solid #E5E0D2;">
-          <div style="font-family:Arial,sans-serif;font-size:11px;color:#8A9794;line-height:1.5;">Automatische melding vanuit het Costa Select dashboard. Alleen nieuwe projecten in ${esc(ALERT_REGION)} van de afgelopen 24 uur.</div>
+          <div style="font-family:Arial,sans-serif;font-size:11px;color:#8A9794;line-height:1.5;">Automatische melding vanuit het Costa Select dashboard. Alleen nieuwe projecten in ${esc(region)} van de afgelopen 24 uur.</div>
         </td></tr>
       </table>
     </td></tr>
@@ -110,50 +140,67 @@ function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolea
 </body></html>`
 }
 
-// Draait de melding: query listings → bouw digest → verstuur via Resend.
+// Eén regio: query listings → bouw digest → verstuur naar de regio-ontvangers.
 // test=true negeert het 24u-venster (recentste projecten) en stuurt altijd.
-export async function runNieuwbouwAlert({ test }: { test: boolean }): Promise<AlertResult> {
-  const to = recipients()
+async function runRegionAlert(
+  cfg: RegionAlert, test: boolean, supabase: BotsClient, mapUrl: string | null, from: string,
+  overrideTo?: string[],
+): Promise<RegionResult> {
+  // overrideTo (test-trigger) → alleen naar de tester, niet de echte teams.
+  const to = overrideTo && overrideTo.length ? overrideTo : resolveRecipients(cfg)
   if (to.length === 0) {
-    return { ok: false, count: 0, test, error: 'Geen ontvangers geconfigureerd (NIEUWBOUW_ALERT_RECIPIENTS)' }
+    return { region: cfg.region, ok: false, count: 0, error: 'Geen ontvangers geconfigureerd' }
   }
 
-  const supabase = createBotsClient()
   const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString()
-
   let query = supabase
     .from('listings')
-    .select('id, property_code, title, municipality, region, province, price, property_type, url, main_image_url, first_seen_at')
+    .select(SELECT_COLS)
     .eq('is_active', true)
-    .ilike('region', ALERT_REGION)
+    .ilike('region', cfg.region)
   if (!test) query = query.gte('first_seen_at', cutoff)
   const { data, error } = await query
     .order('first_seen_at', { ascending: false })
     .limit(test ? TEST_PROJECTS : MAX_PROJECTS)
 
   if (error) {
-    console.error('[nieuwbouw-alert] listings query failed:', error)
-    return { ok: false, count: 0, test, error: error.message }
+    console.error(`[nieuwbouw-alert] query failed (${cfg.region}):`, error)
+    return { region: cfg.region, ok: false, count: 0, error: error.message }
   }
 
   const projects = (data ?? []) as AlertProject[]
   // Buiten test-modus: niets sturen als er geen nieuwe projecten zijn.
   if (projects.length === 0 && !test) {
-    return { ok: true, count: 0, test, message: 'Geen nieuwe projecten' }
+    return { region: cfg.region, ok: true, count: 0, message: 'Geen nieuwe projecten' }
   }
 
-  const mapUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? null
-  const html = buildHtml(projects, mapUrl, test)
+  const html = buildHtml(projects, mapUrl, test, cfg.region)
   const subject = (test ? '[TEST] ' : '') +
-    `${projects.length} nieuw${projects.length === 1 ? '' : 'e'} nieuwbouwproject${projects.length === 1 ? '' : 'en'} — ${ALERT_REGION}`
-  const from = process.env.NIEUWBOUW_ALERT_FROM || process.env.RESEND_FROM || 'Costa Select <nieuwbouw@costaselect.com>'
+    `${projects.length} nieuw${projects.length === 1 ? '' : 'e'} nieuwbouwproject${projects.length === 1 ? '' : 'en'} — ${cfg.region}`
 
   const sent = await sendEmail({ to, subject, html, from })
   if (!sent.ok) {
-    console.error('[nieuwbouw-alert] email failed:', sent.error)
-    return { ok: false, count: projects.length, test, error: sent.error }
+    console.error(`[nieuwbouw-alert] email failed (${cfg.region}):`, sent.error)
+    return { region: cfg.region, ok: false, count: projects.length, error: sent.error }
   }
 
-  console.log(`[nieuwbouw-alert] ${projects.length} projecten gemaild naar ${to.length} ontvanger(s)${test ? ' (test)' : ''}`)
-  return { ok: true, count: projects.length, test, recipients: to.length, emailId: sent.id }
+  console.log(`[nieuwbouw-alert] ${cfg.region}: ${projects.length} projecten → ${to.length} ontvanger(s)${test ? ' (test)' : ''}`)
+  return { region: cfg.region, ok: true, count: projects.length, recipients: to.length, emailId: sent.id }
+}
+
+// Draait de melding voor álle geconfigureerde regio's (elk een eigen digest).
+// overrideTo: stuur alle regio-digests naar dit adres i.p.v. de echte teams
+// (gebruikt door de test-trigger zodat testen collega's niet lastigvalt).
+export async function runNieuwbouwAlert(
+  { test, overrideTo }: { test: boolean; overrideTo?: string[] },
+): Promise<AlertRunResult> {
+  const supabase = createBotsClient()
+  const mapUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? null
+  const from = process.env.NIEUWBOUW_ALERT_FROM || process.env.RESEND_FROM || 'Costa Select <nieuwbouw@costaselect.com>'
+
+  const regions: RegionResult[] = []
+  for (const cfg of REGION_ALERTS) {
+    regions.push(await runRegionAlert(cfg, test, supabase, mapUrl, from, overrideTo))
+  }
+  return { ok: regions.every(r => r.ok), test, regions }
 }

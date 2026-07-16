@@ -12,7 +12,10 @@ async function handle() {
   const auth = await requireAuth()
   if (auth instanceof NextResponse) return auth
 
-  const result = await runNieuwbouwAlert({ test: true })
+  // Test-mails gaan alleen naar de ingelogde gebruiker, niet naar de echte
+  // regio-teams — zo kun je testen zonder collega's lastig te vallen.
+  const overrideTo = auth.email ? [auth.email] : undefined
+  const result = await runNieuwbouwAlert({ test: true, overrideTo })
   return NextResponse.json(result, { status: result.ok ? 200 : 500 })
 }
 
