@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/nieuwbouw-alert",
-      "schedule": "0 8 * * *"
+      "schedule": "0 7 * * 1"
     },
     {
       "path": "/api/news/weekly-run",

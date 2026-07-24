@@ -1,11 +1,17 @@
 import { createBotsClient } from '@/lib/supabase-bots'
 import { sendEmail } from '@/lib/email/resend'
 
-// Gedeelde logica voor de nieuwbouw-melding, gebruikt door zowel de dagelijkse
+// Gedeelde logica voor de nieuwbouw-melding, gebruikt door zowel de wekelijkse
 // cron (/api/cron/nieuwbouw-alert) als de sessie-geauthenticeerde test-trigger
 // (/api/nieuwbouw/alert-test). Bewust ontkoppeld van de ingestion — kijkt alleen
 // naar de listings-tabel. Per regio één digest naar de eigen ontvangers.
-const LOOKBACK_HOURS = 24
+//
+// LET OP: de ingestion-pipeline (Apify → listings) draait WEKELIJKS op ZONDAG
+// (repo costa-select-nieuwbouw, .github/workflows/pipeline.yml). De alert draait
+// daarom maandagochtend (0 7 * * 1 = 09:00 NL), ná de zondag-run, met een 7-daags
+// venster zodat de volledige weekbatch precies één keer wordt gemeld — een
+// dagelijks 24u-venster miste de batch omdat projecten maar ~1 dag 'vers' zijn.
+const LOOKBACK_HOURS = 168 // 7 dagen
 const MAX_PROJECTS = 200
 const TEST_PROJECTS = 6
 const SELECT_COLS = 'id, property_code, title, municipality, region, province, price, property_type, url, main_image_url, first_seen_at'
@@ -132,7 +138,7 @@ function buildHtml(projects: AlertProject[], mapUrl: string | null, test: boolea
         </td></tr>
         ${mapBtn ? `<tr><td style="padding:8px 16px 20px;">${mapBtn}</td></tr>` : ''}
         <tr><td style="padding:14px 24px 20px;border-top:1px solid #E5E0D2;">
-          <div style="font-family:Arial,sans-serif;font-size:11px;color:#8A9794;line-height:1.5;">Automatische melding vanuit het Costa Select dashboard. Alleen nieuwe projecten in ${esc(region)} van de afgelopen 24 uur.</div>
+          <div style="font-family:Arial,sans-serif;font-size:11px;color:#8A9794;line-height:1.5;">Automatische wekelijkse melding vanuit het Costa Select dashboard. Nieuwe projecten in ${esc(region)} van de afgelopen week.</div>
         </td></tr>
       </table>
     </td></tr>
